@@ -20,8 +20,7 @@ type Host interface {
 
 // --------------------------------------------------
 
-// HostBase implements the Host interface. It is intended to be a base for
-// a custom host structs.
+// HostBase implements the Host interface.
 type HostBase struct {
 	_ResourceBase
 }
@@ -45,22 +44,21 @@ func CreateHost(urlTmplStr string) (Host, error) {
 		return nil, newError("%w", ErrWildCardHostTemplate)
 	}
 
-	var h = &struct{ *HostBase }{}
-	h.HostBase = &HostBase{}
-	err = h.configCompatibility(secure, tslash, nil)
+	var hb = &HostBase{}
+	hb.derived = hb
+
+	err = hb.configCompatibility(secure, tslash, nil)
 	if err != nil {
 		return nil, newError("<- %w", err)
 	}
 
-	h.derived = h
-	h.tmpl = tmpl
-	h._RequestHandlerBase = sharedRequestHandlerBase
-	h.httpHandler = http.HandlerFunc(h.handleOrPassRequest)
-	return h, nil
+	hb.tmpl = tmpl
+	hb._RequestHandlerBase = sharedRequestHandlerBase
+	hb.httpHandler = http.HandlerFunc(hb.handleOrPassRequest)
+	return hb, nil
 }
 
 // CreateHostUsingConfig returns a new host from the URL template.
-//
 // The host is configured with the properties in the config as well as the
 // scheme and tslash property values of the URL template. The host's template
 // must not be a wild card template.
@@ -84,54 +82,58 @@ func CreateHostUsingConfig(urlTmplStr string, config Config) (Host, error) {
 		return nil, newError("%w", ErrWildCardHostTemplate)
 	}
 
-	var h = &struct{ *HostBase }{}
-	h.HostBase = &HostBase{}
+	var hb = &HostBase{}
+	hb.derived = hb
+
 	var cfs = config.asFlags()
-	err = h.configCompatibility(secure, tslash, &cfs)
+	err = hb.configCompatibility(secure, tslash, &cfs)
 	if err != nil {
 		return nil, newError("<- %w", err)
 	}
 
-	h.derived = h
-	h.tmpl = tmpl
-	h._RequestHandlerBase = sharedRequestHandlerBase
-	h.httpHandler = http.HandlerFunc(h.handleOrPassRequest)
-	return h, nil
+	hb.tmpl = tmpl
+	hb._RequestHandlerBase = sharedRequestHandlerBase
+	hb.httpHandler = http.HandlerFunc(hb.handleOrPassRequest)
+	return hb, nil
 }
 
 // CreateHostBase returns a pointer to a newly created instance of the HostBase
 // struct.
 //
-// Function's first argument must be a pointer to the instance of the struct
-// that embeds the *HostBase.
-//
-// The second argument URL template's scheme and tslash property values are
+// The first argument URL template's scheme and tslash property values are
 // used to configure the new HostBase instance. The template must not be a wild
 // card template.
 //
+// The second argument must be an instance of a type with methods to handle
+// HTTP requests. Methods must have the signature of the http.HandlerFunc
+// and start with 'Handle' prefix. Remaining part of the methods' name is
+// considered as an HTTP method. For example, HandleGet, HandleCustomMethod
+// are considered as the handlers of the GET and CUSTOMMETHOD HTTP methods
+// respectively.
+//
 // Example:
-// 	type ExampleHost struct {
-// 		*HostBase
+// 	type ExampleHost struct{}
+//
+// 	func (eh *ExampleHost) HandleGet(w http.ResponseWriter, r *http.Request) {
+//		// ...
 // 	}
 //
-// 	func CreateExampleHost() (*ExampleHost, error) {
-// 		var exampleHost = new ExampleHost
-// 		var hostBase, err = CreateHostBase(exampleHost, "https://example.com")
+// 	func CreateExampleHost() (*HostBase, error) {
+// 		var hb, err = CreateHostBase("https://example.com", &ExampleHost{})
 // 		if err != nil {
 // 			return nil, err
 // 		}
 //
-// 		exampleHost.HostBase = hostBase,
-// 		return exampleHost, nil
+// 		return hb, nil
 // 	}
-func CreateHostBase(derived Host, urlTmplStr string) (*HostBase, error) {
+func CreateHostBase(urlTmplStr string, rh RequestHandler) (*HostBase, error) {
+	if rh == nil {
+		return nil, newError("%w", ErrNilArgument)
+	}
+
 	var hTmplStr, secure, tslash, err = getHost(urlTmplStr)
 	if err != nil {
 		return nil, newError("<- %w", err)
-	}
-
-	if derived == nil {
-		return nil, newError("%w", ErrNilArgument)
 	}
 
 	var tmpl *Template
@@ -145,7 +147,7 @@ func CreateHostBase(derived Host, urlTmplStr string) (*HostBase, error) {
 	}
 
 	var rhb *_RequestHandlerBase
-	rhb, err = detectOverriddenHandlers(derived)
+	rhb, err = detectHTTPMethodHandlersOf(rh)
 	if err != nil {
 		return nil, newError("<- %w", err)
 	}
@@ -155,12 +157,14 @@ func CreateHostBase(derived Host, urlTmplStr string) (*HostBase, error) {
 	}
 
 	var hb = &HostBase{}
+	hb.derived = hb
+
 	err = hb.configCompatibility(secure, tslash, nil)
 	if err != nil {
 		return nil, newError("<- %w", err)
 	}
 
-	hb.derived = derived
+	hb.requestHandler = rh
 	hb.tmpl = tmpl
 	hb._RequestHandlerBase = rhb
 	hb.httpHandler = http.HandlerFunc(hb.handleOrPassRequest)
@@ -170,23 +174,28 @@ func CreateHostBase(derived Host, urlTmplStr string) (*HostBase, error) {
 // CreateHostBaseUsingConfig returns a pointer to a newly created instance of
 // the HostBase struct.
 //
-// Function's first argument must be a pointer to the instance of the struct
-// that embeds the *HostBase.
-//
 // The new HostBase instance is configured with the properties in the config as
 // well as the scheme and tslash property values of the URL template. The
 // template must not be a wild card template.
 //
+// The second argument must be an instance of a type with methods to handle
+// HTTP requests. Methods must have the signature of the http.HandlerFunc
+// and start with 'Handle' prefix. Remaining part of the methods' name is
+// considered as an HTTP method. For example, HandleGet, HandleCustomMethod
+// are considered as the handlers of the GET and CUSTOMMETHOD HTTP methods
+// respectively.
+//
 // Example:
-// 	type ExampleHost struct {
-// 		*HostBase
+// 	type ExampleHost struct{}
+//
+// 	func (eh *ExampleHost) HandleGet(w http.ResponseWriter, r *http.Request) {
+//		// ...
 // 	}
 //
-// 	func CreateExampleHost() (*ExampleHost, error) {
-// 		var exampleHost = new ExampleHost
-// 		var hostBase, err = CreateHostBaseUsingConfig(
-// 			exampleHost,
+// 	func CreateExampleHost() (*HostBase, error) {
+// 		var hb, err = CreateHostBaseUsingConfig(
 // 			"https://example.com/",
+// 			&ExampleHost{},
 // 			Config{Subtree: true, RedirectInsecureRequest: true},
 // 		)
 //
@@ -194,15 +203,14 @@ func CreateHostBase(derived Host, urlTmplStr string) (*HostBase, error) {
 // 			return nil, err
 // 		}
 //
-// 		exampleHost.HostBase = hostBase,
-// 		return exampleHost, nil
+// 		return hb, nil
 // 	}
 func CreateHostBaseUsingConfig(
-	derived Host,
 	urlTmplStr string,
+	rh RequestHandler,
 	config Config,
 ) (*HostBase, error) {
-	if derived == nil {
+	if rh == nil {
 		return nil, newError("%w", ErrNilArgument)
 	}
 
@@ -226,7 +234,7 @@ func CreateHostBaseUsingConfig(
 	}
 
 	var rhb *_RequestHandlerBase
-	rhb, err = detectOverriddenHandlers(derived)
+	rhb, err = detectHTTPMethodHandlersOf(rh)
 	if err != nil {
 		return nil, newError("<- %w", err)
 	}
@@ -236,13 +244,15 @@ func CreateHostBaseUsingConfig(
 	}
 
 	var hb = &HostBase{}
+	hb.derived = hb
+
 	var cfs = config.asFlags()
 	err = hb.configCompatibility(secure, tslash, &cfs)
 	if err != nil {
 		return nil, newError("<- %w", err)
 	}
 
-	hb.derived = derived
+	hb.requestHandler = rh
 	hb.tmpl = tmpl
 	hb._RequestHandlerBase = rhb
 	hb.httpHandler = http.HandlerFunc(hb.handleOrPassRequest)
@@ -297,25 +307,29 @@ func NewHostUsingConfig(urlTmplStr string, config Config) Host {
 // NewHostBase returns a pointer to a newly created instance of the HostBase
 // struct. Unlike CreateHostBase, NewHostBase panics on error.
 //
-// Function's first argument must be an instance of the struct that embeds the
-// *HostBase.
-//
-// The second argument URL template's scheme and tslash property values are
+// The first argument URL template's scheme and tslash property values are
 // used to configure the new HostBase instance. The template must not be a wild
 // card template.
 //
+// The second argument must be an instance of a type with methods to handle
+// HTTP requests. Methods must have the signature of the http.HandlerFunc
+// and start with 'Handle' prefix. Remaining part of the methods' name is
+// considered as an HTTP method. For example, HandleGet, HandleCustomMethod
+// are considered as the handlers of the GET and CUSTOMMETHOD HTTP methods
+// respectively.
+//
 // Example:
-// 	type ExampleHost struct {
-// 		*HostBase
+// 	type ExampleHost struct{}
+//
+// 	func (eh *ExampleHost) HandleGet(w http.ResponseWriter, r *http.Request) {
+//		// ...
 // 	}
 //
-// 	func NewHostBase() *ExampleHost {
-// 		var exampleHost = new ExampleHost
-// 		exampleHost.HostBase = NewHostBase(exampleHost, "https://example.com")
-// 		return exampleHost
+// 	func NewExampleHost() *HostBase {
+// 		return NewHostBase("https://example.com", &ExampleHost{})
 // 	}
-func NewHostBase(derived Host, urlTmplStr string) *HostBase {
-	var hb, err = CreateHostBase(derived, urlTmplStr)
+func NewHostBase(urlTmplStr string, rh RequestHandler) *HostBase {
+	var hb, err = CreateHostBase(urlTmplStr, rh)
 	if err != nil {
 		panic(newError("<- %w", err))
 	}
@@ -327,34 +341,37 @@ func NewHostBase(derived Host, urlTmplStr string) *HostBase {
 // the HostBase struct.
 // Unlike CreateHostBaseUsingConfig, NewHostBaseUsingConfig panics on error.
 //
-// Function's first argument must be a pointer to the instance of the struct
-// that embeds the *HostBase.
-//
 // The new HostBase instance is configured with the properties in the config as
 // well as the scheme and tslash property values of the URL template. The
 // template must not be a wild card template.
 //
+// The second argument must be an instance of a type with methods to handle
+// HTTP requests. Methods must have the signature of the http.HandlerFunc
+// and start with 'Handle' prefix. Remaining part of the methods' name is
+// considered as an HTTP method. For example, HandleGet, HandleCustomMethod
+// are considered as the handlers of the GET and CUSTOMMETHOD HTTP methods
+// respectively.
+//
 // Example:
-// 	type ExampleHost struct {
-// 		*HostBase
+// 	type ExampleHost struct{}
+//
+// 	func (eh *ExampleHost) HandleGet(w http.ResponseWriter, r *http.Request) {
+//		// ...
 // 	}
 //
-// 	func NewExampleHost() *ExampleHost {
-// 		var exampleHost = new ExampleHost
-// 		exampleHost.HostBase = NewHostBaseUsingConfig(
-// 			exampleHost,
+// 	func NewExampleHost() *HostBase {
+// 		return NewHostBaseUsingConfig(
 // 			"https://example.com/",
+// 			&ExampleHost{},
 // 			Config{Subtree: true, RedirectInsecureRequest: true},
 // 		)
-
-// 		return exampleHost
 // 	}
 func NewHostBaseUsingConfig(
-	derived Host,
 	urlTmplStr string,
+	rh RequestHandler,
 	config Config,
 ) *HostBase {
-	var hb, err = CreateHostBaseUsingConfig(derived, urlTmplStr, config)
+	var hb, err = CreateHostBaseUsingConfig(urlTmplStr, rh, config)
 	if err != nil {
 		panic(newError("<- %w", err))
 	}

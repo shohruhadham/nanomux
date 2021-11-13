@@ -610,21 +610,16 @@ func TestResourceBase_canHandleRequest(t *testing.T) {
 
 func TestResourceBase_checkNameIsUniqueInThePath(t *testing.T) {
 	var (
-		r1 = struct{ *ResourceBase }{}
-		r2 = struct{ *ResourceBase }{}
-		r3 = struct{ *ResourceBase }{}
-		r4 = struct{ *ResourceBase }{}
+		rb1 = NewResource("{country}").base()
+		rb2 = NewResource("{city}").base()
+		rb3 = NewResource("{info}").base()
+		rb4 = NewResource("{extra}").base()
 	)
 
-	r1.ResourceBase = NewResourceBase(r1, "{country}")
-	r2.ResourceBase = NewResourceBase(r2, "{city}")
-	r3.ResourceBase = NewResourceBase(r3, "{info}")
-	r4.ResourceBase = NewResourceBase(r4, "{extra}")
-
-	r4.papa = r3
-	r3.wildcardResource = r4
-	r3.papa = r2
-	r2.papa = r1
+	rb4.papa = rb3
+	rb3.wildcardResource = rb4
+	rb3.papa = rb2
+	rb2.papa = rb1
 
 	var cases = []struct {
 		name    string
@@ -636,7 +631,7 @@ func TestResourceBase_checkNameIsUniqueInThePath(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if err := r3.checkNameIsUniqueInThePath(c.name); (err != nil) != c.wantErr {
+			if err := rb3.checkNameIsUniqueInThePath(c.name); (err != nil) != c.wantErr {
 				t.Fatalf(
 					"ResourceBase.checkNameIsUniqueInThePath() error = %v, wantErr %v",
 					err,
@@ -649,14 +644,10 @@ func TestResourceBase_checkNameIsUniqueInThePath(t *testing.T) {
 
 func TestResourceBase_checkChildResourceNamesAreUniqueInThePath(t *testing.T) {
 	var (
-		p1 = struct{ *ResourceBase }{}
-		p2 = struct{ *ResourceBase }{}
-		p3 = struct{ *ResourceBase }{}
+		p1 = NewResource("{country}").base()
+		p2 = NewResource("{city}").base()
+		p3 = NewResource("{info}").base()
 	)
-
-	p1.ResourceBase = NewResourceBase(p1, "{country}")
-	p2.ResourceBase = NewResourceBase(p2, "{city}")
-	p3.ResourceBase = NewResourceBase(p3, "{info}")
 
 	p1.wildcardResource = p2
 	p2.wildcardResource = p3
@@ -665,14 +656,10 @@ func TestResourceBase_checkChildResourceNamesAreUniqueInThePath(t *testing.T) {
 	p2.papa = p1
 
 	var (
-		ch1 = struct{ *ResourceBase }{}
-		ch2 = struct{ *ResourceBase }{}
-		ch3 = struct{ *ResourceBase }{}
+		ch1 = NewResource("info").base()
+		ch2 = NewResource("{catergory}").base()
+		ch3 = NewResource("{manufacturer}").base()
 	)
-
-	ch1.ResourceBase = NewResourceBase(ch1, "info")
-	ch2.ResourceBase = NewResourceBase(ch2, "{catergory}")
-	ch3.ResourceBase = NewResourceBase(ch3, "{manufacturer}")
 
 	ch1.wildcardResource = ch2
 	ch2.wildcardResource = ch3
@@ -686,8 +673,7 @@ func TestResourceBase_checkChildResourceNamesAreUniqueInThePath(t *testing.T) {
 		)
 	}
 
-	var ch4 = struct{ *ResourceBase }{}
-	ch4.ResourceBase = NewResourceBase(ch4, "{country}")
+	var ch4 = NewResource("{country}").base()
 	ch3.wildcardResource = ch4
 	ch4.papa = ch3
 

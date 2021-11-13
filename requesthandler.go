@@ -4,24 +4,11 @@
 package nanomux
 
 import (
-	"bytes"
 	"fmt"
 	"net/http"
-	"net/http/httptest"
+	"reflect"
 	"strings"
 )
-
-// --------------------------------------------------
-
-// MethodGet               = "GET"
-// MethodHead              = "HEAD"
-// MethodPost              = "POST"
-// MethodPut               = "PUT"
-// MethodPatch             = "PATCH"
-// MethodDelete            = "DELETE"
-// MethodConnect           = "CONNECT"
-// MethodOptions           = "OPTIONS"
-// MethodTrace             = "TRACE"
 
 // --------------------------------------------------
 
@@ -40,30 +27,21 @@ var ErrConflictingStatusCode = fmt.Errorf("conflicting status code")
 
 // --------------------------------------------------
 
-// _RequestHandler declares the handlers for the HTTP methods.
-type _RequestHandler interface {
-	HandleUnusedMethod(w http.ResponseWriter, r *http.Request)
-
-	HandleGet(w http.ResponseWriter, r *http.Request)
-	HandleHead(w http.ResponseWriter, r *http.Request)
-	HandlePost(w http.ResponseWriter, r *http.Request)
-	HandlePut(w http.ResponseWriter, r *http.Request)
-	HandlePatch(w http.ResponseWriter, r *http.Request)
-	HandleDelete(w http.ResponseWriter, r *http.Request)
-	HandleConnect(w http.ResponseWriter, r *http.Request)
-	HandleOptions(w http.ResponseWriter, r *http.Request)
-	HandleTrace(w http.ResponseWriter, r *http.Request)
-
-	http.Handler
-}
+// RequestHandler is used to accept any type that has methods to handle
+// HTTP requests. Methods must have the signature of the http.HandlerFunc
+// and start with 'Handle' prefix. Remaining part of the methods' name is
+// considered as HTTP method. For example, HandleGet, HandleCustomMethod
+// are considered as the handlers of the GET and CUSTOMMETHOD HTTP methods
+// respectively.
+type RequestHandler interface{}
 
 // --------------------------------------------------
 
-// _RequestHandlerBase is intended to be embedded into another struct.
-// It has the default implementation of the methods declared in the
-// _RequestHandler.
+// _RequestHandlerBase is intended to be embedded into the _ResourceBase
+// struct. It keeps the HTTP method handlers of the host or resource and
+// provides with the functionality to manage them. It also handles the HTTP
+// request by calling the responsible handler of the request's HTTP method.
 type _RequestHandlerBase struct {
-	_RequestHandler
 	handlers             map[string]http.Handler
 	unusedMethodsHandler http.Handler
 }
@@ -74,53 +52,57 @@ var sharedRequestHandlerBase = &_RequestHandlerBase{}
 
 // -------------------------
 
-// detectOverriddenHandlers detects the methods of the custom host and
-// resources that implements the methods of the _RequestHandler interface.
-// Implementing all the methods of the interface is not required.
-func detectOverriddenHandlers(rh _RequestHandler) (
+// detectHTTPMethodHandlersOf detects the HTTP method handlers of the
+// RequestHandler's underlying value.
+func detectHTTPMethodHandlersOf(rh RequestHandler) (
 	*_RequestHandlerBase,
 	error,
 ) {
-	var mhs = map[string]http.HandlerFunc{
-		"GET":     rh.HandleGet,
-		"HEAD":    rh.HandleHead,
-		"POST":    rh.HandlePost,
-		"PUT":     rh.HandlePut,
-		"PATCH":   rh.HandlePatch,
-		"DELETE":  rh.HandleDelete,
-		"CONNECT": rh.HandleConnect,
-		"OPTIONS": rh.HandleOptions,
-		"TRACE":   rh.HandleTrace,
-	}
-
-	var handlers = make(map[string]http.Handler)
-	for m, mh := range mhs {
-		var rr = httptest.NewRecorder()
-		var r = httptest.NewRequest(m, "/", &bytes.Buffer{})
-
-		func() {
-			defer func() { recover() }()
-			mh.ServeHTTP(rr, r)
-		}()
-
-		if rr.Code != http.StatusMethodNotAllowed {
-			handlers[m] = mh
+	// hmns keeps the HTTP methods' names and their corresponding handlers'
+	// names.
+	var hmns = make(map[string]string)
+	var t = reflect.TypeOf(rh)
+	for i, nm := 0, t.NumMethod(); i < nm; i++ {
+		var m = t.Method(i)
+		var hm = strings.TrimPrefix(m.Name, "Handle")
+		if hm != m.Name {
+			hm = strings.ToUpper(hm)
+			hmns[hm] = m.Name
 		}
 	}
 
-	var (
-		unusedMethodsHandler http.Handler
-		rr                   = httptest.NewRecorder()
-		r                    = httptest.NewRequest("", "/", &bytes.Buffer{})
+	var handlers = make(map[string]http.Handler)
+	var unusedMethodsHandler http.HandlerFunc
+
+	// reflect.Value allows us to compare method signatures directly, instead of
+	// signatures of their function values.
+	var v reflect.Value = reflect.ValueOf(rh)
+	var handlerFuncType = reflect.TypeOf(
+		// Signature of the http.HandlerFunc.
+		func(http.ResponseWriter, *http.Request) {},
 	)
 
-	func() {
-		defer func() { recover() }()
-		rh.HandleUnusedMethod(rr, r)
-	}()
+	for hm, n := range hmns {
+		var m = v.MethodByName(n)
+		if m.Kind() != reflect.Func { // Just in case :)
+			continue
+		}
 
-	if rr.Code == http.StatusMethodNotAllowed {
-		unusedMethodsHandler = http.HandlerFunc(rh.HandleUnusedMethod)
+		if m.Type() != handlerFuncType {
+			// Method doesn't have the signature of the http.HandlerFunc.
+			continue
+		}
+
+		var hf, ok = m.Interface().(func(http.ResponseWriter, *http.Request))
+		if !ok {
+			return nil, fmt.Errorf("error")
+		}
+
+		if hm == "UNUSEDMETHOD" {
+			unusedMethodsHandler = http.HandlerFunc(hf)
+		} else {
+			handlers[hm] = http.HandlerFunc(hf)
+		}
 	}
 
 	var lhandlers = len(handlers)
@@ -130,7 +112,6 @@ func detectOverriddenHandlers(rh _RequestHandler) (
 		}
 
 		return &_RequestHandlerBase{
-			nil,
 			handlers,
 			unusedMethodsHandler,
 		}, nil
@@ -323,71 +304,6 @@ func (rhb *_RequestHandlerBase) handleUnusedMethod(
 		http.StatusText(http.StatusMethodNotAllowed),
 		http.StatusMethodNotAllowed,
 	)
-}
-
-// -------------------------
-
-func (rhb *_RequestHandlerBase) HandleGet(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
-	rhb.handleUnusedMethod(w, r)
-}
-
-func (rhb *_RequestHandlerBase) HandleHead(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
-	rhb.handleUnusedMethod(w, r)
-}
-
-func (rhb *_RequestHandlerBase) HandlePost(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
-	rhb.handleUnusedMethod(w, r)
-}
-
-func (rhb *_RequestHandlerBase) HandlePut(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
-	rhb.handleUnusedMethod(w, r)
-}
-
-func (rhb *_RequestHandlerBase) HandlePatch(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
-	rhb.handleUnusedMethod(w, r)
-}
-
-func (rhb *_RequestHandlerBase) HandleDelete(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
-	rhb.handleUnusedMethod(w, r)
-}
-
-func (rhb *_RequestHandlerBase) HandleConnect(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
-	rhb.handleUnusedMethod(w, r)
-}
-
-func (rhb *_RequestHandlerBase) HandleOptions(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
-	rhb.handleUnusedMethod(w, r)
-}
-
-func (rhb *_RequestHandlerBase) HandleTrace(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
-	rhb.handleUnusedMethod(w, r)
 }
 
 // -------------------------

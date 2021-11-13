@@ -30,8 +30,7 @@ type Resource interface {
 
 // --------------------------------------------------
 
-// ResourceBase implements the Resource interface. It is intended to be a base
-// for a custom resource structs.
+// ResourceBase implements the Resource interface.
 type ResourceBase struct {
 	_ResourceBase
 	urlt *URLTmpl
@@ -71,23 +70,23 @@ func CreateResource(urlTmplStr string) (Resource, error) {
 		tmpl = Parse(rTmplStr)
 	}
 
-	var r = &struct{ *ResourceBase }{}
-	r.ResourceBase = &ResourceBase{}
-	err = r.configCompatibility(secure, tslash, nil)
+	var rb = &ResourceBase{}
+	rb.derived = rb
+
+	err = rb.configCompatibility(secure, tslash, nil)
 	if err != nil {
 		return nil, newError("<- %w", err)
 	}
 
-	r.derived = r
-	r.tmpl = tmpl
-	r._RequestHandlerBase = sharedRequestHandlerBase
+	rb.tmpl = tmpl
+	rb._RequestHandlerBase = sharedRequestHandlerBase
 
 	if hTmplStr != "" || pTmplStr != "" {
-		r.urlt = &URLTmpl{Host: hTmplStr, PrefixPath: pTmplStr}
+		rb.urlt = &URLTmpl{Host: hTmplStr, PrefixPath: pTmplStr}
 	}
 
-	r.httpHandler = http.HandlerFunc(r.handleOrPassRequest)
-	return r, nil
+	rb.httpHandler = http.HandlerFunc(rb.handleOrPassRequest)
+	return rb, nil
 }
 
 // CreateResourceUsingConfig returns a new resource from the URL template.
@@ -133,53 +132,60 @@ func CreateResourceUsingConfig(
 		tmpl = Parse(rTmplStr)
 	}
 
-	var r = &struct{ *ResourceBase }{}
-	r.ResourceBase = &ResourceBase{}
+	var rb = &ResourceBase{}
+	rb.derived = rb
+
 	var cfs = config.asFlags()
-	err = r.configCompatibility(secure, tslash, &cfs)
+	err = rb.configCompatibility(secure, tslash, &cfs)
 	if err != nil {
 		return nil, newError("<- %w", err)
 	}
 
-	r.derived = r
-	r.tmpl = tmpl
-	r._RequestHandlerBase = sharedRequestHandlerBase
+	rb.tmpl = tmpl
+	rb._RequestHandlerBase = sharedRequestHandlerBase
 
 	if hTmplStr != "" || pTmplStr != "" {
-		r.urlt = &URLTmpl{Host: hTmplStr, PrefixPath: pTmplStr}
+		rb.urlt = &URLTmpl{Host: hTmplStr, PrefixPath: pTmplStr}
 	}
 
-	r.httpHandler = http.HandlerFunc(r.handleOrPassRequest)
-	return r, nil
+	rb.httpHandler = http.HandlerFunc(rb.handleOrPassRequest)
+	return rb, nil
 }
 
 // CreateResourceBase returns a pointer to a newly created instance of the
 // ResourceBase struct.
 //
-// Function's first argument must be a pointer to the instance of the struct
-// that embeds the *ResourceBase.
-//
-// The second argument URL template's scheme and tslash property values are
+// The first argument URL template's scheme and tslash property values are
 // used to configure the new ResourceBase instance.
 //
+// The second argument must be an instance of a type with methods to handle
+// HTTP requests. Methods must have the signature of the http.HandlerFunc
+// and start with 'Handle' prefix. Remaining part of the methods' name is
+// considered as an HTTP method. For example, HandleGet, HandleCustomMethod
+// are considered as the handlers of the GET and CUSTOMMETHOD HTTP methods
+// respectively.
+//
 // Example:
-// 	type ExampleResource struct {
-// 		*ResourceBase
+// 	type ExampleResource struct{}
+//
+// 	func (er *ExampleResource) HandleGet(
+// 		w http.ResponseWriter,
+// 		r *http.Request,
+// 	) {
+// 		// ...
 // 	}
 //
-// 	func CreateExampleResource() (*ExampleResource, error) {
-// 		var exampleResource = new ExampleResource
-// 		var resourceBase, err = CreateResourceBase(
-// 			exampleHost,
+// 	func CreateExampleResource() (*ResourceBase, error) {
+// 		var rb, err = CreateResourceBase(
 // 			"https://example.com/staticTemplate/{valueName:patternTemplate}",
+// 			&ExampleResource{},
 // 		)
 //
 // 		if err != nil {
 // 			return nil, err
 // 		}
 //
-// 		exampleResource.ResourceBase = resourceBase,
-// 		return exampleResource, nil
+// 		return rb, nil
 // 	}
 //
 // When the URL template contains a host and/or prefix path segment templates,
@@ -196,10 +202,10 @@ func CreateResourceUsingConfig(
 // resource, they show where in the hierarchy the resource must be placed under
 // the registering resource.
 func CreateResourceBase(
-	derived Resource,
 	urlTmplStr string,
+	rh RequestHandler,
 ) (*ResourceBase, error) {
-	if derived == nil {
+	if rh == nil {
 		return nil, newError("%w", ErrNilArgument)
 	}
 
@@ -222,7 +228,7 @@ func CreateResourceBase(
 	}
 
 	var rhb *_RequestHandlerBase
-	rhb, err = detectOverriddenHandlers(derived)
+	rhb, err = detectHTTPMethodHandlersOf(rh)
 	if err != nil {
 		return nil, newError("<- %w", err)
 	}
@@ -232,12 +238,14 @@ func CreateResourceBase(
 	}
 
 	var rb = &ResourceBase{}
+	rb.derived = rb
+
 	err = rb.configCompatibility(secure, tslash, nil)
 	if err != nil {
 		return nil, newError("<- %w", err)
 	}
 
-	rb.derived = derived
+	rb.requestHandler = rh
 	rb.tmpl = tmpl
 	rb._RequestHandlerBase = rhb
 
@@ -252,22 +260,30 @@ func CreateResourceBase(
 // CreateResourceBaseUsingConfig returns a pointer to a newly created instance
 // of the ResourceBase struct.
 //
-// Function's first argument must be a pointer to the instance of the struct
-// that embeds the *ResourceBase.
-//
 // The new ResourceBase instance is configured with the properties in the
 // config as well as the scheme and tslash property values of the URL template.
 //
+// The second argument must be an instance of a type with methods to handle
+// HTTP requests. Methods must have the signature of the http.HandlerFunc
+// and start with 'Handle' prefix. Remaining part of the methods' name is
+// considered as an HTTP method. For example, HandleGet, HandleCustomMethod
+// are considered as the handlers of the GET and CUSTOMMETHOD HTTP methods
+// respectively.
+//
 // Example:
-// 	type ExampleResource struct {
-// 		*ResourceBase
+// 	type ExampleResource struct{}
+//
+// 	func (er *ExampleResource) HandleGet(
+// 		w http.ResponseWriter,
+// 		r *http.Request,
+// 	) {
+// 		// ...
 // 	}
 //
-// 	func CreateExampleResource() (*ExampleResource, error) {
-// 		var exampleResource = new ExampleResource
-// 		var resourceBase, err = CreateResourceBaseUsingConfig(
-// 			exampleResource,
+// 	func CreateExampleResource() (*ResourceBase, error) {
+// 		var rb, err = CreateResourceBaseUsingConfig(
 // 			"https://example.com/{wildCardTemplate}/",
+// 			&ExampleResource{},
 // 			Config{Subtree: true, RedirectInsecureRequest: true},
 // 		)
 //
@@ -275,8 +291,7 @@ func CreateResourceBase(
 // 			return nil, err
 // 		}
 //
-// 		exampleResource.ResourceBase = resourceBase,
-// 		return exampleResource, nil
+// 		return rb, nil
 // 	}
 //
 // When the URL template contains a host and/or prefix path segment templates,
@@ -293,11 +308,11 @@ func CreateResourceBase(
 // resource, they show where in the hierarchy the resource must be placed under
 // the registering resource.
 func CreateResourceBaseUsingConfig(
-	derived Resource,
 	urlTmplStr string,
+	rh RequestHandler,
 	config Config,
 ) (*ResourceBase, error) {
-	if derived == nil {
+	if rh == nil {
 		return nil, newError("%w", ErrNilArgument)
 	}
 
@@ -324,7 +339,7 @@ func CreateResourceBaseUsingConfig(
 	}
 
 	var rhb *_RequestHandlerBase
-	rhb, err = detectOverriddenHandlers(derived)
+	rhb, err = detectHTTPMethodHandlersOf(rh)
 	if err != nil {
 		return nil, newError("<- %w", err)
 	}
@@ -334,13 +349,15 @@ func CreateResourceBaseUsingConfig(
 	}
 
 	var rb = &ResourceBase{}
+	rb.derived = rb
+
 	var cfs = config.asFlags()
 	err = rb.configCompatibility(secure, tslash, &cfs)
 	if err != nil {
 		return nil, newError("<- %w", err)
 	}
 
-	rb.derived = derived
+	rb.requestHandler = rh
 	rb.tmpl = tmpl
 	rb._RequestHandlerBase = rhb
 
@@ -412,25 +429,31 @@ func NewResourceUsingConfig(urlTmplStr string, config Config) Resource {
 // ResourceBase struct. Unlike CreateResourceBase, NewResourceBase panics on
 // error.
 //
-// Function's first argument must be a pointer to the instance of the struct
-// that embeds the *ResourceBase.
-//
-// The second argument URL template's scheme and tslash property values are
+// The first argument URL template's scheme and tslash property values are
 // used to configure the new ResourceBase instance.
 //
+// The second argument must be an instance of a type with methods to handle
+// HTTP requests. Methods must have the signature of the http.HandlerFunc
+// and start with 'Handle' prefix. Remaining part of the methods' name is
+// considered as an HTTP method. For example, HandleGet, HandleCustomMethod
+// are considered as the handlers of the GET and CUSTOMMETHOD HTTP methods
+// respectively.
+//
 // Example:
-// 	type ExampleResource struct {
-// 		*ResourceBase
+// 	type ExampleResource struct{}
+//
+// 	func (er *ExampleResource) HandleGet(
+// 		w http.ResponseWriter,
+// 		r *http.Request,
+// 	) {
+// 		// ...
 // 	}
 //
-// 	func NewExampleResource() *ExampleResource {
-// 		var exampleResource = new ExampleResource
-// 		exampleResource.ResourceBase = NewResourceBase(
-// 			exampleHost,
+// 	func NewExampleResource() *ResourceBase {
+// 		return NewResourceBase(
 // 			"https://example.com/staticTemplate/{valueName:patternTemplate}",
+// 			&ExampleResource{},
 // 		)
-
-// 		return exampleResource
 // 	}
 //
 // When the URL template contains a host and/or prefix path segment templates,
@@ -446,8 +469,8 @@ func NewResourceUsingConfig(urlTmplStr string, config Config) Resource {
 // If there are remaining path segments that comes below the registering
 // resource, they show where in the hierarchy the resource must be placed under
 // the registering resource.
-func NewResourceBase(derived Resource, urlTmplStr string) *ResourceBase {
-	var rb, err = CreateResourceBase(derived, urlTmplStr)
+func NewResourceBase(urlTmplStr string, rh RequestHandler) *ResourceBase {
+	var rb, err = CreateResourceBase(urlTmplStr, rh)
 	if err != nil {
 		panic(newError("<- %w", err))
 	}
@@ -459,26 +482,32 @@ func NewResourceBase(derived Resource, urlTmplStr string) *ResourceBase {
 // of the ResourceBase struct. Unlike CreateResourceBaseUsingConfig,
 // NewResourceBaseUsingConfig panics on error.
 //
-// Function's first argument must be a pointer to the instance of the struct
-// that embeds the *ResourceBase.
-//
 // The new ResourceBase instance is configured with the properties in the
 // config as well as the scheme and tslash property values of the URL template.
 //
+// The second argument must be an instance of a type with methods to handle
+// HTTP requests. Methods must have the signature of the http.HandlerFunc
+// and start with 'Handle' prefix. Remaining part of the methods' name is
+// considered as an HTTP method. For example, HandleGet, HandleCustomMethod
+// are considered as the handlers of the GET and CUSTOMMETHOD HTTP methods
+// respectively.
+//
 // Example:
-// 	type ExampleResource struct {
-// 		*ResourceBase
+// 	type ExampleResource struct{}
+//
+// 	func (er *ExampleResource) HandleGet(
+// 		w http.ResponseWriter,
+// 		r *http.Request,
+// 	) {
+// 		// ...
 // 	}
 //
-// 	func NewExampleResource() *ExampleResource {
-// 		var exampleResource = new ExampleResource
-// 		exampleResource.ResourceBase = NewResourceBaseUsingConfig(
-// 			exampleResource,
+// 	func NewExampleResource() *ResourceBase {
+// 		return NewResourceBaseUsingConfig(
 // 			"https://example.com/{wildCardTemplate}/",
+// 			&ExampleResource{},
 // 			Config{Subtree: true, RedirectInsecureRequest: true},
 // 		)
-
-// 		return exampleResource
 // 	}
 //
 // When the URL template contains a host and/or prefix path segment templates,
@@ -495,11 +524,11 @@ func NewResourceBase(derived Resource, urlTmplStr string) *ResourceBase {
 // resource, they show where in the hierarchy the resource must be placed under
 // the registering resource.
 func NewResourceBaseUsingConfig(
-	derived Resource,
 	urlTmplStr string,
+	rh RequestHandler,
 	config Config,
 ) *ResourceBase {
-	var rb, err = CreateResourceBaseUsingConfig(derived, urlTmplStr, config)
+	var rb, err = CreateResourceBaseUsingConfig(urlTmplStr, rh, config)
 	if err != nil {
 		panic(newError("<- %w", err))
 	}
@@ -509,13 +538,13 @@ func NewResourceBaseUsingConfig(
 
 // newResourceBase creates a dummy instance of the ResourceBase from the tmpl.
 func newResourceBase(tmpl *Template) *ResourceBase {
-	var base = &ResourceBase{}
-	base.derived = base
-	base.tmpl = tmpl
-	base._RequestHandlerBase = sharedRequestHandlerBase
-	base.httpHandler = http.HandlerFunc(base.handleOrPassRequest)
+	var rb = &ResourceBase{}
+	rb.derived = rb
+	rb.tmpl = tmpl
+	rb._RequestHandlerBase = sharedRequestHandlerBase
+	rb.httpHandler = http.HandlerFunc(rb.handleOrPassRequest)
 
-	return base
+	return rb
 }
 
 // newRootResource creates a dummy root resource.
