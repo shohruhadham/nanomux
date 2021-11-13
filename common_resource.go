@@ -308,12 +308,14 @@ type _Resource interface {
 	WrapSubtreeHandlersOfMethodsInUse(middlewares ...Middleware) error
 	WrapSubtreeHandlersOfUnusedMethods(middlewares ...Middleware) error
 
+	RequestHandler() RequestHandler
+
 	_Resources() []_Resource
 	setRequestHandlerBase(rhb *_RequestHandlerBase)
 	requestHandlerBase() *_RequestHandlerBase
 
 	serveHTTP(w http.ResponseWriter, r *http.Request)
-	_RequestHandler
+	http.Handler
 }
 
 // --------------------------------------------------
@@ -321,9 +323,10 @@ type _Resource interface {
 // _ResourceBase implements the _Resource interface and provides the HostBase
 // and ResourceBase types with the common functionality.
 type _ResourceBase struct {
-	derived _Resource
-	tmpl    *Template
-	papa    _Parent
+	derived        _Resource // Keeps the reference to the embedding struct.
+	requestHandler RequestHandler
+	tmpl           *Template
+	papa           _Parent
 
 	staticResources  map[string]Resource
 	patternResources []Resource
@@ -1792,6 +1795,14 @@ func (rb *_ResourceBase) WrapSubtreeHandlersOfUnusedMethods(
 	}
 
 	return nil
+}
+
+// -------------------------
+
+// RequestHandler returns the RequestHandler of the host or resource.
+// If the host or resource wasn't created from a RequestHandler nil is returned.
+func (rb *_ResourceBase) RequestHandler() RequestHandler {
+	return rb.requestHandler
 }
 
 // -------------------------
