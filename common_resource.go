@@ -252,7 +252,7 @@ type _Resource interface {
 
 	canHandleRequest() bool
 
-	checkChildResourceNamesAreUniqueInThePath(r Resource) error
+	checkChildResourceNamesAreUniqueInThePath(r *Resource) error
 	validate(tmpl *Template) error
 	validateHostTmpl(tmplStr string) error
 	validateURL(hostTmplstr, pathTmplStr string) (
@@ -260,36 +260,36 @@ type _Resource interface {
 		err error,
 	)
 
-	resourceWithTemplate(tmpl *Template) (Resource, error)
-	registeredResource(pathTmplStr string) (r Resource, tslash bool, err error)
+	resourceWithTemplate(tmpl *Template) (*Resource, error)
+	registeredResource(pathTmplStr string) (r *Resource, tslash bool, err error)
 	passChildResourcesTo(r _Resource) error
-	registerResource(r Resource) error
+	registerResource(r *Resource) error
 	segmentResources(pathSegments []string) (
 		oldLast _Resource,
-		newFirst, newLast *ResourceBase,
+		newFirst, newLast *Resource,
 		err error,
 	)
 
 	pathSegmentResources(path string) (
 		oldLast _Resource,
-		newFirst, newLast *ResourceBase,
+		newFirst, newLast *Resource,
 		tslash bool,
 		err error,
 	)
 
-	registerResourceUnder(prefixPath string, r Resource) error
-	keepResourceOrItsChildResources(r Resource) error
+	registerResourceUnder(prefixPath string, r *Resource) error
+	keepResourceOrItsChildResources(r *Resource) error
 
-	Resource(path string) (Resource, error)
-	ResourceUsingConfig(path string, config Config) (Resource, error)
-	RegisterResource(r Resource) error
-	RegisterResourceUnder(prefixPath string, r Resource) error
-	RegisteredResource(path string) (Resource, error)
+	Resource(path string) (*Resource, error)
+	ResourceUsingConfig(path string, config Config) (*Resource, error)
+	RegisterResource(r *Resource) error
+	RegisterResourceUnder(prefixPath string, r *Resource) error
+	RegisteredResource(path string) (*Resource, error)
 
-	ChildResourceNamed(name string) Resource
-	ChildResources() []Resource
+	ChildResourceNamed(name string) *Resource
+	ChildResources() []*Resource
 
-	HasChildResource(r Resource) bool
+	HasChildResource(r *Resource) bool
 	HasAnyChildResource() bool
 
 	SetHandlerFor(methods string, handler http.Handler) error
@@ -328,9 +328,9 @@ type _ResourceBase struct {
 	tmpl           *Template
 	papa           _Parent
 
-	staticResources  map[string]Resource
-	patternResources []Resource
-	wildcardResource Resource
+	staticResources  map[string]*Resource
+	patternResources []*Resource
+	wildcardResource *Resource
 
 	*_RequestHandlerBase
 	httpHandler http.Handler
@@ -383,7 +383,7 @@ func (rb *_ResourceBase) setParent(p _Parent) error {
 		return nil
 	}
 
-	if _, ok := rb.derived.(Host); ok {
+	if _, ok := rb.derived.(*Host); ok {
 		// Only a router can be set as a parent for a host.
 		if _, ok := p.(*Router); !ok {
 			return newError("%w", ErrNonRouterParent)
@@ -590,13 +590,13 @@ func (rb *_ResourceBase) checkNameIsUniqueInThePath(name string) error {
 		return nil
 	}
 
-	if _, ok := rb.derived.(Host); !ok {
+	if _, ok := rb.derived.(*Host); !ok {
 		if !rb.Template().IsStatic() && rb.Name() == name {
 			return ErrDuplicateNameInThePath
 		}
 
 		for p := rb.parent(); p != nil; p = p.parent() {
-			if r, ok := p.(Resource); ok {
+			if r, ok := p.(*Resource); ok {
 				if !r.Template().IsStatic() && r.Name() == name {
 					return ErrDuplicateNameInThePath
 				}
@@ -613,9 +613,9 @@ func (rb *_ResourceBase) checkNameIsUniqueInThePath(name string) error {
 // of the argument resource have unique names above in the receiver resource's
 // hierarchy.
 func (rb *_ResourceBase) checkChildResourceNamesAreUniqueInThePath(
-	r Resource,
+	r *Resource,
 ) error {
-	if _, ok := rb.derived.(Host); ok {
+	if _, ok := rb.derived.(*Host); ok {
 		return nil
 	}
 
@@ -658,11 +658,11 @@ func (rb *_ResourceBase) validate(tmpl *Template) error {
 // resource's host. Validation fails even if the resource doesn't have a host.
 func (rb *_ResourceBase) validateHostTmpl(tmplStr string) error {
 	if tmplStr != "" {
-		var h Host
+		var h *Host
 		switch _r := rb.derived.(type) {
-		case Host:
+		case *Host:
 			h = _r
-		case Resource:
+		case *Resource:
 			h = _r.Host()
 		}
 
@@ -701,7 +701,7 @@ func (rb *_ResourceBase) validateURL(hostTmplStr string, pathTmplStr string) (
 	}
 
 	var lresources = len(resources)
-	if _, ok := resources[0].(Host); ok {
+	if _, ok := resources[0].(*Host); ok {
 		if lresources == 1 {
 			if pathTmplStr == "" || pathTmplStr == "/" {
 				return "", nil
@@ -738,7 +738,7 @@ func (rb *_ResourceBase) validateURL(hostTmplStr string, pathTmplStr string) (
 // resourceWithTemplate returns the existing child resource with the similar
 // template to the argument.
 func (rb *_ResourceBase) resourceWithTemplate(tmpl *Template) (
-	Resource,
+	*Resource,
 	error,
 ) {
 	if tmpl.IsStatic() {
@@ -805,7 +805,7 @@ func (rb *_ResourceBase) resourceWithTemplate(tmpl *Template) (
 // 		/$someChildResourceName/$anotherResourceName
 func (rb *_ResourceBase) registeredResource(
 	pathTmplStr string,
-) (r Resource, tslash bool, err error) {
+) (r *Resource, tslash bool, err error) {
 	var _r _Resource = rb
 	var psi = makePathSegmentIterator(pathTmplStr)
 
@@ -880,7 +880,7 @@ func (rb *_ResourceBase) passChildResourcesTo(r _Resource) error {
 // replaceResource replaces the old child resource with the new resource.
 // The function doesn't compare the templates of the resources. It assemes they
 // are the same.
-func (rb *_ResourceBase) replaceResource(oldR, newR Resource) error {
+func (rb *_ResourceBase) replaceResource(oldR, newR *Resource) error {
 	var tmpl = oldR.Template()
 	switch {
 	case tmpl.IsStatic():
@@ -914,11 +914,11 @@ func (rb *_ResourceBase) replaceResource(oldR, newR Resource) error {
 
 // registerResource registers the argument resource and sets the receiver
 // resource as it's parent.
-func (rb *_ResourceBase) registerResource(r Resource) error {
+func (rb *_ResourceBase) registerResource(r *Resource) error {
 	switch tmpl := r.Template(); {
 	case tmpl.IsStatic():
 		if rb.staticResources == nil {
-			rb.staticResources = make(map[string]Resource)
+			rb.staticResources = make(map[string]*Resource)
 		}
 
 		rb.staticResources[tmpl.Content()] = r
@@ -943,7 +943,7 @@ func (rb *_ResourceBase) registerResource(r Resource) error {
 // It's the reesponsibility of the caller.
 func (rb *_ResourceBase) segmentResources(pathSegments []string) (
 	oldLast _Resource,
-	newFirst, newLast *ResourceBase,
+	newFirst, newLast *Resource,
 	err error,
 ) {
 	oldLast = rb.derived
@@ -955,7 +955,7 @@ func (rb *_ResourceBase) segmentResources(pathSegments []string) (
 			return
 		}
 
-		var r Resource
+		var r *Resource
 		if newFirst == nil {
 			r, err = oldLast.resourceWithTemplate(tmpl)
 			if err != nil {
@@ -972,7 +972,7 @@ func (rb *_ResourceBase) segmentResources(pathSegments []string) (
 				return
 			}
 
-			var r = newResourceBase(tmpl)
+			var r = newDummyResource(tmpl)
 			if newLast != nil {
 				var name = tmpl.Name()
 				if err = newLast.checkNameIsUniqueInThePath(name); err != nil {
@@ -1002,7 +1002,7 @@ func (rb *_ResourceBase) segmentResources(pathSegments []string) (
 // existing resource. It's the responsibility of the caller.
 func (rb *_ResourceBase) pathSegmentResources(pathTmplStr string) (
 	oldLast _Resource,
-	newFirst, newLast *ResourceBase,
+	newFirst, newLast *Resource,
 	tslash bool,
 	err error,
 ) {
@@ -1014,7 +1014,7 @@ func (rb *_ResourceBase) pathSegmentResources(pathTmplStr string) (
 	}
 
 	if root {
-		if _, ok := rb.derived.(Host); ok {
+		if _, ok := rb.derived.(*Host); ok {
 			oldLast = rb
 			return
 		}
@@ -1037,7 +1037,7 @@ func (rb *_ResourceBase) pathSegmentResources(pathTmplStr string) (
 // they don't exist.
 func (rb *_ResourceBase) registerResourceUnder(
 	prefixPath string,
-	r Resource,
+	r *Resource,
 ) error {
 	var oldLast, newFirst, newLast, _, err = rb.pathSegmentResources(prefixPath)
 	if err != nil {
@@ -1082,7 +1082,7 @@ func (rb *_ResourceBase) registerResourceUnder(
 // also passes the child resources of the resource that can not handle a request
 // to the one that can. If both resources can handle a request, then the
 // ErrDuplicateResourceTemplate error will be returned.
-func (rb *_ResourceBase) keepResourceOrItsChildResources(r Resource) error {
+func (rb *_ResourceBase) keepResourceOrItsChildResources(r *Resource) error {
 	var rwt, err = rb.resourceWithTemplate(r.Template())
 	if err != nil {
 		return newError("<- %w", err)
@@ -1150,7 +1150,7 @@ func (rb *_ResourceBase) keepResourceOrItsChildResources(r Resource) error {
 //
 // Names given to the path segment resources must be unique in the path and
 // among their respective siblings.
-func (rb *_ResourceBase) Resource(path string) (Resource, error) {
+func (rb *_ResourceBase) Resource(path string) (*Resource, error) {
 	var (
 		hTmplStr       string
 		secure, tslash bool
@@ -1175,7 +1175,7 @@ func (rb *_ResourceBase) Resource(path string) (Resource, error) {
 	}
 
 	var oldLast _Resource
-	var newFirst, newLast *ResourceBase
+	var newFirst, newLast *Resource
 	oldLast, newFirst, newLast, _, err = rb.pathSegmentResources(path)
 	if err != nil {
 		return nil, newError("<- %w", err)
@@ -1203,7 +1203,7 @@ func (rb *_ResourceBase) Resource(path string) (Resource, error) {
 		return nil, newError("<- %w", err)
 	}
 
-	return oldLast.(Resource), nil
+	return oldLast.(*Resource), nil
 }
 
 // ResourceUsingConfig uses the path template and config to find an existing
@@ -1222,7 +1222,7 @@ func (rb *_ResourceBase) Resource(path string) (Resource, error) {
 func (rb *_ResourceBase) ResourceUsingConfig(
 	pathTmplStr string,
 	config Config,
-) (Resource, error) {
+) (*Resource, error) {
 	var (
 		hTmplStr       string
 		secure, tslash bool
@@ -1251,7 +1251,7 @@ func (rb *_ResourceBase) ResourceUsingConfig(
 	}
 
 	var oldLast _Resource
-	var newFirst, newLast *ResourceBase
+	var newFirst, newLast *Resource
 	oldLast, newFirst, newLast, _, err = rb.pathSegmentResources(pathTmplStr)
 	if err != nil {
 		return nil, newError("<- %w", err)
@@ -1280,7 +1280,7 @@ func (rb *_ResourceBase) ResourceUsingConfig(
 		return nil, newError("<- %w", err)
 	}
 
-	return oldLast.(Resource), nil
+	return oldLast.(*Resource), nil
 }
 
 // RegisterResource registers the argument resource below in the hierarchy of
@@ -1299,7 +1299,7 @@ func (rb *_ResourceBase) ResourceUsingConfig(
 // and passes the other one's child resources to it. If both can handle a
 // request, the function returns an error. Child resources are also checked
 // recursively.
-func (rb *_ResourceBase) RegisterResource(r Resource) error {
+func (rb *_ResourceBase) RegisterResource(r *Resource) error {
 	if r == nil {
 		return newError("%w", ErrNilArgument)
 	}
@@ -1362,7 +1362,7 @@ func (rb *_ResourceBase) RegisterResource(r Resource) error {
 // Tslash (trailing slash) in the prefix path is ignored.
 func (rb *_ResourceBase) RegisterResourceUnder(
 	prefixPath string,
-	r Resource,
+	r *Resource,
 ) error {
 	if r == nil {
 		return newError("%w", ErrNilArgument)
@@ -1385,7 +1385,7 @@ func (rb *_ResourceBase) RegisterResourceUnder(
 	}
 
 	if prefixPath == "/" {
-		if _, ok := rb.derived.(Host); ok {
+		if _, ok := rb.derived.(*Host); ok {
 			prefixPath = ""
 		} else {
 			return newError("%w", ErrNonRouterParent)
@@ -1458,7 +1458,7 @@ func (rb *_ResourceBase) RegisterResourceUnder(
 // otherwise the function returns an error.
 func (rb *_ResourceBase) RegisteredResource(
 	pathTmplStr string,
-) (Resource, error) {
+) (*Resource, error) {
 	var (
 		hTmplStr       string
 		secure, tslash bool
@@ -1482,7 +1482,7 @@ func (rb *_ResourceBase) RegisteredResource(
 		return nil, newError("%w", ErrNonRouterParent)
 	}
 
-	var r Resource
+	var r *Resource
 	r, _, err = rb.registeredResource(pathTmplStr)
 	if err != nil {
 		return nil, newError("<- %w", err)
@@ -1503,7 +1503,7 @@ func (rb *_ResourceBase) RegisteredResource(
 // ChildResourceNamed returns the named resource if it exists, otherwise
 // returns nil. Only the direct child resources of the receiver resource
 // will be looked.
-func (rb *_ResourceBase) ChildResourceNamed(name string) Resource {
+func (rb *_ResourceBase) ChildResourceNamed(name string) *Resource {
 	if name == "" {
 		return nil
 	}
@@ -1530,8 +1530,8 @@ func (rb *_ResourceBase) ChildResourceNamed(name string) Resource {
 // ChildResources returns all the child resources of the receiver resource.
 // If the receiver resource doesn't have any child resource, the function
 // returns nil.
-func (rb *_ResourceBase) ChildResources() []Resource {
-	var rs []Resource
+func (rb *_ResourceBase) ChildResources() []*Resource {
+	var rs []*Resource
 	for _, r := range rb.staticResources {
 		rs = append(rs, r)
 	}
@@ -1547,7 +1547,7 @@ func (rb *_ResourceBase) ChildResources() []Resource {
 
 // HasChildResource returns true if the argument resource is a direct child
 // of the receiver resource.
-func (rb *_ResourceBase) HasChildResource(r Resource) bool {
+func (rb *_ResourceBase) HasChildResource(r *Resource) bool {
 	if r == nil {
 		return false
 	}
@@ -1633,7 +1633,7 @@ func (rb *_ResourceBase) SetHandlerForUnusedMethods(
 	handler http.Handler,
 ) error {
 	if rb._RequestHandlerBase == sharedRequestHandlerBase {
-		if _, ok := rb.derived.(Host); ok {
+		if _, ok := rb.derived.(*Host); ok {
 			return newError("%w", ErrDummyHost)
 		}
 
@@ -1697,7 +1697,7 @@ func (rb *_ResourceBase) WrapHandlerOf(
 	mws ...Middleware,
 ) error {
 	if rb._RequestHandlerBase == sharedRequestHandlerBase {
-		if _, ok := rb.derived.(Host); ok {
+		if _, ok := rb.derived.(*Host); ok {
 			return newError("%w", ErrDummyHost)
 		}
 
@@ -1716,7 +1716,7 @@ func (rb *_ResourceBase) WrapHandlerOf(
 // resource with middlewares in their passed order.
 func (rb *_ResourceBase) WrapHandlerOfMethodsInUse(mws ...Middleware) error {
 	if rb._RequestHandlerBase == sharedRequestHandlerBase {
-		if _, ok := rb.derived.(Host); ok {
+		if _, ok := rb.derived.(*Host); ok {
 			return newError("%w", ErrDummyHost)
 		}
 
@@ -1735,7 +1735,7 @@ func (rb *_ResourceBase) WrapHandlerOfMethodsInUse(mws ...Middleware) error {
 // methods with the middlewares in their passed order.
 func (rb *_ResourceBase) WrapHandlerOfUnusedMethods(mws ...Middleware) error {
 	if rb._RequestHandlerBase == sharedRequestHandlerBase {
-		if _, ok := rb.derived.(Host); ok {
+		if _, ok := rb.derived.(*Host); ok {
 			return newError("%w", ErrDummyHost)
 		}
 

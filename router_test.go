@@ -17,13 +17,13 @@ import (
 func TestRouter_resource(t *testing.T) {
 	var (
 		ro  = NewRouter()
-		h0  = NewHost("example.com")
-		r10 = NewResource("https:///r10")
-		r20 = NewResource("{r20:pattern}/")
+		h0  = NewDormantHost("example.com")
+		r10 = NewDormantResource("https:///r10")
+		r20 = NewDormantResource("{r20:pattern}/")
 
-		r00 = NewResource("{r00:1}/")
-		r11 = NewResource("/r11")
-		r21 = NewResource("https:///{r21}/")
+		r00 = NewDormantResource("{r00:1}/")
+		r11 = NewDormantResource("/r11")
+		r21 = NewDormantResource("https:///{r21}/")
 	)
 
 	ro.registerHost(h0)
@@ -41,7 +41,7 @@ func TestRouter_resource(t *testing.T) {
 		wantR   _Resource
 		wantErr bool
 	}{
-		{"h0 #1", "http://example.com", h0.(_Resource), false},
+		{"h0 #1", "http://example.com", h0, false},
 		{"h0 #2", "https://example.com/", nil, true},
 		{"h0 #3", "http://example.com/", nil, true},
 		{"h0 #4", "https://example.com", nil, true},
@@ -62,14 +62,14 @@ func TestRouter_resource(t *testing.T) {
 
 		{"h3 #1", "http://{sub1:1}.{sub2:2}.example.com", nil, false},
 
-		{"r10 #1", "https://example.com/r10", r10.(_Resource), false},
+		{"r10 #1", "https://example.com/r10", r10, false},
 		{"r10 #2", "https://example.com/r10/", nil, true},
 		{"r10 #3", "http://example.com/r10", nil, true},
 
 		{
 			"r20 #1",
 			"http://example.com/r10/{r20:pattern}/",
-			r20.(_Resource),
+			r20,
 			false,
 		},
 		{"r20 #2", "https://example.com/r10/{r20:pattern}/", nil, true},
@@ -85,14 +85,14 @@ func TestRouter_resource(t *testing.T) {
 		{"r12 #3", "http://example.com/{r12}", nil, true},
 		{"r12 #4", "https://example.com/{r12}/", nil, true},
 
-		{"r00 #1", "{r00:1}/", r00.(_Resource), false},
+		{"r00 #1", "{r00:1}/", r00, false},
 		{"r00 #2", "https:///{r00:1}/", nil, true},
 		{"r00 #3", "http:///{r00:1}", nil, true},
 		{"r00 #4", "$r00:{r00x:1}/", nil, true},
 		{"r00 #5", "$r00x:{r00:1}/", nil, true},
 
-		{"r11 #1", "{r00:1}/r11", r11.(_Resource), false},
-		{"r11 #2", "/{r00:1}/r11", r11.(_Resource), false},
+		{"r11 #1", "{r00:1}/r11", r11, false},
+		{"r11 #2", "/{r00:1}/r11", r11, false},
 		{"r11 #3", "https:///{r00:1}/r11", nil, true},
 		{"r11 #4", "http:///{r00:1}/r11/", nil, true},
 
@@ -128,7 +128,7 @@ func TestRouter_resource(t *testing.T) {
 		{"r01 #4", "https:///r01", nil, true},
 		{"r01 #5", "r01", nil, true},
 
-		{"r21 #1", "https:///{r00:1}/r11/{r21}/", r21.(_Resource), false},
+		{"r21 #1", "https:///{r00:1}/r11/{r21}/", r21, false},
 		{"r21 #2", "https:///{r00:1}/r11/{r21}", nil, true},
 		{"r21 #3", "/{r00:1}/r11/{r21}/", nil, true},
 	}
@@ -154,11 +154,11 @@ func TestRouter_resource(t *testing.T) {
 func TestRouter_registeredResource(t *testing.T) {
 	var (
 		ro  = NewRouter()
-		h0  = NewHost("example.com")
-		r10 = NewResource("r10/")
-		r20 = NewResource("{r20:pattern}")
-		r00 = NewResource("r00")
-		r11 = NewResource("https:///{r11}")
+		h0  = NewDormantHost("example.com")
+		r10 = NewDormantResource("r10/")
+		r20 = NewDormantResource("{r20:pattern}")
+		r00 = NewDormantResource("r00")
+		r11 = NewDormantResource("https:///{r11}")
 	)
 
 	ro.registerHost(h0)
@@ -176,17 +176,17 @@ func TestRouter_registeredResource(t *testing.T) {
 		wantHost bool
 		wantErr  bool
 	}{
-		{"h0 #1", "http://example.com", h0.(_Resource), true, false},
+		{"h0 #1", "http://example.com", h0, true, false},
 		{"h0 #2", "http://example.com/", nil, false, true},
 		{"h0 #3", "https://example.com", nil, false, true},
 
-		{"r10 #1", "http://example.com/r10/", r10.(_Resource), false, false},
+		{"r10 #1", "http://example.com/r10/", r10, false, false},
 		{"r10 #2", "https://example.com/r10/", nil, false, true},
 		{"r10 #3", "http://example.com/r10", nil, false, true},
 
 		{
 			"r20 #1", "http://example.com/r10/{r20:pattern}",
-			r20.(_Resource),
+			r20,
 			false,
 			false,
 		},
@@ -207,12 +207,12 @@ func TestRouter_registeredResource(t *testing.T) {
 			true,
 		},
 
-		{"r00 #1", "/r00", r00.(_Resource), false, false},
-		{"r00 #2", "r00", r00.(_Resource), false, false},
+		{"r00 #1", "/r00", r00, false, false},
+		{"r00 #2", "r00", r00, false, false},
 		{"r00 #3", "https:///r00", nil, false, true},
 		{"r00 #4", "r00/", nil, false, true},
 
-		{"r11 #1", "https:///r00/{r11}", r11.(_Resource), false, false},
+		{"r11 #1", "https:///r00/{r11}", r11, false, false},
 		{"r11 #2", "r00/{r11}", nil, false, true},
 		{"r11 #3", "https:///r00/{r11}/", nil, false, true},
 	}
@@ -331,7 +331,7 @@ func TestRouter_SetHandlerFor(t *testing.T) {
 					return
 				}
 
-				var hb, ok = _r.(*HostBase)
+				var hb, ok = _r.(*Host)
 				if ok {
 					if n := len(hb.handlers); n != c.numberOfHandlers {
 						t.Fatalf(
@@ -341,8 +341,8 @@ func TestRouter_SetHandlerFor(t *testing.T) {
 					}
 				}
 
-				var rb *ResourceBase
-				rb, ok = _r.(*ResourceBase)
+				var rb *Resource
+				rb, ok = _r.(*Resource)
 				if ok {
 					if n := len(rb.handlers); n != c.numberOfHandlers {
 						t.Fatalf(
@@ -441,7 +441,7 @@ func TestRouter_SetHandlerFuncFor(t *testing.T) {
 					return
 				}
 
-				var hb, ok = _r.(*HostBase)
+				var hb, ok = _r.(*Host)
 				if ok {
 					if n := len(hb.handlers); n != c.numberOfHandlers {
 						t.Fatalf(
@@ -450,7 +450,7 @@ func TestRouter_SetHandlerFuncFor(t *testing.T) {
 						)
 					}
 				} else {
-					var rb, ok = _r.(*ResourceBase)
+					var rb, ok = _r.(*Resource)
 					if ok {
 						if n := len(rb.handlers); n != c.numberOfHandlers {
 							t.Fatalf(
@@ -600,13 +600,13 @@ func TestRouter_SetHandlerForUnusedMethods(t *testing.T) {
 					return
 				}
 
-				var hb, ok = _r.(*HostBase)
+				var hb, ok = _r.(*Host)
 				if ok {
 					if hb.unusedMethodsHandler == nil {
 						t.Fatalf("Router.SetHandlerForUnusedMethods() failed")
 					}
 				} else {
-					var rb, ok = _r.(*ResourceBase)
+					var rb, ok = _r.(*Resource)
 					if ok {
 						if rb.unusedMethodsHandler == nil {
 							t.Fatalf(
@@ -683,13 +683,13 @@ func TestRouter_SetHandlerFuncForUnusedMethods(t *testing.T) {
 					return
 				}
 
-				var hb, ok = _r.(*HostBase)
+				var hb, ok = _r.(*Host)
 				if ok {
 					if hb.unusedMethodsHandler == nil {
 						t.Fatalf("Router.SetHandlerForUnusedMethods() failed")
 					}
 				} else {
-					var rb, ok = _r.(*ResourceBase)
+					var rb, ok = _r.(*Resource)
 					if ok {
 						if rb.unusedMethodsHandler == nil {
 							t.Fatalf(
@@ -1368,33 +1368,33 @@ func TestRouter_WrapHandlerOfUnusedMethods(t *testing.T) {
 	}
 }
 
-func TestRouter_hostByTemplate(t *testing.T) {
+func TestRouterHostByTemplate(t *testing.T) {
 	var (
 		ro    = NewRouter()
-		host1 = NewHost("example.com")
-		host2 = NewHost("{sub:name}.example.com")
-		host3 = NewHost("{sub:id}.example.com")
-		host4 = NewHost("{sub}.example.com")
-		host5 = NewHost("{sub1:name}{sub2:id}.example.com")
+		host1 = NewDormantHost("example.com")
+		host2 = NewDormantHost("{sub:name}.example.com")
+		host3 = NewDormantHost("{sub:id}.example.com")
+		host4 = NewDormantHost("{sub}.example.com")
+		host5 = NewDormantHost("{sub1:name}{sub2:id}.example.com")
 	)
 
-	ro.staticHosts = make(map[string]Host)
+	ro.staticHosts = make(map[string]*Host)
 	ro.staticHosts[host1.Template().Content()] = host1
 	ro.patternHosts = append(ro.patternHosts, host2)
 	ro.patternHosts = append(ro.patternHosts, host3)
 	ro.patternHosts = append(ro.patternHosts, host4)
 	ro.patternHosts = append(ro.patternHosts, host5)
 
-	host1.base().papa = ro
-	host2.base().papa = ro
-	host3.base().papa = ro
-	host4.base().papa = ro
-	host5.base().papa = ro
+	host1.papa = ro
+	host2.papa = ro
+	host3.papa = ro
+	host4.papa = ro
+	host5.papa = ro
 
 	var cases = []struct {
 		name    string
 		tmpl    *Template
-		want    Host
+		want    *Host
 		wantErr bool
 	}{
 		{"host1 (own tmpl)", host1.Template(), host1, false},
@@ -1492,25 +1492,25 @@ func TestRouter_hostByTemplate(t *testing.T) {
 func TestRouter_replaceHost(t *testing.T) {
 	var (
 		ro           = NewRouter()
-		static1      = NewHost("example.com")
-		pattern1     = NewHost("{sub:name}.example.com")
-		wildcardSub1 = NewHost("{sub}.example.com")
-		static2      = NewHost("example.com")
-		pattern2     = NewHost("{sub:name}.example.com")
-		wildcardSub2 = NewHost("{sub}.example.com")
-		static3      = NewHost("example3.com")
-		pattern3     = NewHost("{sub3:name}.example.com")
+		static1      = NewDormantHost("example.com")
+		pattern1     = NewDormantHost("{sub:name}.example.com")
+		wildcardSub1 = NewDormantHost("{sub}.example.com")
+		static2      = NewDormantHost("example.com")
+		pattern2     = NewDormantHost("{sub:name}.example.com")
+		wildcardSub2 = NewDormantHost("{sub}.example.com")
+		static3      = NewDormantHost("example3.com")
+		pattern3     = NewDormantHost("{sub3:name}.example.com")
 	)
 
-	ro.staticHosts = map[string]Host{}
+	ro.staticHosts = map[string]*Host{}
 	ro.staticHosts[static1.Template().Content()] = static1
-	static1.base().papa = ro
+	static1.papa = ro
 	ro.staticHosts[static3.Template().Content()] = static3
-	static3.base().papa = ro
+	static3.papa = ro
 	ro.patternHosts = append(ro.patternHosts, pattern1)
-	pattern1.base().papa = ro
+	pattern1.papa = ro
 	ro.patternHosts = append(ro.patternHosts, pattern3)
-	pattern3.base().papa = ro
+	pattern3.papa = ro
 	ro.patternHosts = append(ro.patternHosts, wildcardSub1)
 
 	ro.replaceHost(static1, static2)
@@ -1521,11 +1521,11 @@ func TestRouter_replaceHost(t *testing.T) {
 		)
 	}
 
-	if static2.base().papa == nil {
+	if static2.papa == nil {
 		t.Fatalf("Router.replaceHost() new static host's parent wasn't set")
 	}
 
-	if static1.base().papa != nil {
+	if static1.papa != nil {
 		t.Fatalf("Router.replaceHost() old static host's parent wasn't cleared")
 	}
 
@@ -1552,13 +1552,13 @@ func TestRouter_replaceHost(t *testing.T) {
 		}
 	}
 
-	if pattern2.base().papa == nil {
+	if pattern2.papa == nil {
 		t.Fatalf(
 			"Router.replaceHost() new pattern host's parent wasn't set",
 		)
 	}
 
-	if pattern1.base().papa != nil {
+	if pattern1.papa != nil {
 		t.Fatalf(
 			"Router.replaceHost() old pattern host's parent wasn't cleared",
 		)
@@ -1586,13 +1586,13 @@ func TestRouter_replaceHost(t *testing.T) {
 		}
 	}
 
-	if wildcardSub2.base().papa == nil {
+	if wildcardSub2.papa == nil {
 		t.Fatalf(
 			"Router.replaceHost() new wildcard subdomain resource's parent wasn't set",
 		)
 	}
 
-	if wildcardSub1.base().papa != nil {
+	if wildcardSub1.papa != nil {
 		t.Fatalf(
 			"Router.replaceHost() old wildcard subdomain resource's parent wasn't cleared",
 		)
@@ -1603,9 +1603,9 @@ func TestRouter_registerHost(t *testing.T) {
 	var (
 		ro = NewRouter()
 
-		static      = NewHost("example.com")
-		pattern     = NewHost("{sub:name}.example.com")
-		wildcardSub = NewHost("{sub}.example.com")
+		static      = NewDormantHost("example.com")
+		pattern     = NewDormantHost("{sub:name}.example.com")
+		wildcardSub = NewDormantHost("{sub}.example.com")
 	)
 
 	ro.registerHost(static)
@@ -1631,16 +1631,16 @@ func TestRouter_registerHost(t *testing.T) {
 	}
 }
 
-func TestRouter_Host(t *testing.T) {
+func TestRouterHost(t *testing.T) {
 	var (
 		ro      = NewRouter()
-		static  = NewHostUsingConfig("example.com", Config{Subtree: true})
-		pattern = NewHostUsingConfig(
+		static  = NewDormantHostUsingConfig("example.com", Config{Subtree: true})
+		pattern = NewDormantHostUsingConfig(
 			"https://{sub:name}.example.com",
 			Config{HandleThePathAsIs: true},
 		)
 
-		wildcardSub = NewHost("{sub}.example.com/")
+		wildcardSub = NewDormantHost("{sub}.example.com/")
 	)
 
 	ro.registerHost(static)
@@ -1650,7 +1650,7 @@ func TestRouter_Host(t *testing.T) {
 	var cases = []struct {
 		name     string
 		tmplStr  string
-		wantHost Host
+		wantHost *Host
 		wantErr  bool
 	}{
 		{"static #1", "example.com", static, false},
@@ -1727,16 +1727,16 @@ func TestRouter_Host(t *testing.T) {
 	}
 }
 
-func TestRouter_HostUsingConfig(t *testing.T) {
+func TestRouterHostUsingConfig(t *testing.T) {
 	var (
 		ro      = NewRouter()
-		static  = NewHostUsingConfig("example.com", Config{Subtree: true})
-		pattern = NewHostUsingConfig(
+		static  = NewDormantHostUsingConfig("example.com", Config{Subtree: true})
+		pattern = NewDormantHostUsingConfig(
 			"{sub:name}.example.com/",
 			Config{HandleThePathAsIs: true},
 		)
 
-		wildcardSub = NewHostUsingConfig(
+		wildcardSub = NewDormantHostUsingConfig(
 			"https://{wildCardSub}.example.com",
 			Config{DropRequestOnUnmatchedTslash: true},
 		)
@@ -1750,7 +1750,7 @@ func TestRouter_HostUsingConfig(t *testing.T) {
 		name     string
 		tmplStr  string
 		config   Config
-		wantHost Host
+		wantHost *Host
 		wantErr  bool
 	}{
 		{
@@ -1939,10 +1939,10 @@ func TestRouter_HostUsingConfig(t *testing.T) {
 func TestRouter_RegisterHost(t *testing.T) {
 	var (
 		ro = NewRouter()
-		h1 = NewHost("{sub:id}.example.com")
-		h2 = NewHost("{sub:id}.example.com")
-		r1 = NewResource("r1")
-		r2 = NewResource("r2")
+		h1 = NewDormantHost("{sub:id}.example.com")
+		h2 = NewDormantHost("{sub:id}.example.com")
+		r1 = NewDormantResource("r1")
+		r2 = NewDormantResource("r2")
 	)
 
 	if err := h1.RegisterResource(r1); err != nil {
@@ -1967,7 +1967,7 @@ func TestRouter_RegisterHost(t *testing.T) {
 		)
 	}
 
-	var hb = ro.patternHosts[0].base()
+	var hb = ro.patternHosts[0]
 	if len(hb.staticResources) != 2 {
 		t.Fatalf("Router.RegisterHost() couldn't keep rersource 2")
 	}
@@ -1984,25 +1984,25 @@ func TestRouter_RegisteredHost(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var static2 Host
+	var static2 *Host
 	static2, err = ro.Host("$static2:example2.com")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	var pattern1 Host
+	var pattern1 *Host
 	pattern1, err = ro.Host("{sub1:name}.example.com")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	var pattern2 Host
+	var pattern2 *Host
 	pattern2, err = ro.Host("$sub2:{sub1:name}{sub2}.example.com")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	var wildcardSub Host
+	var wildcardSub *Host
 	wildcardSub, err = ro.Host("{sub}.example.com")
 	if err != nil {
 		t.Fatal(err)
@@ -2011,7 +2011,7 @@ func TestRouter_RegisteredHost(t *testing.T) {
 	var cases = []struct {
 		name    string
 		tmplStr string
-		want    Host
+		want    *Host
 		wantErr bool
 	}{
 		{"static1", "example1.com", static1, false},
@@ -2055,7 +2055,7 @@ func TestRouter_RegisteredHost(t *testing.T) {
 	}
 }
 
-func TestRouter_HostNamed(t *testing.T) {
+func TestRouterHostNamed(t *testing.T) {
 	var ro = NewRouter()
 
 	var _, err = ro.Host("$host:example.com")
@@ -2068,19 +2068,19 @@ func TestRouter_HostNamed(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var wildcardSub Host
+	var wildcardSub *Host
 	wildcardSub, err = ro.Host("{subdomain}.example.com")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	var static Host
+	var static *Host
 	static, err = ro.Host("$static:example2.com")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	var pattern Host
+	var pattern *Host
 	pattern, err = ro.Host("{name:name}.example.com")
 	if err != nil {
 		t.Fatal(err)
@@ -2103,116 +2103,11 @@ func TestRouter_HostNamed(t *testing.T) {
 	}
 }
 
-// func TestRouter_HostsNamed(t *testing.T) {
-// 	var (
-// 		ro  = NewRouter()
-// 		hs  = make([]Host, 5)
-// 		err error
-// 	)
-
-// 	hs[0], err = ro.Host("$host:example1.com")
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-
-// 	hs[1], err = ro.Host("$host:example2.com")
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-
-// 	hs[2], err = ro.Host("$host:{sub:name}.example1.com")
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-
-// 	hs[3], err = ro.Host("$host:{sub:id}.example2.com")
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-
-// 	hs[4], err = ro.Host("$host:{sub}.example3.com")
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-
-// 	var static Host
-// 	static, err = ro.Host("$static:example3.com")
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-
-// 	var pattern Host
-// 	pattern, err = ro.Host("{name:name1}.example4.com")
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-
-// 	gotHs := ro.HostsNamed("host")
-// 	if len(gotHs) != len(hs) {
-// 		t.Fatalf(
-// 			"Router.HostNamed() len(got) = %d, want %d",
-// 			len(gotHs),
-// 			len(hs),
-// 		)
-// 	}
-
-// 	for _, h := range hs {
-// 		var found bool
-// 		for _, gotH := range gotHs {
-// 			if gotH == h {
-// 				found = true
-// 				break
-// 			}
-// 		}
-
-// 		if !found {
-// 			t.Fatalf(
-// 				"Router.HostsNamed(): %q were not gottern",
-// 				h.Template().String(),
-// 			)
-// 		}
-// 	}
-
-// 	gotHs = ro.HostsNamed("static")
-// 	if len(gotHs) != 1 {
-// 		t.Fatalf(
-// 			"Router.HostsNamed() len(got) = %d, want 1",
-// 			len(gotHs),
-// 		)
-// 	}
-
-// 	if gotHs[0] != static {
-// 		t.Fatalf(
-// 			"Router.HostsNamed(): single static host didn't match",
-// 		)
-// 	}
-
-// 	gotHs = ro.HostsNamed("name")
-// 	if len(gotHs) != 1 {
-// 		t.Fatalf(
-// 			"Router.HostsNamed() len(got) = %d, want 1",
-// 			len(gotHs),
-// 		)
-// 	}
-
-// 	if gotHs[0] != pattern {
-// 		t.Fatalf(
-// 			"Router.HostsNamed(): single pattern host didn't match",
-// 		)
-// 	}
-
-// 	if gotHs = ro.HostsNamed("noName"); gotHs != nil {
-// 		t.Fatalf(
-// 			"Router.HostsNamed() got = %v, want nil", gotHs,
-// 		)
-// 	}
-// }
-
-func TestRouter_Hosts(t *testing.T) {
+func TestRouterHosts(t *testing.T) {
 	var (
 		ro     = NewRouter()
 		length = 5
-		hs     = make([]Host, length)
+		hs     = make([]*Host, length)
 		err    error
 	)
 
@@ -2270,7 +2165,7 @@ func TestRouter_Hosts(t *testing.T) {
 
 func TestRouter_HasHost(t *testing.T) {
 	var ro = NewRouter()
-	var hs = make([]Host, 5)
+	var hs = make([]*Host, 5)
 
 	var err error
 	hs[0], err = ro.Host("example1.com")
@@ -2300,7 +2195,7 @@ func TestRouter_HasHost(t *testing.T) {
 
 	var cases = []struct {
 		name string
-		h    Host
+		h    *Host
 		want bool
 	}{
 		{"static1", hs[0], true},
@@ -2308,15 +2203,15 @@ func TestRouter_HasHost(t *testing.T) {
 		{"pattern1", hs[2], true},
 		{"pattern2", hs[3], true},
 		{"wildcardSub", hs[4], true},
-		{"static3", NewHost("example3.com"), false},
+		{"static3", NewDormantHost("example3.com"), false},
 		{
 			"pattern3",
-			NewHost("{sub:name3}.example.com"),
+			NewDormantHost("{sub:name3}.example.com"),
 			false,
 		},
 		{
 			"wildcardSub2",
-			NewHost("{sub2}.example2.com"),
+			NewDormantHost("{sub2}.example2.com"),
 			false,
 		},
 	}
@@ -2364,13 +2259,13 @@ func TestRouter_Resource(t *testing.T) {
 		t.Fatalf("Router.Resource() err = %v, want nil", err)
 	}
 
-	var pattern Resource
+	var pattern *Resource
 	pattern, err = ro.Resource("static2/{name:pattern}/")
 	if err != nil {
 		t.Fatalf("Router.Resource() err = %v, want nil", err)
 	}
 
-	var wildcard Resource
+	var wildcard *Resource
 	wildcard, err = ro.Resource("https:///{name:pattern2}/{wildcard}")
 	if err != nil {
 		t.Fatal(err)
@@ -2379,7 +2274,7 @@ func TestRouter_Resource(t *testing.T) {
 	var cases = []struct {
 		name         string
 		tmplStr      string
-		wantResource Resource
+		wantResource *Resource
 		wantErr      bool
 	}{
 		{"static1 #1", "static1", static1, false},
@@ -2467,7 +2362,7 @@ func TestRouter_ResourceUsingConfig(t *testing.T) {
 		t.Fatalf("Router.ResourceUsingConfig() err = %v, want nil", err)
 	}
 
-	var pattern Resource
+	var pattern *Resource
 	pattern, err = ro.ResourceUsingConfig("{name:pattern}/", Config{
 		HandleThePathAsIs: true,
 	})
@@ -2476,7 +2371,7 @@ func TestRouter_ResourceUsingConfig(t *testing.T) {
 		t.Fatalf("Router.ResourceUsingConfig() err = %v, want nil", err)
 	}
 
-	var wildcard Resource
+	var wildcard *Resource
 	wildcard, err = ro.ResourceUsingConfig("https:///{wildcard}", Config{
 		RedirectInsecureRequest: true,
 	})
@@ -2489,7 +2384,7 @@ func TestRouter_ResourceUsingConfig(t *testing.T) {
 		name    string
 		tmplStr string
 		config  Config
-		wantR   Resource
+		wantR   *Resource
 		wantErr bool
 	}{
 		{"static #1", "static", Config{Subtree: true}, static, false},
@@ -2705,251 +2600,6 @@ func TestRouter_ResourceUsingConfig(t *testing.T) {
 	}
 }
 
-//func TestRouter_ResourceUnder(t *testing.T) {
-//	var ro = NewRouter()
-//	if _, err := ro.Resource("static"); err != nil {
-//		t.Fatalf("Router.ResourceUnder() err = %v, want nil", nil)
-//
-//	}
-//
-//	var pattern, err = ro.Resource("{name:pattern}")
-//	if err != nil {
-//		t.Fatalf("Router.ResourceUnder() err = %v, want nil", nil)
-//
-//	}
-//
-//	var r Resource
-//	r, err = ro.ResourceUnder(
-//		"example.com",
-//		[]string{"static1", "{name:pattern1}", "{wildcard1}"},
-//		"resource",
-//	)
-//
-//	if err != nil {
-//		t.Fatalf("Router.ResourceUnder() err = %v, want nil", err)
-//	}
-//
-//	if r.Template(}.Content() != "resource" {
-//		t.Fatalf(
-//			"Router.ResourceUnder() returned resource's template = %q, want 'resource'",
-//			r.Template(}.Content(),
-//		)
-//	}
-//
-//	if len(ro.staticHosts) != 1 {
-//		t.Fatalf("Router.ResourceUnder() failed to register host")
-//	}
-//
-//	var pr = ro.staticHosts["example.com"].base(}.staticResources["static1"]
-//	if pr == nil {
-//		t.Fatalf("Router.ResourceUnder() failed to register prifix[0]")
-//	}
-//
-//	var prb = pr.base()
-//	if !(len(prb.patternResources) > 0) ||
-//		prb.patternResources[0].Template(}.Content() != "{name:^pattern1$}" {
-//		t.Fatalf(
-//			"Router.ResourceUnder() failed to register prifix[1]",
-//		)
-//	}
-//
-//	prb = prb.patternResources[0].base()
-//	if prb.wildcardResource == nil ||
-//		prb.wildcardResource.Template(}.Content() != "{wildcard1}" {
-//		t.Fatalf(
-//			"Router.ResourceUnder() failed to register prifix[2]",
-//		)
-//	}
-//
-//	prb = prb.wildcardResource.base()
-//	if prb.staticResources["resource"] != r {
-//		t.Fatalf(
-//			"Router.ResourceUnder() failed to register resource",
-//		)
-//	}
-//
-//	var rr Resource
-//	rr, err = ro.ResourceUnder(
-//		"example.com",
-//		[]string{
-//			"static1", "{name:pattern1}", "{wildcard1}",
-//		},
-//		"resource",
-//	)
-//
-//	if rr != r {
-//		t.Fatalf(
-//			"Router.ResourceUnder() couldn't get registered resource",
-//		)
-//	}
-//
-//	r, err = ro.ResourceUnder(
-//		"",
-//		[]string{"{name:pattern}", "static"},
-//		"resource",
-//	)
-//
-//	if err != nil {
-//		t.Fatalf(
-//			"Router.ResourceUnder() err = %v, want nil",
-//			err,
-//		)
-//	}
-//
-//	if r.Template(}.Content() != "resource" {
-//		t.Fatalf(
-//			"Router.ResourceUnder() returned resource's template = %q, want 'resource'",
-//			r.Template(}.Content(),
-//		)
-//	}
-//
-//	prb = ro.r.base()
-//	if len(prb.patternResources) != 1 && prb.patternResources[0] != pattern {
-//		t.Fatalf(
-//			"Router.ResourceUnder() failed to keep old pattern resource",
-//		)
-//	}
-//
-//	prb = pattern.base()
-//	if len(prb.staticResources) == 0 {
-//		t.Fatalf(
-//			"Router.ResourceUnder() failed to register prifix[1]",
-//		)
-//	}
-//
-//	prb = prb.staticResources["static"].base()
-//	if len(prb.staticResources) == 0 || prb.staticResources["resource"] != r {
-//		t.Fatalf(
-//			"Router.ResourceUnder() failed to register resource",
-//		)
-//	}
-//}
-
-//func TestRouter_ResourceUsingConfigUnder(t *testing.T) {
-//	var ro = NewRouter()
-//	if _, err := ro.Resource("static"); err != nil {
-//		t.Fatalf("Router.ResourceUsingConfigUnder() err = %v, want nil", nil)
-//
-//	}
-//
-//	var pattern, err = ro.Resource("{name:pattern}")
-//	if err != nil {
-//		t.Fatalf("Router.ResourceUsingConfigUnder() err = %v, want nil", nil)
-//
-//	}
-//
-//	var r Resource
-//	r, err = ro.ResourceUsingConfigUnder(
-//		"example.com",
-//		[]string{"static1", "{name:pattern1}", "{wildcard1}"},
-//		"resource",
-//		Config{Secure: true},
-//	)
-//
-//	if err != nil {
-//		t.Fatalf("Router.ResourceUsingConfigUnder() err = %v, want nil", err)
-//	}
-//
-//	if r.Template(}.Content() != "resource" {
-//		t.Fatalf(
-//			"Router.ResourceUsingConfigUnder() returned resource's template = %q, want 'resource'",
-//			r.Template(}.Content(),
-//		)
-//	}
-//
-//	if len(ro.staticHosts) != 1 {
-//		t.Fatalf("Router.ResourceUsingConfigUnder() failed to register host")
-//	}
-//
-//	var pr = ro.staticHosts["example.com"].base(}.staticResources["static1"]
-//	if pr == nil {
-//		t.Fatalf(
-//			"Router.ResourceUsingConfigUnder() failed to register prifix[0]",
-//		)
-//	}
-//
-//	var prb = pr.base()
-//	if !(len(prb.patternResources) > 0) ||
-//		prb.patternResources[0].Template(}.Content() != "{name:^pattern1$}" {
-//		t.Fatalf(
-//			"Router.ResourceUsingConfigUnder() failed to register prifix[1]",
-//		)
-//	}
-//
-//	prb = prb.patternResources[0].base()
-//	if prb.wildcardResource == nil ||
-//		prb.wildcardResource.Template(}.Content() != "{wildcard1}" {
-//		t.Fatalf(
-//			"Router.ResourceUsingConfigUnder() failed to register prifix[2]",
-//		)
-//	}
-//
-//	prb = prb.wildcardResource.base()
-//	if prb.staticResources["resource"] != r {
-//		t.Fatalf(
-//			"Router.ResourceUsingConfigUnder() failed to register resource",
-//		)
-//	}
-//
-//	var rr Resource
-//	rr, err = ro.ResourceUsingConfigUnder(
-//		"example.com",
-//		[]string{
-//			"static1", "{name:pattern1}", "{wildcard1}",
-//		},
-//		"resource",
-//		Config{Secure: true},
-//	)
-//
-//	if rr != r {
-//		t.Fatalf(
-//			"Router.ResourceUsingConfigUnder() couldn't get registered resource",
-//		)
-//	}
-//
-//	r, err = ro.ResourceUsingConfigUnder(
-//		"",
-//		[]string{"{name:pattern}", "static"},
-//		"resource",
-//		Config{HandleThePathAsIs: true},
-//	)
-//
-//	if err != nil {
-//		t.Fatalf(
-//			"Router.ResourceUsingConfigUnder() err = %v, want nil",
-//			err,
-//		)
-//	}
-//
-//	if r.Template(}.Content() != "resource" {
-//		t.Fatalf(
-//			"Router.ResourceUsingConfigUnder() returned resource's template = %q, want 'resource'",
-//			r.Template(}.Content(),
-//		)
-//	}
-//
-//	prb = ro.r.base()
-//	if len(prb.patternResources) != 1 && prb.patternResources[0] != pattern {
-//		t.Fatalf(
-//			"Router.ResourceUsingConfigUnder() failed to keep old pattern resource",
-//		)
-//	}
-//
-//	prb = pattern.base()
-//	if len(prb.staticResources) == 0 {
-//		t.Fatalf(
-//			"Router.ResourceUsingConfigUnder() failed to register prifix[1]",
-//		)
-//	}
-//
-//	prb = prb.staticResources["static"].base()
-//	if len(prb.staticResources) == 0 || prb.staticResources["resource"] != r {
-//		t.Fatalf(
-//			"Router.ResourceUsingConfigUnder() failed to register resource",
-//		)
-//	}
-//}
-
 func TestRouter_registerNewRoot(t *testing.T) {
 	var ro = NewRouter()
 	var err = ro.registerNewRoot(newRootResource())
@@ -2957,7 +2607,7 @@ func TestRouter_registerNewRoot(t *testing.T) {
 		t.Fatalf("Router.registerNewRoot() err = %v, want nil", err)
 	}
 
-	var r1 Resource
+	var r1 *Resource
 	r1, err = ro.Resource("static1")
 	if err != nil {
 		t.Fatalf("Router.registerNewRoot() err = %v, want nil", err)
@@ -2981,15 +2631,15 @@ func TestRouter_registerNewRoot(t *testing.T) {
 		t.Fatalf("Router.registerNewRoot() failed to register new root")
 	}
 
-	if len(ro.r.base().staticResources) != 1 &&
-		ro.r.base().staticResources["static1"] != r1 {
+	if len(ro.r.staticResources) != 1 &&
+		ro.r.staticResources["static1"] != r1 {
 		t.Fatalf(
 			"Router.registerNewRoot() failed to keep resource of the old root",
 		)
 	}
 
 	var root2 = newRootResource()
-	var r2 Resource
+	var r2 *Resource
 	r2, err = root2.Resource("static2")
 	if err != nil {
 		t.Fatal(err)
@@ -3004,8 +2654,8 @@ func TestRouter_registerNewRoot(t *testing.T) {
 		t.Fatalf("Router.registerNewRoot() failed to keep old root")
 	}
 
-	if len(ro.r.base().staticResources) != 2 &&
-		ro.r.base().staticResources["static2"] != r2 {
+	if len(ro.r.staticResources) != 2 &&
+		ro.r.staticResources["static2"] != r2 {
 		t.Fatalf(
 			"Router.registerNewRoot() failed to register resource of the new root",
 		)
@@ -3042,10 +2692,10 @@ func TestRouter_registerNewRoot(t *testing.T) {
 func TestRouter_RegisterResource(t *testing.T) {
 	var (
 		ro          = NewRouter()
-		child1      = NewResource("{name:pattern}")
-		child2      = NewResource("{name:pattern}")
-		grandChild1 = NewResource("grandChild1")
-		grandChild2 = NewResource("grandChild2")
+		child1      = NewDormantResource("{name:pattern}")
+		child2      = NewDormantResource("{name:pattern}")
+		grandChild1 = NewDormantResource("grandChild1")
+		grandChild2 = NewDormantResource("grandChild2")
 	)
 
 	if err := child1.RegisterResource(grandChild1); err != nil {
@@ -3064,14 +2714,14 @@ func TestRouter_RegisterResource(t *testing.T) {
 		t.Fatalf("Router.RegisterResource() err = %v, want nil", nil)
 	}
 
-	var rb = ro.r.base()
+	var rb = ro.r
 	if len(rb.patternResources) != 1 && rb.patternResources[0] != child1 {
 		t.Fatalf(
 			"Router.RegisterResource() couldn't keep own child",
 		)
 	}
 
-	var childB = rb.patternResources[0].base()
+	var childB = rb.patternResources[0]
 	if len(childB.staticResources) != 2 {
 		t.Fatalf("Router.RegisterResource() couldn't keep grandChild2")
 	}
@@ -3084,7 +2734,7 @@ func TestRouter_RegisterResource(t *testing.T) {
 		t.Fatalf("Router.RegisterResource() err = nil, want !nil")
 	}
 
-	var r = NewResource("http://example.com/prefix/resource")
+	var r = NewDormantResource("http://example.com/prefix/resource")
 	if err := ro.RegisterResource(r); err != nil {
 		t.Fatalf("Router.RegisterResource() err = %v, want nil", err)
 	}
@@ -3093,17 +2743,17 @@ func TestRouter_RegisterResource(t *testing.T) {
 		t.Fatalf("Router.RegisterResource() failed to register host")
 	}
 
-	var hb = ro.staticHosts["example.com"].base()
+	var hb = ro.staticHosts["example.com"]
 	if len(hb.staticResources) != 1 {
 		t.Fatalf("Router.RegisterResource() failed to register prefix")
 	}
 
-	rb = hb.staticResources["prefix"].base()
+	rb = hb.staticResources["prefix"]
 	if rb.staticResources["resource"] == nil {
 		t.Fatalf("Router.RegisterResource() failed to register resource")
 	}
 
-	var root = NewResource("/")
+	var root = NewDormantResource("/")
 	var err error
 	r, err = root.Resource("new-resource")
 	if err != nil {
@@ -3128,7 +2778,7 @@ func TestRouter_RegisterResource(t *testing.T) {
 		t.Fatalf("Router.RegisterResource() failed to keep old root")
 	}
 
-	if ro.r.base().staticResources["new-resource"] != r {
+	if ro.r.staticResources["new-resource"] != r {
 		t.Fatalf(
 			"Router.RegisterResource() failed to register new root's resource",
 		)
@@ -3138,10 +2788,10 @@ func TestRouter_RegisterResource(t *testing.T) {
 func TestRouter_RegisterResourceUnder(t *testing.T) {
 	var (
 		ro     = NewRouter()
-		child1 = NewResource("resource1")
-		child2 = NewResource("/{name:pattern}/{grandChild}/resource2")
-		child3 = NewResource("{name:pattern}/grandChild/resource3")
-		child4 = NewResource(
+		child1 = NewDormantResource("resource1")
+		child2 = NewDormantResource("/{name:pattern}/{grandChild}/resource2")
+		child3 = NewDormantResource("{name:pattern}/grandChild/resource3")
+		child4 = NewDormantResource(
 			"http://example.com/{name:pattern}/grandChild/resource4",
 		)
 	)
@@ -3157,28 +2807,28 @@ func TestRouter_RegisterResourceUnder(t *testing.T) {
 		t.Fatalf("Router.RegisterResourceUnder() failed to register host")
 	}
 
-	var hb = ro.staticHosts["example.com"].base()
+	var hb = ro.staticHosts["example.com"]
 	if len(hb.patternResources) != 1 {
 		t.Fatalf(
 			"Router.RegisterResourceUnder() failed to register prefix[0]",
 		)
 	}
 
-	var rb = hb.patternResources[0].base()
+	var rb = hb.patternResources[0]
 	if len(rb.staticResources) != 1 {
 		t.Fatalf(
 			"Router.RegisterResourceUnder() failed to register prefix[1]",
 		)
 	}
 
-	rb = rb.staticResources["grandChild"].base()
+	rb = rb.staticResources["grandChild"]
 	if len(rb.staticResources) != 1 {
 		t.Fatalf(
 			"Router.RegisterResourceUnder() failed to register resource",
 		)
 	}
 
-	rb = rb.staticResources["resource1"].base()
+	rb = rb.staticResources["resource1"]
 	if !rb.configFlags().has(flagSecure) {
 		t.Fatalf(
 			"Router.RegisterResourceUnder() failed to set flagSecure",
@@ -3192,7 +2842,7 @@ func TestRouter_RegisterResourceUnder(t *testing.T) {
 		t.Fatalf("Router.RegisterResourceUnder() err = nil, want non-nil")
 	}
 
-	child2 = NewResource("/{name:pattern}/{grandChild}/resource2")
+	child2 = NewDormantResource("/{name:pattern}/{grandChild}/resource2")
 	if err := ro.RegisterResourceUnder(
 		"{name:pattern}/{grandChild}",
 		child2,
@@ -3200,21 +2850,21 @@ func TestRouter_RegisterResourceUnder(t *testing.T) {
 		t.Fatalf("Router.RegisterResourceUnder() err = %v, want nil", err)
 	}
 
-	rb = ro.r.base()
+	rb = ro.r
 	if len(rb.patternResources) != 1 {
 		t.Fatalf(
 			"Router.RegisterResourceUnder() failed to keep prefix[0]",
 		)
 	}
 
-	rb = rb.patternResources[0].base()
+	rb = rb.patternResources[0]
 	if rb.wildcardResource == nil {
 		t.Fatalf(
 			"Router.RegisterResourceUnder() failed to register prefix[1]",
 		)
 	}
 
-	rb = rb.wildcardResource.base()
+	rb = rb.wildcardResource
 	if len(rb.staticResources) != 1 {
 		t.Fatalf(
 			"Router.RegisterResourceUnder() failed to register resource",
@@ -3228,8 +2878,8 @@ func TestRouter_RegisterResourceUnder(t *testing.T) {
 		t.Fatalf("Router.RegisterResourceUnder() err = %v, want nil", err)
 	}
 
-	rb = hb.patternResources[0].base()
-	rb = rb.staticResources["grandChild"].base()
+	rb = hb.patternResources[0]
+	rb = rb.staticResources["grandChild"]
 
 	if len(rb.staticResources) != 2 {
 		t.Fatalf(
@@ -3244,8 +2894,8 @@ func TestRouter_RegisterResourceUnder(t *testing.T) {
 		t.Fatalf("Router.RegisterResourceUnder() err = %v, want nil", err)
 	}
 
-	rb = hb.patternResources[0].base()
-	rb = rb.staticResources["grandChild"].base()
+	rb = hb.patternResources[0]
+	rb = rb.staticResources["grandChild"]
 
 	if len(rb.staticResources) != 3 {
 		t.Fatalf(
@@ -3253,17 +2903,17 @@ func TestRouter_RegisterResourceUnder(t *testing.T) {
 		)
 	}
 
-	var r = NewResource("http://example.com/child/resource0")
+	var r = NewDormantResource("http://example.com/child/resource0")
 	if err := ro.RegisterResourceUnder("/child", r); err == nil {
 		t.Fatalf("Router.RegisterResourceUnder() err = nil, want non-nil")
 	}
 
-	r = NewResource("http://example.com/child/resource0")
+	r = NewDormantResource("http://example.com/child/resource0")
 	if err := ro.RegisterResourceUnder("http://example.com/", r); err == nil {
 		t.Fatalf("Router.RegisterResourceUnder() err = nil, want non-nil")
 	}
 
-	r = NewResource("http://{sub}.example.com/child/resource0")
+	r = NewDormantResource("http://{sub}.example.com/child/resource0")
 	var err = ro.RegisterResourceUnder("http://{sub}.example.com/child/", r)
 	if err != nil {
 		t.Fatalf("Router.RegisterResourceUnder() err = %v, want nil", err)
@@ -3275,7 +2925,7 @@ func TestRouter_RegisterResourceUnder(t *testing.T) {
 		)
 	}
 
-	rb = ro.patternHosts[0].base().staticResources["child"].base()
+	rb = ro.patternHosts[0].staticResources["child"]
 	if rb.staticResources["resource0"] != r {
 		t.Fatalf(
 			"Router.RegisterResourceUnder() failed to register new resource",
@@ -3291,7 +2941,7 @@ func TestRouter_RegisterResourceUnder(t *testing.T) {
 		t.Fatalf("Router.RegisterResourceUnder() err = nil, want non-nil")
 	}
 
-	r = NewResource("new-child2")
+	r = NewDormantResource("new-child2")
 	if err := ro.RegisterResourceUnder(
 		"http://example.com/{changedName:pattern}",
 		r,
@@ -3299,7 +2949,7 @@ func TestRouter_RegisterResourceUnder(t *testing.T) {
 		t.Fatalf("Router.RegisterResourceUnder() err = nil, want non-nil")
 	}
 
-	r = NewResource("new-child3")
+	r = NewDormantResource("new-child3")
 	if err := ro.RegisterResourceUnder(
 		"http://example.com/$changedName:{name:pattern}",
 		r,
@@ -3307,7 +2957,7 @@ func TestRouter_RegisterResourceUnder(t *testing.T) {
 		t.Fatalf("Router.RegisterResourceUnder() err = nil, want non-nil")
 	}
 
-	var root = NewResource("/")
+	var root = NewDormantResource("/")
 	r, err = root.Resource("new-resource")
 	if err != nil {
 		t.Fatal(err)
@@ -3330,7 +2980,7 @@ func TestRouter_RegisterResourceUnder(t *testing.T) {
 		t.Fatalf("router.RegisterResourceUnder() failed to keep old root")
 	}
 
-	rb = ro.r.base()
+	rb = ro.r
 	if rb.staticResources["new-resource"] != r {
 		t.Fatalf(
 			"Router.RegisterResourceUnder() failed to register new root's resource",
@@ -3351,25 +3001,25 @@ func TestRouter_RegisteredResource(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var static2 Resource
+	var static2 *Resource
 	static2, err = ro.Resource("$staticR1:staticR1")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	var pattern1 Resource
+	var pattern1 *Resource
 	pattern1, err = ro.Resource("{patternR1:pattern}")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	var pattern2 Resource
+	var pattern2 *Resource
 	pattern2, err = ro.Resource("$patternR2:{name:pattern}{wildcard}")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	var wildcard Resource
+	var wildcard *Resource
 	wildcard, err = ro.Resource("{wildcard}")
 	if err != nil {
 		t.Fatal(err)
@@ -3378,7 +3028,7 @@ func TestRouter_RegisteredResource(t *testing.T) {
 	var cases = []struct {
 		name    string
 		tmplStr string
-		want    Resource
+		want    *Resource
 		wantErr bool
 	}{
 		{"static", "static", static1, false},
@@ -3421,295 +3071,6 @@ func TestRouter_RegisteredResource(t *testing.T) {
 		})
 	}
 }
-
-// func TestRouter_ChildResourceNamed(t *testing.T) {
-// 	var ro = NewRouter()
-// 	var _, err = ro.Resource("$resource:static1")
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-
-// 	_, err = ro.Resource("$resource:{name:pattern1}")
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-
-// 	var wildcard Resource
-// 	wildcard, err = ro.Resource("$resource:{wildcard}")
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-
-// 	var static Resource
-// 	static, err = ro.Resource("$static:static2")
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-
-// 	var pattern Resource
-// 	pattern, err = ro.Resource("{vName:pattern}")
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-
-// 	if got := ro.ChildResourceNamed("resource"); got != wildcard {
-// 		t.Fatalf("Router.ChildResourceNamed() = %v, want %v", got, wildcard)
-// 	}
-
-// 	if got := ro.ChildResourceNamed("vName"); got != pattern {
-// 		t.Fatalf("Router.ChildResourceNamed() = %v, want %v", got, pattern)
-// 	}
-
-// 	if got := ro.ChildResourceNamed("static"); got != static {
-// 		t.Fatalf("Router.ChildResourceNamed() = %v, want %v", got, static)
-// 	}
-
-// 	if got := ro.ChildResourceNamed("noName"); got != nil {
-// 		t.Fatalf("Router.ChildResourceNamed() = %v, want nil", got)
-// 	}
-// }
-
-// func TestRouter_ChildResourcesNamed(t *testing.T) {
-// 	var (
-// 		ro  = NewRouter()
-// 		rs  = make([]Resource, 5)
-// 		err error
-// 	)
-
-// 	rs[0], err = ro.Resource("$resource:static1")
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-
-// 	rs[1], err = ro.Resource("$resource:static2")
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-
-// 	rs[2], err = ro.Resource("$resource:{name:pattern1}")
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-
-// 	rs[3], err = ro.Resource("$resource:{name:pattern2}")
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-
-// 	rs[4], err = ro.Resource("$resource:{wildcard}")
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-
-// 	var static Resource
-// 	static, err = ro.Resource("$static:static3")
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-
-// 	var pattern Resource
-// 	pattern, err = ro.Resource("{vName:pattern3}")
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-
-// 	gotRs := ro.ChildResourcesNamed("resource")
-// 	if len(gotRs) != len(rs) {
-// 		t.Fatalf(
-// 			"Router.ChildResourcesNamed() len(got) = %d, want %d",
-// 			len(gotRs),
-// 			len(rs),
-// 		)
-// 	}
-
-// 	for _, r := range rs {
-// 		var found bool
-// 		for _, gotR := range gotRs {
-// 			if gotR == r {
-// 				found = true
-// 				break
-// 			}
-// 		}
-
-// 		if !found {
-// 			t.Fatalf(
-// 				"Router.ChildResourcesNamed(): %q were not gottern",
-// 				r.Template().String(),
-// 			)
-// 		}
-// 	}
-
-// 	gotRs = ro.ChildResourcesNamed("static")
-// 	if len(gotRs) != 1 {
-// 		t.Fatalf(
-// 			"Router.ChildResourcesNamed() len(got) = %d, want 1",
-// 			len(gotRs),
-// 		)
-// 	}
-
-// 	if gotRs[0] != static {
-// 		t.Fatalf(
-// 			"Router.ChildResourcesNamed(): single static resource didn't match",
-// 		)
-// 	}
-
-// 	gotRs = ro.ChildResourcesNamed("vName")
-// 	if len(gotRs) != 1 {
-// 		t.Fatalf(
-// 			"Router.ChildResourcesNamed() len(got) = %d, want 1",
-// 			len(gotRs),
-// 		)
-// 	}
-
-// 	if gotRs[0] != pattern {
-// 		t.Fatalf(
-// 			"Router.ChildResourcesNamed(): single pattern resource didn't match",
-// 		)
-// 	}
-
-// 	if gotRs = ro.ChildResourcesNamed("noName"); gotRs != nil {
-// 		t.Fatalf(
-// 			"Router.ChildResourcesNamed() got = %v, want nil", gotRs,
-// 		)
-// 	}
-// }
-
-// func TestRouter_ChildResources(t *testing.T) {
-// 	var (
-// 		ro     = NewRouter()
-// 		length = 5
-// 		rs     = make([]Resource, length)
-// 		err    error
-// 	)
-
-// 	rs[0], err = ro.Resource("static1")
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-
-// 	rs[1], err = ro.Resource("static2")
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-
-// 	rs[2], err = ro.Resource("{name1:pattern1}")
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-
-// 	rs[3], err = ro.Resource("{name2:pattern2}")
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-
-// 	rs[4], err = ro.Resource("{wildcard}")
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-
-// 	var gotRs = ro.ChildResources()
-// 	if len(gotRs) != length {
-// 		t.Fatalf(
-// 			"Router.ChildResources():  len(got) = %d, want %d",
-// 			len(gotRs),
-// 			length,
-// 		)
-// 	}
-
-// 	for _, r := range rs {
-// 		var found bool
-// 		for _, gotR := range gotRs {
-// 			if gotR == r {
-// 				found = true
-// 				break
-// 			}
-// 		}
-
-// 		if !found {
-// 			t.Fatalf(
-// 				"Router.ChildResources(): %q were not gotten",
-// 				r.Template().String(),
-// 			)
-// 		}
-// 	}
-// }
-
-// func TestRouter_HasChildResource(t *testing.T) {
-// 	var ro = NewRouter()
-// 	var rs = make([]Resource, 5)
-
-// 	var err error
-// 	rs[0], err = ro.Resource("static1")
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-
-// 	rs[1], err = ro.Resource("static2")
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-
-// 	rs[2], err = ro.Resource("$pattern1:{name:pattern1}")
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-
-// 	rs[3], err = ro.Resource("$pattern2:{name:pattern2}")
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-
-// 	rs[4], err = ro.Resource("{wildcard}")
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-
-// 	var cases = []struct {
-// 		name string
-// 		r    Resource
-// 		want bool
-// 	}{
-// 		{"static1", rs[0], true},
-// 		{"static2", rs[1], true},
-// 		{"pattern1", rs[2], true},
-// 		{"pattern2", rs[3], true},
-// 		{"wildcard", rs[4], true},
-// 		{"static3", NewResource("static3"), false},
-// 		{
-// 			"pattern3",
-// 			NewResource("$pattern3:{name:pattern3}"),
-// 			false,
-// 		},
-// 		{"wildcard2", NewResource("{wildcard}"), false},
-// 	}
-
-// 	for _, c := range cases {
-// 		t.Run(c.name, func(t *testing.T) {
-// 			if got := ro.HasChildResource(c.r); got != c.want {
-// 				t.Fatalf(
-// 					"Router.HasChildResource() = %v, want %v",
-// 					got,
-// 					c.want,
-// 				)
-// 			}
-// 		})
-// 	}
-// }
-
-// func TestRouter_HasAnyChildResource(t *testing.T) {
-// 	var ro = NewRouter()
-// 	if ro.HasAnyChildResource() {
-// 		t.Fatalf("Router.HasAnyChildResource() = true, want false")
-// 	}
-
-// 	if _, err := ro.Resource("{child}"); err != nil {
-// 		t.Fatal(err)
-// 	}
-
-// 	if !ro.HasAnyChildResource() {
-// 		t.Fatalf("Router.HasAnyChildResource() = false, want true")
-// 	}
-// }
 
 func TestRouter_WrapWith(t *testing.T) {
 	var (
@@ -3777,95 +3138,16 @@ func TestRouter_WrapWith(t *testing.T) {
 	}
 }
 
-// func TestRouter_initializeMiddlewareBundleOnce(t *testing.T) {
-// 	var ro = NewRouter()
-// 	if ro.middlewareBundle() != nil {
-// 		t.Fatalf("router's middlewareBundle should have been nil")
-// 	}
-
-// 	ro.initializeMiddlewareBundleOnce()
-// 	if ro.middlewareBundle() == nil {
-// 		t.Fatalf(
-// 			"Router.initializeMiddlewareBundleOnce() failed to initialize middlewareBundle",
-// 		)
-// 	}
-// }
-
 func TestRouter_AddMiddlewareFor(t *testing.T) {
-	// var ro = NewRouter()
-	// if err := ro.AddMiddlewareFor(
-	// 	"post put",
-	// 	[]Middleware{MiddlewareFunc(nil), MiddlewareFunc(nil)}...); err != nil {
-	// 	t.Fatalf(
-	// 		"Router.AddMiddlewareFor() error = %v, want nil", err,
-	// 	)
-	// }
 
-	// var mwb = ro.middlewareBundle()
-	// if len(mwb) != 2 {
-	// 	t.Fatalf(
-	// 		"Router.AddMiddlewareFor() failed to add middlewares for methods",
-	// 	)
-	// }
-
-	// if len(mwb["POST"]) != 2 {
-	// 	t.Fatalf(
-	// 		"Router.AddMiddlewareFor() failed to add middlewares for method POST",
-	// 	)
-	// }
-
-	// if len(mwb["PUT"]) != 2 {
-	// 	t.Fatalf(
-	// 		"Router.AddMiddlewareFor() failed to add middlewares for method PUT",
-	// 	)
-	// }
 }
 
 func TestRouter_AddMiddlewareForMethodsInUse(t *testing.T) {
-	// var ro = NewRouter()
-	// if err := ro.AddMiddlewareForMethodsInUse(
-	// 	[]Middleware{MiddlewareFunc(nil), MiddlewareFunc(nil)}...); err != nil {
-	// 	t.Fatalf(
-	// 		"Router.AddMiddlewareForMethodsInUse() error = %v, want nil", err,
-	// 	)
-	// }
 
-	// var mwb = ro.middlewareBundle()
-	// if len(mwb) != 1 {
-	// 	t.Fatalf(
-	// 		"Router.AddMiddlewareForMethodsInUse() failed to add middlewares for methods in use",
-	// 	)
-	// }
-
-	// if len(mwb[methodsInUseStr]) != 2 {
-	// 	t.Fatalf(
-	// 		"Router.AddMiddlewareForMethodsInUse() failed to add middlewares for methods in use",
-	// 	)
-	// }
 }
 
 func TestRouter_AddMiddlewareForUnusedMethods(t *testing.T) {
-	// var ro = NewRouter()
-	// if err := ro.AddMiddlewareForUnusedMethods(
-	// 	[]Middleware{MiddlewareFunc(nil), MiddlewareFunc(nil)}...); err != nil {
-	// 	t.Fatalf(
-	// 		"Router.AddMiddlewareForUnusedMethods() error = %v, want nil",
-	// 		err,
-	// 	)
-	// }
 
-	// var mwb = ro.middlewareBundle()
-	// if len(mwb) != 1 {
-	// 	t.Fatalf(
-	// 		"Router.AddMiddlewareForUnusedMethods() failed to add middlewares for methods in use",
-	// 	)
-	// }
-
-	// if len(mwb[unusedMethodsStr]) != 2 {
-	// 	t.Fatalf(
-	// 		"Router.AddMiddlewareForUnusedMethods() failed to add middlewares for methods in use",
-	// 	)
-	// }
 }
 
 func TestRouter__Resources(t *testing.T) {
@@ -3951,7 +3233,7 @@ func TestRouter_ServeHTTP(t *testing.T) {
 
 	addRequestHandlerSubresources(t, staticHost1, 0, 2)
 
-	var staticHost2 Host
+	var staticHost2 *Host
 	staticHost2, err = ro.Host("example2.com")
 	if err != nil {
 		t.Fatal(err)
@@ -3959,7 +3241,7 @@ func TestRouter_ServeHTTP(t *testing.T) {
 
 	addRequestHandlerSubresources(t, staticHost2, 0, 2)
 
-	var patternHost1 Host
+	var patternHost1 *Host
 	patternHost1, err = ro.HostUsingConfig(
 		"{sub:abc}.example.com/",
 		Config{Subtree: true},
@@ -3971,7 +3253,7 @@ func TestRouter_ServeHTTP(t *testing.T) {
 
 	addRequestHandlerSubresources(t, patternHost1, 0, 2)
 
-	var patternHost2 Host
+	var patternHost2 *Host
 	patternHost2, err = ro.Host("https://{sub2:bca}.example.com")
 	if err != nil {
 		t.Fatal(err)
@@ -3979,7 +3261,7 @@ func TestRouter_ServeHTTP(t *testing.T) {
 
 	addRequestHandlerSubresources(t, patternHost2, 0, 2)
 
-	var wildcardSub1 Host
+	var wildcardSub1 *Host
 	wildcardSub1, err = ro.HostUsingConfig(
 		"{wildCardSub}.example1.com",
 		Config{DropRequestOnUnmatchedTslash: true},
@@ -3991,7 +3273,7 @@ func TestRouter_ServeHTTP(t *testing.T) {
 
 	addRequestHandlerSubresources(t, wildcardSub1, 0, 2)
 
-	var wildcardSub2 Host
+	var wildcardSub2 *Host
 	wildcardSub2, err = ro.HostUsingConfig(
 		"{wildCardSub2}.example2.com",
 		Config{HandleThePathAsIs: true},

@@ -56,19 +56,9 @@ func TestResourceBase_Name(t *testing.T) {
 	var tmplStr = "$resource-name:static{name:pattern}"
 	var tmpl = Parse(tmplStr)
 
-	rb := newResourceBase(tmpl)
+	rb := newDummyResource(tmpl)
 	if got := rb.Name(); got != rb.tmpl.Name() {
 		t.Fatalf("ResourceBase.Name() = %v, want %v", got, rb.tmpl.Name())
-	}
-}
-
-func TestResourceBase_base(t *testing.T) {
-	var r = &struct{ *ResourceBase }{}
-	r.ResourceBase = &ResourceBase{}
-
-	var rb = r.base()
-	if rb != r.ResourceBase {
-		t.Fatalf("ResourceBase.base() = %p, want %p", rb, r.ResourceBase)
 	}
 }
 
@@ -76,7 +66,7 @@ func TestResourceBase_Template(t *testing.T) {
 	var tmplStr = "$tmplName:{valueName:pattern}"
 	var tmpl = Parse(tmplStr)
 
-	var rb = newResourceBase(tmpl)
+	var rb = newDummyResource(tmpl)
 	if got := rb.Template(); !reflect.DeepEqual(got, tmpl) {
 		t.Fatalf("ResourceBase.Template() = %v, want %v", got, tmpl)
 	}
@@ -84,32 +74,32 @@ func TestResourceBase_Template(t *testing.T) {
 
 func TestResourceBase_URL(t *testing.T) {
 	var (
-		h = NewHostUsingConfig(
+		h = NewDormantHostUsingConfig(
 			"https://{info}.example.com",
 			Config{RedirectInsecureRequest: true},
 		)
 
-		r1 = NewResource("{country}")
-		r2 = NewResourceUsingConfig("{city}", Config{Subtree: true})
+		r1 = NewDormantResource("{country}")
+		r2 = NewDormantResourceUsingConfig("{city}", Config{Subtree: true})
 
-		r3 = NewResource("{info}")
-		r4 = NewResource("population")
-		r5 = NewResourceUsingConfig(
+		r3 = NewDormantResource("{info}")
+		r4 = NewDormantResource("population")
+		r5 = NewDormantResourceUsingConfig(
 			"https:///{country}",
 			Config{RedirectInsecureRequest: true},
 		)
 	)
 
-	h.base().wildcardResource = r1
-	r1.base().papa = h
-	r1.base().wildcardResource = r2
-	r2.base().papa = r1
+	h.wildcardResource = r1
+	r1.papa = h
+	r1.wildcardResource = r2
+	r2.papa = r1
 
-	r3.base().staticResources = map[string]Resource{}
-	r3.base().staticResources[r4.Template().Content()] = r4
-	r4.base().papa = r3
-	r4.base().wildcardResource = r5
-	r5.base().papa = r4
+	r3.staticResources = map[string]*Resource{}
+	r3.staticResources[r4.Template().Content()] = r4
+	r4.papa = r3
+	r4.wildcardResource = r5
+	r5.papa = r4
 
 	type args struct {
 		hvs HostValues
@@ -247,10 +237,10 @@ func TestResourceBase_URL(t *testing.T) {
 
 func TestResourceBase_Router(t *testing.T) {
 	var ro = NewRouter()
-	var h = NewHost("example.com")
-	var r = NewResource("index")
+	var h = NewDormantHost("example.com")
+	var r = NewDormantResource("index")
 	h.setParent(ro)
-	r.base().papa = h
+	r.papa = h
 
 	if got := r.Router(); !reflect.DeepEqual(got, ro) {
 		t.Fatalf("ResourceBase.Router() = %v, want %v", got, ro)
@@ -260,10 +250,10 @@ func TestResourceBase_Router(t *testing.T) {
 func TestResourceBase_setParent(t *testing.T) {
 	var (
 		ro   = NewRouter()
-		h1   = NewHost("example.com")
-		h2   = NewHost("example2.com")
-		r1   = NewResource("r1")
-		root = NewResource("/")
+		h1   = NewDormantHost("example.com")
+		h2   = NewDormantHost("example2.com")
+		r1   = NewDormantResource("r1")
+		root = NewDormantResource("/")
 	)
 
 	var err = h1.setParent(ro)
@@ -288,8 +278,8 @@ func TestResourceBase_setParent(t *testing.T) {
 }
 
 func TestResourceBase_parent(t *testing.T) {
-	var parent = NewResource("parent")
-	var child = NewResource("child")
+	var parent = NewDormantResource("parent")
+	var child = NewDormantResource("child")
 	child.setParent(parent)
 
 	if got := child.parent(); !reflect.DeepEqual(got, parent) {
@@ -299,9 +289,9 @@ func TestResourceBase_parent(t *testing.T) {
 
 func TestResourceBase_resourcesInThePath(t *testing.T) {
 	var (
-		h  = NewHost("example.com")
-		r1 = NewResource("r1")
-		r2 = NewResource("{r2:pattern}")
+		h  = NewDormantHost("example.com")
+		r1 = NewDormantResource("r1")
+		r2 = NewDormantResource("{r2:pattern}")
 	)
 
 	r1.setParent(h)
@@ -316,7 +306,7 @@ func TestResourceBase_resourcesInThePath(t *testing.T) {
 		)
 	}
 
-	if rs[0].(Host) != h {
+	if rs[0].(*Host) != h {
 		t.Fatalf("ResourceBase().resourcesInThePath() failed to get host")
 	}
 
@@ -328,11 +318,11 @@ func TestResourceBase_resourcesInThePath(t *testing.T) {
 		)
 	}
 
-	if rs[0].(Host) != h {
+	if rs[0].(*Host) != h {
 		t.Fatalf("ResourceBase().resourcesInThePath() failed to get host")
 	}
 
-	if rs[1].(Resource) != r1 {
+	if rs[1].(*Resource) != r1 {
 		t.Fatalf("ResourceBase().resourcesInThePath() failed to get r1")
 	}
 
@@ -344,15 +334,15 @@ func TestResourceBase_resourcesInThePath(t *testing.T) {
 		)
 	}
 
-	if rs[0].(Host) != h {
+	if rs[0].(*Host) != h {
 		t.Fatalf("ResourceBase().resourcesInThePath() failed to get host")
 	}
 
-	if rs[1].(Resource) != r1 {
+	if rs[1].(*Resource) != r1 {
 		t.Fatalf("ResourceBase().resourcesInThePath() failed to get r1")
 	}
 
-	if rs[2].(Resource) != r2 {
+	if rs[2].(*Resource) != r2 {
 		t.Fatalf("ResourceBase().resourcesInThePath() failed to get r2")
 	}
 }
@@ -360,14 +350,14 @@ func TestResourceBase_resourcesInThePath(t *testing.T) {
 func TestResourceBase_Host(t *testing.T) {
 	var (
 		ro = NewRouter()
-		h  = NewHost("example.com")
-		r1 = NewResource("country")
-		r2 = NewResource("city")
+		h  = NewDormantHost("example.com")
+		r1 = NewDormantResource("country")
+		r2 = NewDormantResource("city")
 	)
 
 	h.setParent(ro)
-	r1.base().papa = h
-	r2.base().papa = r1
+	r1.papa = h
+	r2.papa = r1
 
 	t.Run("ResourceBase.Host(}", func(t *testing.T) {
 		if got := r2.Host(); !reflect.DeepEqual(got, h) {
@@ -378,10 +368,10 @@ func TestResourceBase_Host(t *testing.T) {
 
 func TestResourceBase_Parent(t *testing.T) {
 	var ro = NewRouter()
-	var r1 = NewResource("resource1")
-	var r2 = NewResource("resource2")
-	r1.base().papa = ro
-	r2.base().papa = r1
+	var r1 = NewDormantResource("resource1")
+	var r2 = NewDormantResource("resource2")
+	r1.papa = ro
+	r2.papa = r1
 
 	if got := r1.Parent(); reflect.DeepEqual(got, ro) {
 		t.Fatalf("ResourceBase.Parent() = %v, want nil", got)
@@ -393,23 +383,23 @@ func TestResourceBase_Parent(t *testing.T) {
 }
 
 func TestResourceBase_SetSharedData(t *testing.T) {
-	var r = NewResource("resource")
+	var r = NewDormantResource("resource")
 	r.SetSharedData(1)
-	if r.base().sharedData != 1 {
+	if r.sharedData != 1 {
 		t.Fatalf("ResourceBase.SetSharedData() couldn't set data")
 	}
 }
 
 func TestResourceBase_SharedData(t *testing.T) {
-	var r = NewResource("resource")
-	r.base().sharedData = 1
+	var r = NewDormantResource("resource")
+	r.sharedData = 1
 	if r.SharedData() != 1 {
 		t.Fatalf("ResourceBase.SharedData() couldn't get data")
 	}
 }
 
 func TestResourceBase_configFlags(t *testing.T) {
-	var r = NewResourceUsingConfig(
+	var r = NewDormantResourceUsingConfig(
 		"https:///resource/",
 		Config{
 			RedirectInsecureRequest:      true,
@@ -426,7 +416,7 @@ func TestResourceBase_configFlags(t *testing.T) {
 }
 
 func TestResourceBase_setConfigFlag(t *testing.T) {
-	var r = NewResource("resource")
+	var r = NewDormantResource("resource")
 	var cfs = flagTslash | flagDropOnUnmatchedTslash
 	r.setConfigFlags(cfs)
 	cfs |= flagActive
@@ -440,7 +430,7 @@ func TestResourceBase_setConfigFlag(t *testing.T) {
 }
 
 func TestResourceBase_IsRoot(t *testing.T) {
-	var r = newResourceBase(rootTmpl)
+	var r = newDummyResource(rootTmpl)
 	if !r.IsRoot() {
 		t.Fatalf("ResourceBase.IsRoot() = false, want true")
 	}
@@ -448,8 +438,8 @@ func TestResourceBase_IsRoot(t *testing.T) {
 
 func TestResourceBase_IsSubtree(t *testing.T) {
 	var (
-		r1 = NewResourceUsingConfig("r1", Config{Subtree: true})
-		r2 = NewResource("r2")
+		r1 = NewDormantResourceUsingConfig("r1", Config{Subtree: true})
+		r2 = NewDormantResource("r2")
 	)
 
 	if !r1.IsSubtree() {
@@ -463,8 +453,8 @@ func TestResourceBase_IsSubtree(t *testing.T) {
 
 func TestResourceBase_IsSecure(t *testing.T) {
 	var (
-		r1 = NewResource("https:///r1")
-		r2 = NewResource("r2")
+		r1 = NewDormantResource("https:///r1")
+		r2 = NewDormantResource("r2")
 	)
 
 	if !r1.IsSecure() {
@@ -478,12 +468,12 @@ func TestResourceBase_IsSecure(t *testing.T) {
 
 func TestResourceBase_RedirectsInsecureRequest(t *testing.T) {
 	var (
-		r1 = NewResourceUsingConfig(
+		r1 = NewDormantResourceUsingConfig(
 			"https:///r1",
 			Config{RedirectInsecureRequest: true},
 		)
 
-		r2 = NewResource("r2")
+		r2 = NewDormantResource("r2")
 	)
 
 	if !r1.RedirectsInsecureRequest() {
@@ -497,8 +487,8 @@ func TestResourceBase_RedirectsInsecureRequest(t *testing.T) {
 
 func TestResourceBase_HasTslash(t *testing.T) {
 	var (
-		r1 = NewResource("r1/")
-		r2 = NewResource("r2")
+		r1 = NewDormantResource("r1/")
+		r2 = NewDormantResource("r2")
 	)
 
 	if !r1.HasTslash() {
@@ -512,12 +502,12 @@ func TestResourceBase_HasTslash(t *testing.T) {
 
 func TestResourceBase_DropsRequestOnUnmatchedTslash(t *testing.T) {
 	var (
-		r1 = NewResourceUsingConfig(
+		r1 = NewDormantResourceUsingConfig(
 			"r1",
 			Config{DropRequestOnUnmatchedTslash: true},
 		)
 
-		r2 = NewResource("r2")
+		r2 = NewDormantResource("r2")
 	)
 
 	if !r1.DropsRequestOnUnmatchedTslash() {
@@ -535,11 +525,11 @@ func TestResourceBase_DropsRequestOnUnmatchedTslash(t *testing.T) {
 
 func TestResourceBase_IsLenientOnTslash(t *testing.T) {
 	var (
-		r1 = NewResourceUsingConfig("r1", Config{
+		r1 = NewDormantResourceUsingConfig("r1", Config{
 			LeniencyOnTslash: true,
 		})
 
-		r2 = NewResource("r2")
+		r2 = NewDormantResource("r2")
 	)
 
 	if !r1.IsLenientOnTslash() {
@@ -553,11 +543,11 @@ func TestResourceBase_IsLenientOnTslash(t *testing.T) {
 
 func TestResourceBase_IsLenientOnUncleanPath(t *testing.T) {
 	var (
-		r1 = NewResourceUsingConfig("r1", Config{
+		r1 = NewDormantResourceUsingConfig("r1", Config{
 			LeniencyOnUncleanPath: true,
 		})
 
-		r2 = NewResource("r2")
+		r2 = NewDormantResource("r2")
 	)
 
 	if !r1.IsLenientOnUncleanPath() {
@@ -575,11 +565,11 @@ func TestResourceBase_IsLenientOnUncleanPath(t *testing.T) {
 
 func TestResourceBase_HandlesThePathAsIs(t *testing.T) {
 	var (
-		r1 = NewResourceUsingConfig("r1", Config{
+		r1 = NewDormantResourceUsingConfig("r1", Config{
 			HandleThePathAsIs: true,
 		})
 
-		r2 = NewResource("r2")
+		r2 = NewDormantResource("r2")
 	)
 
 	if !r1.HandlesThePathAsIs() {
@@ -592,7 +582,7 @@ func TestResourceBase_HandlesThePathAsIs(t *testing.T) {
 }
 
 func TestResourceBase_canHandleRequest(t *testing.T) {
-	var r = NewResource("index")
+	var r = NewDormantResource("index")
 	if r.canHandleRequest() {
 		t.Fatalf("ResourceBase.canHandleRequest() = true, want false")
 	}
@@ -610,10 +600,10 @@ func TestResourceBase_canHandleRequest(t *testing.T) {
 
 func TestResourceBase_checkNameIsUniqueInThePath(t *testing.T) {
 	var (
-		rb1 = NewResource("{country}").base()
-		rb2 = NewResource("{city}").base()
-		rb3 = NewResource("{info}").base()
-		rb4 = NewResource("{extra}").base()
+		rb1 = NewDormantResource("{country}")
+		rb2 = NewDormantResource("{city}")
+		rb3 = NewDormantResource("{info}")
+		rb4 = NewDormantResource("{extra}")
 	)
 
 	rb4.papa = rb3
@@ -644,9 +634,9 @@ func TestResourceBase_checkNameIsUniqueInThePath(t *testing.T) {
 
 func TestResourceBase_checkChildResourceNamesAreUniqueInThePath(t *testing.T) {
 	var (
-		p1 = NewResource("{country}").base()
-		p2 = NewResource("{city}").base()
-		p3 = NewResource("{info}").base()
+		p1 = NewDormantResource("{country}")
+		p2 = NewDormantResource("{city}")
+		p3 = NewDormantResource("{info}")
 	)
 
 	p1.wildcardResource = p2
@@ -656,9 +646,9 @@ func TestResourceBase_checkChildResourceNamesAreUniqueInThePath(t *testing.T) {
 	p2.papa = p1
 
 	var (
-		ch1 = NewResource("info").base()
-		ch2 = NewResource("{catergory}").base()
-		ch3 = NewResource("{manufacturer}").base()
+		ch1 = NewDormantResource("info")
+		ch2 = NewDormantResource("{catergory}")
+		ch3 = NewDormantResource("{manufacturer}")
 	)
 
 	ch1.wildcardResource = ch2
@@ -673,7 +663,7 @@ func TestResourceBase_checkChildResourceNamesAreUniqueInThePath(t *testing.T) {
 		)
 	}
 
-	var ch4 = NewResource("{country}").base()
+	var ch4 = NewDormantResource("{country}")
 	ch3.wildcardResource = ch4
 	ch4.papa = ch3
 
@@ -686,15 +676,15 @@ func TestResourceBase_checkChildResourceNamesAreUniqueInThePath(t *testing.T) {
 
 func TestResourceBase_validate(t *testing.T) {
 	var (
-		r1 = NewResource("{country}")
-		r2 = NewResource("{city}")
-		r3 = NewResource("{info}")
+		r1 = NewDormantResource("{country}")
+		r2 = NewDormantResource("{city}")
+		r3 = NewDormantResource("{info}")
 	)
 
-	r1.base().wildcardResource = r2
-	r2.base().papa = r1
-	r2.base().wildcardResource = r3
-	r3.base().papa = r2
+	r1.wildcardResource = r2
+	r2.papa = r1
+	r2.wildcardResource = r3
+	r3.papa = r2
 
 	var cases = []struct {
 		name    string
@@ -725,9 +715,9 @@ func TestResourceBase_validate(t *testing.T) {
 
 func TestResourceBase_validateHostTmpl(t *testing.T) {
 	var (
-		h  = NewHost("{country}.example.com")
-		r1 = NewResource("r1")
-		r2 = NewResource("r2")
+		h  = NewDormantHost("{country}.example.com")
+		r1 = NewDormantResource("r1")
+		r2 = NewDormantResource("r2")
 	)
 
 	r1.setParent(h)
@@ -763,10 +753,10 @@ func TestResourceBase_validateHostTmpl(t *testing.T) {
 
 func TestResourceBase_validateURL(t *testing.T) {
 	var (
-		h  = NewHost("example.com")
-		r1 = NewResource("r1")
-		r2 = NewResource("{r2:pattern}")
-		r3 = NewResource("/{r3}")
+		h  = NewDormantHost("example.com")
+		r1 = NewDormantResource("r1")
+		r2 = NewDormantResource("{r2:pattern}")
+		r3 = NewDormantResource("/{r3}")
 	)
 
 	r1.setParent(h)
@@ -872,29 +862,29 @@ func TestResourceBase_validateURL(t *testing.T) {
 
 func TestResourceBase_resourceWithTemplate(t *testing.T) {
 	var (
-		parent = NewResource("parent")
-		child1 = NewResource("child1")
-		child2 = NewResource("$child2:{name:pattern}")
-		child3 = NewResource("{child3:id}")
-		child4 = NewResource("{child4}")
+		parent = NewDormantResource("parent")
+		child1 = NewDormantResource("child1")
+		child2 = NewDormantResource("$child2:{name:pattern}")
+		child3 = NewDormantResource("{child3:id}")
+		child4 = NewDormantResource("{child4}")
 	)
 
-	var pb = parent.base()
-	pb.staticResources = make(map[string]Resource)
+	var pb = parent
+	pb.staticResources = make(map[string]*Resource)
 	pb.staticResources[child1.Template().Content()] = child1
 	pb.patternResources = append(pb.patternResources, child2)
 	pb.patternResources = append(pb.patternResources, child3)
 	pb.wildcardResource = child4
 
-	child1.base().papa = parent
-	child2.base().papa = parent
-	child3.base().papa = parent
-	child4.base().papa = parent
+	child1.papa = parent
+	child2.papa = parent
+	child3.papa = parent
+	child4.papa = parent
 
 	var cases = []struct {
 		name    string
 		tmpl    *Template
-		want    Resource
+		want    *Resource
 		wantErr bool
 	}{
 		{"child1 (own tmpl}", child1.Template(), child1, false},
@@ -945,7 +935,7 @@ func TestResourceBase_resourceWithTemplate(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got, err := parent.base().resourceWithTemplate(c.tmpl)
+			got, err := parent.resourceWithTemplate(c.tmpl)
 			if (err != nil) != c.wantErr {
 				t.Fatalf(
 					"ResourceBase.resourceWithTemplate() error = %v, wantErr %v",
@@ -968,33 +958,33 @@ func TestResourceBase_resourceWithTemplate(t *testing.T) {
 
 func TestResourceBase_passSubresourcesTo(t *testing.T) {
 	var (
-		r0 = NewResource("resource0")
-		r1 = NewResource("resource1")
-		r2 = NewResource("resource2")
-		r3 = NewResource("{resource3:name}")
-		r4 = NewResource("{resource4}")
-		r5 = NewResource("resource5")
-		r6 = NewResource("{resource6:id}")
-		r7 = NewResource("{resource7}")
+		r0 = NewDormantResource("resource0")
+		r1 = NewDormantResource("resource1")
+		r2 = NewDormantResource("resource2")
+		r3 = NewDormantResource("{resource3:name}")
+		r4 = NewDormantResource("{resource4}")
+		r5 = NewDormantResource("resource5")
+		r6 = NewDormantResource("{resource6:id}")
+		r7 = NewDormantResource("{resource7}")
 	)
 
-	r1.base().staticResources = make(map[string]Resource)
-	r1.base().staticResources[r2.Template().Content()] = r2
-	r2.base().papa = r1
-	r1.base().patternResources = append(r1.base().patternResources, r3)
-	r3.base().papa = r1
-	r1.base().wildcardResource = r4
-	r4.base().papa = r1
+	r1.staticResources = make(map[string]*Resource)
+	r1.staticResources[r2.Template().Content()] = r2
+	r2.papa = r1
+	r1.patternResources = append(r1.patternResources, r3)
+	r3.papa = r1
+	r1.wildcardResource = r4
+	r4.papa = r1
 
-	r2.base().wildcardResource = r7
-	r7.base().papa = r2
+	r2.wildcardResource = r7
+	r7.papa = r2
 
-	r4.base().staticResources = make(map[string]Resource)
-	r4.base().staticResources[r5.Template().Content()] = r5
-	r5.base().papa = r4
+	r4.staticResources = make(map[string]*Resource)
+	r4.staticResources[r5.Template().Content()] = r5
+	r5.papa = r4
 
-	r4.base().patternResources = append(r4.base().patternResources, r6)
-	r6.base().papa = r4
+	r4.patternResources = append(r4.patternResources, r6)
+	r6.papa = r4
 
 	if err := r1.passChildResourcesTo(r0); err != nil {
 		t.Fatalf(
@@ -1003,7 +993,7 @@ func TestResourceBase_passSubresourcesTo(t *testing.T) {
 		)
 	}
 
-	if base := r1.base(); base.staticResources != nil ||
+	if base := r1; base.staticResources != nil ||
 		base.patternResources != nil || base.wildcardResource != nil {
 		t.Fatalf(
 			"after ResourceBase.passSubresourcesTo() r1.staticResources = %v, r1.patternResources = %v, r1.wildCardResource = %v, want all nil",
@@ -1013,7 +1003,7 @@ func TestResourceBase_passSubresourcesTo(t *testing.T) {
 		)
 	}
 
-	var r0Base = r0.base()
+	var r0Base = r0
 	gotR2 := r0Base.staticResources[r2.Template().Content()]
 	if gotR2 != r2 {
 		t.Fatalf(
@@ -1033,22 +1023,22 @@ func TestResourceBase_passSubresourcesTo(t *testing.T) {
 		)
 	}
 
-	if gotR2.base().wildcardResource == nil ||
-		gotR2.base().wildcardResource != r7 {
+	if gotR2.wildcardResource == nil ||
+		gotR2.wildcardResource != r7 {
 		t.Fatalf(
 			"ResourceBase.passSubresourcesTo() failed to pass grandchild resoource",
 		)
 	}
 
 	var gotR4 = r0Base.wildcardResource
-	if gotR4.base().staticResources[r5.Template().Content()] != r5 {
+	if gotR4.staticResources[r5.Template().Content()] != r5 {
 		t.Fatalf(
 			"ResourceBase.passSubresourcesTo() failed to pass grandchild resoource",
 		)
 	}
 
-	if len(gotR4.base().patternResources) == 0 ||
-		gotR4.base().patternResources[0] != r6 {
+	if len(gotR4.patternResources) == 0 ||
+		gotR4.patternResources[0] != r6 {
 		t.Fatalf(
 			"ResourceBase.passSubresourcesTo() failed to pass grandchild resoource",
 		)
@@ -1057,19 +1047,19 @@ func TestResourceBase_passSubresourcesTo(t *testing.T) {
 
 func TestResourceBase_replaceResource(t *testing.T) {
 	var (
-		r         = NewResource("r")
-		static1   = NewResource("static")
-		pattern1  = NewResource("{name:pattern}")
-		wildcard1 = NewResource("{wildcard}")
-		static2   = NewResource("static")
-		pattern2  = NewResource("{name:pattern}")
-		wildcard2 = NewResource("{wildcard}")
-		static3   = NewResource("static3")
-		pattern3  = NewResource("{name:pattern3}")
+		r         = NewDormantResource("r")
+		static1   = NewDormantResource("static")
+		pattern1  = NewDormantResource("{name:pattern}")
+		wildcard1 = NewDormantResource("{wildcard}")
+		static2   = NewDormantResource("static")
+		pattern2  = NewDormantResource("{name:pattern}")
+		wildcard2 = NewDormantResource("{wildcard}")
+		static3   = NewDormantResource("static3")
+		pattern3  = NewDormantResource("{name:pattern3}")
 	)
 
-	var rb = r.base()
-	rb.staticResources = map[string]Resource{}
+	var rb = r
+	rb.staticResources = map[string]*Resource{}
 	rb.staticResources[static1.Template().Content()] = static1
 	static1.setParent(rb)
 	rb.staticResources[static3.Template().Content()] = static3
@@ -1091,13 +1081,13 @@ func TestResourceBase_replaceResource(t *testing.T) {
 		)
 	}
 
-	if static2.base().papa == nil {
+	if static2.papa == nil {
 		t.Fatalf(
 			"ResourceBase.replaceResource() new static resource's parent wasn't set",
 		)
 	}
 
-	if static1.base().papa != nil {
+	if static1.papa != nil {
 		t.Fatalf(
 			"ResourceBase.replaceResource() old static resource's parent wasn't cleared",
 		)
@@ -1128,13 +1118,13 @@ func TestResourceBase_replaceResource(t *testing.T) {
 		}
 	}
 
-	if pattern2.base().papa == nil {
+	if pattern2.papa == nil {
 		t.Fatalf(
 			"ResourceBase.replaceResource() new pattern resource's parent wasn't set",
 		)
 	}
 
-	if pattern1.base().papa != nil {
+	if pattern1.papa != nil {
 		t.Fatalf(
 			"ResourceBase.replaceResource() old pattern resource's parent wasn't cleared",
 		)
@@ -1150,13 +1140,13 @@ func TestResourceBase_replaceResource(t *testing.T) {
 		)
 	}
 
-	if wildcard2.base().papa == nil {
+	if wildcard2.papa == nil {
 		t.Fatalf(
 			"ResourceBase.replaceResource() new wildcard resource's parent wasn't set",
 		)
 	}
 
-	if wildcard1.base().papa != nil {
+	if wildcard1.papa != nil {
 		t.Fatalf(
 			"ResourceBase.replaceResource() old wildcard resource's parent wasn't cleared",
 		)
@@ -1165,12 +1155,12 @@ func TestResourceBase_replaceResource(t *testing.T) {
 
 func TestResourceBase_registerResource(t *testing.T) {
 	var (
-		r  = NewResource("parent")
-		rb = r.base()
+		r  = NewDormantResource("parent")
+		rb = r
 
-		staticR   = NewResource("static")
-		patternR  = NewResource("{name:pattern}")
-		wildcardR = NewResource("{wildcard}")
+		staticR   = NewDormantResource("static")
+		patternR  = NewDormantResource("{name:pattern}")
+		wildcardR = NewDormantResource("{wildcard}")
 	)
 
 	r.registerResource(staticR)
@@ -1203,7 +1193,7 @@ func TestResourceBase_segmentResources(t *testing.T) {
 		tmplStrs[i] = "r-" + strconv.Itoa(i)
 	}
 
-	var parent = NewResource("parent")
+	var parent = NewDormantResource("parent")
 	var oldLast, newFirst, newLast, err = parent.segmentResources(tmplStrs)
 	if err != nil {
 		t.Fatalf(
@@ -1237,12 +1227,12 @@ func TestResourceBase_segmentResources(t *testing.T) {
 			)
 		}
 
-		var staticr Resource
-		for _, staticr = range sr.base().staticResources {
+		var staticr *Resource
+		for _, staticr = range sr.staticResources {
 			break
 		}
 
-		sr, _ = staticr.(*ResourceBase)
+		sr = staticr
 	}
 
 	if i != ltmplStr {
@@ -1253,10 +1243,10 @@ func TestResourceBase_segmentResources(t *testing.T) {
 		)
 	}
 
-	var r1 = NewResource("r-0")
+	var r1 = NewDormantResource("r-0")
 	parent.registerResource(r1)
 
-	var r2 = NewResource("r-1")
+	var r2 = NewDormantResource("r-1")
 	r1.registerResource(r2)
 
 	oldLast, newFirst, newLast, err = parent.segmentResources(tmplStrs)
@@ -1293,12 +1283,12 @@ func TestResourceBase_segmentResources(t *testing.T) {
 			)
 		}
 
-		var staticr Resource
-		for _, staticr = range sr.base().staticResources {
+		var staticr *Resource
+		for _, staticr = range sr.staticResources {
 			break
 		}
 
-		sr, _ = staticr.(*ResourceBase)
+		sr = staticr
 	}
 
 	if i != ltmplStr {
@@ -1309,10 +1299,10 @@ func TestResourceBase_segmentResources(t *testing.T) {
 		)
 	}
 
-	var r3 = NewResource("r-2")
+	var r3 = NewDormantResource("r-2")
 	r2.registerResource(r3)
 
-	var r4 = NewResource("r-3")
+	var r4 = NewDormantResource("r-3")
 	r3.registerResource(r4)
 
 	oldLast, newFirst, newLast, err = parent.segmentResources(tmplStrs)
@@ -1348,7 +1338,7 @@ func TestResourceBase_pathSegmentResources(t *testing.T) {
 
 	var (
 		pathTmplStrs = "/r-0/r-1/r-2/r-3"
-		parent       = NewResource("parent")
+		parent       = NewDormantResource("parent")
 	)
 
 	var _, newFirst, newLast, tslash, err = parent.pathSegmentResources(
@@ -1387,12 +1377,12 @@ func TestResourceBase_pathSegmentResources(t *testing.T) {
 			)
 		}
 
-		var staticr Resource
-		for _, staticr = range sr.base().staticResources {
+		var staticr *Resource
+		for _, staticr = range sr.staticResources {
 			break
 		}
 
-		sr, _ = staticr.(*ResourceBase)
+		sr = staticr
 	}
 
 	if i != ltmplStr {
@@ -1403,10 +1393,10 @@ func TestResourceBase_pathSegmentResources(t *testing.T) {
 		)
 	}
 
-	var r1 = NewResource("r-0")
+	var r1 = NewDormantResource("r-0")
 	parent.registerResource(r1)
 
-	var r2 = NewResource("r-1")
+	var r2 = NewDormantResource("r-1")
 	r1.registerResource(r2)
 
 	var oldLast _Resource
@@ -1454,12 +1444,12 @@ func TestResourceBase_pathSegmentResources(t *testing.T) {
 			)
 		}
 
-		var staticr Resource
-		for _, staticr = range sr.base().staticResources {
+		var staticr *Resource
+		for _, staticr = range sr.staticResources {
 			break
 		}
 
-		sr, _ = staticr.(*ResourceBase)
+		sr = staticr
 	}
 
 	if i != ltmplStr {
@@ -1470,10 +1460,10 @@ func TestResourceBase_pathSegmentResources(t *testing.T) {
 		)
 	}
 
-	var r3 = NewResource("r-2")
+	var r3 = NewDormantResource("r-2")
 	r2.registerResource(r3)
 
-	var r4 = NewResource("r-3")
+	var r4 = NewDormantResource("r-3")
 	r3.registerResource(r4)
 
 	oldLast, newFirst, newLast, tslash, err = parent.pathSegmentResources(
@@ -1510,8 +1500,8 @@ func TestResourceBase_pathSegmentResources(t *testing.T) {
 }
 
 func TestResourceBase_registerResourceUnder(t *testing.T) {
-	var parent = NewResource("parent")
-	var r = NewResource("resource1")
+	var parent = NewDormantResource("parent")
+	var r = NewDormantResource("resource1")
 	var err = parent.registerResourceUnder(
 		"static/{name:pattern}/{wildcard}",
 		r,
@@ -1521,14 +1511,14 @@ func TestResourceBase_registerResourceUnder(t *testing.T) {
 		t.Fatalf("ResourceBase.registerResourceUnder() err = %v, want nil", err)
 	}
 
-	var pr = parent.base().staticResources["static"]
+	var pr = parent.staticResources["static"]
 	if pr == nil {
 		t.Fatalf(
 			"ResourceBase.registerResourceUnder() failed to register prifix[0]",
 		)
 	}
 
-	var prb = pr.base()
+	var prb = pr
 	if !(len(prb.patternResources) > 0) ||
 		prb.patternResources[0].Template().Content() != "{name:^pattern$}" {
 		t.Fatalf(
@@ -1536,7 +1526,7 @@ func TestResourceBase_registerResourceUnder(t *testing.T) {
 		)
 	}
 
-	prb = prb.patternResources[0].base()
+	prb = prb.patternResources[0]
 	if prb.wildcardResource == nil ||
 		prb.wildcardResource.Template().Content() != "{wildcard}" {
 		t.Fatalf(
@@ -1544,14 +1534,14 @@ func TestResourceBase_registerResourceUnder(t *testing.T) {
 		)
 	}
 
-	prb = prb.wildcardResource.base()
+	prb = prb.wildcardResource
 	if prb.staticResources["resource1"] != r {
 		t.Fatalf(
 			"ResourceBase.registerResourceUnder() failed to register resource",
 		)
 	}
 
-	var static = NewResource("static")
+	var static = NewDormantResource("static")
 	err = static.SetHandlerFor(
 		"get",
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}),
@@ -1566,20 +1556,20 @@ func TestResourceBase_registerResourceUnder(t *testing.T) {
 		t.Fatalf("ResourceBase.registerResourceUnder() err = %v, want nil", err)
 	}
 
-	if parent.base().staticResources["static"] != static {
+	if parent.staticResources["static"] != static {
 		t.Fatalf(
 			"ResourceBase.registerResourceUnder() failed to replace static resource",
 		)
 	}
 
-	if !(len(static.base().patternResources) > 0) {
+	if !(len(static.patternResources) > 0) {
 		t.Fatalf(
 			"ResourceBase.registerResourceUnder() failed to pass old pattern resource",
 		)
 	}
 
-	var pattern = NewResource("{name:pattern}")
-	r = NewResource("resource2")
+	var pattern = NewDormantResource("{name:pattern}")
+	r = NewDormantResource("resource2")
 	pattern.registerResource(r)
 
 	err = parent.registerResourceUnder("static", pattern)
@@ -1587,14 +1577,14 @@ func TestResourceBase_registerResourceUnder(t *testing.T) {
 		t.Fatalf("ResourceBase.registerResourceUnder() err = %v, want nil", err)
 	}
 
-	if static.base().patternResources[0] == pattern {
+	if static.patternResources[0] == pattern {
 		t.Fatalf(
 			"ResourceBase.registerResourceUnder() failed to keep old pattern resource",
 		)
 	}
 
-	pattern = static.base().patternResources[0]
-	if pattern.base().staticResources["resource2"] != r {
+	pattern = static.patternResources[0]
+	if pattern.staticResources["resource2"] != r {
 		t.Fatalf(
 			"ResourceBase.registerResourceUnder() failed to keep new resource2",
 		)
@@ -1603,21 +1593,21 @@ func TestResourceBase_registerResourceUnder(t *testing.T) {
 
 func TestResourceBase_keepResourceOrItsSubresources(t *testing.T) {
 	var (
-		r         = NewResource("resource")
-		static1   = NewResource("static")
-		pattern1  = NewResource("{name:pattern}")
-		wildcard1 = NewResource("{wildcard}")
+		r         = NewDormantResource("resource")
+		static1   = NewDormantResource("static")
+		pattern1  = NewDormantResource("{name:pattern}")
+		wildcard1 = NewDormantResource("{wildcard}")
 
-		static2   = NewResource("staticChild1")
-		pattern2  = NewResource("{name:patternChild1}")
-		wildcard2 = NewResource("{wildcardChild1}")
+		static2   = NewDormantResource("staticChild1")
+		pattern2  = NewDormantResource("{name:patternChild1}")
+		wildcard2 = NewDormantResource("{wildcardChild1}")
 
-		static3   = NewResource("static")
-		pattern3  = NewResource("{name:pattern}")
-		wildcard3 = NewResource("{wildcard}")
+		static3   = NewDormantResource("static")
+		pattern3  = NewDormantResource("{name:pattern}")
+		wildcard3 = NewDormantResource("{wildcard}")
 
-		static4  = NewResource("staticChild2")
-		pattern4 = NewResource("{name:patternChild2}")
+		static4  = NewDormantResource("staticChild2")
+		pattern4 = NewDormantResource("{name:patternChild2}")
 	)
 
 	r.registerResource(static1)
@@ -1652,7 +1642,7 @@ func TestResourceBase_keepResourceOrItsSubresources(t *testing.T) {
 		)
 	}
 
-	var rb = r.base()
+	var rb = r
 	var static = rb.staticResources[static3.Template().Content()]
 	if static != static1 {
 		t.Fatalf(
@@ -1660,13 +1650,13 @@ func TestResourceBase_keepResourceOrItsSubresources(t *testing.T) {
 		)
 	}
 
-	if static.base().staticResources[static4.Template().Content()] != static4 {
+	if static.staticResources[static4.Template().Content()] != static4 {
 		t.Fatalf(
 			"ResourceBase.keepResourceOrItsSubresources() failed to keep new static resource's static child",
 		)
 	}
 
-	if static.base().patternResources[1] != pattern4 {
+	if static.patternResources[1] != pattern4 {
 		t.Fatalf(
 			"ResourceBase.keepResourceOrItsSubresources() failed to keep new static resource's pattern child",
 		)
@@ -1686,13 +1676,13 @@ func TestResourceBase_keepResourceOrItsSubresources(t *testing.T) {
 		)
 	}
 
-	if pattern.base().staticResources[static4.Template().Content()] != static4 {
+	if pattern.staticResources[static4.Template().Content()] != static4 {
 		t.Fatalf(
 			"ResourceBase.keepResourceOrItsSubresources() failed to keep new pattern resource's static child",
 		)
 	}
 
-	if pattern.base().patternResources[1] != pattern4 {
+	if pattern.patternResources[1] != pattern4 {
 		t.Fatalf(
 			"ResourceBase.keepResourceOrItsSubresources() failed to keep new pattern resource's pattern child",
 		)
@@ -1712,13 +1702,13 @@ func TestResourceBase_keepResourceOrItsSubresources(t *testing.T) {
 		)
 	}
 
-	if wildcard.base().staticResources[static4.Template().Content()] != static4 {
+	if wildcard.staticResources[static4.Template().Content()] != static4 {
 		t.Fatalf(
 			"ResourceBase.keepResourceOrItsSubresources() failed to keep new wildcard resource's static child",
 		)
 	}
 
-	if wildcard.base().patternResources[1] != pattern4 {
+	if wildcard.patternResources[1] != pattern4 {
 		t.Fatalf(
 			"ResourceBase.keepResourceOrItsSubresources() failed to keep new  wildcard resource's pattern child",
 		)
@@ -1784,21 +1774,21 @@ func TestResourceBase_keepResourceOrItsSubresources(t *testing.T) {
 // 		t.Fatalf("ResourceBase.resourceUsingConfig() err = %v, want nil", err)
 // 	}
 
-// 	var pb = parent.base()
+// 	var pb = parent
 // 	if len(pb.staticResources) != 1 {
 // 		t.Fatalf(
 // 			"ResourceBase.resourceUsingConfig() failed to register first resource",
 // 		)
 // 	}
 
-// 	var r1b = pb.staticResources["r1"].base()
+// 	var r1b = pb.staticResources["r1"]
 // 	if len(r1b.patternResources) != 1 {
 // 		t.Fatalf(
 // 			"ResourceBase.resourceUsingConfig() failed to register second resource",
 // 		)
 // 	}
 
-// 	var r2b = r1b.patternResources[0].base()
+// 	var r2b = r1b.patternResources[0]
 // 	if r2b.wildcardResource == nil {
 // 		t.Fatalf(
 // 			"ResourceBase.resourceUsingConfig() failed to register thirs resource",
@@ -1833,7 +1823,7 @@ func TestResourceBase_keepResourceOrItsSubresources(t *testing.T) {
 //	}
 //
 //	var r = NewResource("resource")
-//	var _, head, tail, err = r.base().createPrefixResources(tmplStrs)
+//	var _, head, tail, err = r.createPrefixResources(tmplStrs)
 //	if err != nil {
 //		t.Fatalf(
 //			"ResourceBase.createPrefixResources() error = %v, want nil",
@@ -1862,7 +1852,7 @@ func TestResourceBase_keepResourceOrItsSubresources(t *testing.T) {
 //		}
 //
 //		var breakLoop = true
-//		for _, prefixR = range prefixR.base().staticResources {
+//		for _, prefixR = range prefixR.staticResources {
 //			breakLoop = false
 //		}
 //
@@ -1882,19 +1872,19 @@ func TestResourceBase_keepResourceOrItsSubresources(t *testing.T) {
 //}
 
 func TestResourceBase_Resource(t *testing.T) {
-	var r = NewResource("r")
+	var r = NewDormantResource("r")
 	var static1, err = r.Resource("static1")
 	if err != nil {
 		t.Fatalf("Resource.Resource() err = %v, want nil", err)
 	}
 
-	var pattern Resource
+	var pattern *Resource
 	pattern, err = r.Resource("static2/{name:pattern}/")
 	if err != nil {
 		t.Fatalf("Resource.Resource() err = %v, want nil", err)
 	}
 
-	var wildcard Resource
+	var wildcard *Resource
 	wildcard, err = r.Resource("https:///{name:pattern2}/{wildcard}")
 	if err != nil {
 		t.Fatal(err)
@@ -1903,7 +1893,7 @@ func TestResourceBase_Resource(t *testing.T) {
 	var cases = []struct {
 		name         string
 		tmplStr      string
-		wantResource Resource
+		wantResource *Resource
 		wantErr      bool
 	}{
 		{"static1 #1", "static1", static1, false},
@@ -1984,13 +1974,13 @@ func TestResourceBase_Resource(t *testing.T) {
 }
 
 func TestResourceBase_ResourceUsingConfig(t *testing.T) {
-	var r = NewResource("r")
+	var r = NewDormantResource("r")
 	var static, err = r.ResourceUsingConfig("static", Config{Subtree: true})
 	if err != nil {
 		t.Fatalf("Resource.ResourceUsingConfig() err = %v, want nil", err)
 	}
 
-	var pattern Resource
+	var pattern *Resource
 	pattern, err = r.ResourceUsingConfig("{name:pattern}/", Config{
 		HandleThePathAsIs: true,
 	})
@@ -1999,7 +1989,7 @@ func TestResourceBase_ResourceUsingConfig(t *testing.T) {
 		t.Fatalf("Resource.ResourceUsingConfig() err = %v, want nil", err)
 	}
 
-	var wildcard Resource
+	var wildcard *Resource
 	wildcard, err = r.ResourceUsingConfig("https:///{wildcard}", Config{
 		RedirectInsecureRequest: true,
 	})
@@ -2012,7 +2002,7 @@ func TestResourceBase_ResourceUsingConfig(t *testing.T) {
 		name    string
 		tmplStr string
 		config  Config
-		wantR   Resource
+		wantR   *Resource
 		wantErr bool
 	}{
 		{"static #1", "static", Config{Subtree: true}, static, false},
@@ -2260,14 +2250,14 @@ func TestResourceBase_ResourceUsingConfig(t *testing.T) {
 //		)
 //	}
 //
-//	var pr = parent.base().staticResources["static1"]
+//	var pr = parent.staticResources["static1"]
 //	if pr == nil {
 //		t.Fatalf(
 //			"ResourceBase.ResourceUnder() failed to register prifix[0]",
 //		)
 //	}
 //
-//	var prb = pr.base()
+//	var prb = pr
 //	if !(len(prb.patternResources) > 0) ||
 //		prb.patternResources[0].Template().Content() != "{name:^pattern1$}" {
 //		t.Fatalf(
@@ -2275,7 +2265,7 @@ func TestResourceBase_ResourceUsingConfig(t *testing.T) {
 //		)
 //	}
 //
-//	prb = prb.patternResources[0].base()
+//	prb = prb.patternResources[0]
 //	if prb.wildCardResource == nil ||
 //		prb.wildCardResource.Template().Content() != "{wildcard1}" {
 //		t.Fatalf(
@@ -2283,7 +2273,7 @@ func TestResourceBase_ResourceUsingConfig(t *testing.T) {
 //		)
 //	}
 //
-//	prb = prb.wildCardResource.base()
+//	prb = prb.wildCardResource
 //	if prb.staticResources["resource"] != r {
 //		t.Fatalf(
 //			"ResourceBase.ResourceUnder() failed to register resource",
@@ -2323,21 +2313,21 @@ func TestResourceBase_ResourceUsingConfig(t *testing.T) {
 //		)
 //	}
 //
-//	prb = parent.base()
+//	prb = parent
 //	if len(prb.patternResources) != 1 && prb.patternResources[0] != pattern {
 //		t.Fatalf(
 //			"ResoruceBase.ResourceUnder() failed to keep old pattern resource",
 //		)
 //	}
 //
-//	prb = pattern.base()
+//	prb = pattern
 //	if len(prb.staticResources) == 0 {
 //		t.Fatalf(
 //			"ResourceBase.ResourceUnder() failed to register prifix[1]",
 //		)
 //	}
 //
-//	prb = prb.staticResources["static"].base()
+//	prb = prb.staticResources["static"]
 //	if len(prb.staticResources) == 0 || prb.staticResources["resource"] != r {
 //		t.Fatalf(
 //			"ResourceBase.ResourceUnder() failed to register resource",
@@ -2378,14 +2368,14 @@ func TestResourceBase_ResourceUsingConfig(t *testing.T) {
 //		)
 //	}
 //
-//	var pr = parent.base().staticResources["static1"]
+//	var pr = parent.staticResources["static1"]
 //	if pr == nil {
 //		t.Fatalf(
 //			"ResourceBase.ResourceUsingConfigUnder() failed to register prifix[0]",
 //		)
 //	}
 //
-//	var prb = pr.base()
+//	var prb = pr
 //	if !(len(prb.patternResources) > 0) ||
 //		prb.patternResources[0].Template().Content() != "{name:^pattern1$}" {
 //		t.Fatalf(
@@ -2393,7 +2383,7 @@ func TestResourceBase_ResourceUsingConfig(t *testing.T) {
 //		)
 //	}
 //
-//	prb = prb.patternResources[0].base()
+//	prb = prb.patternResources[0]
 //	if prb.wildCardResource == nil ||
 //		prb.wildCardResource.Template().Content() != "{wildcard1}" {
 //		t.Fatalf(
@@ -2401,7 +2391,7 @@ func TestResourceBase_ResourceUsingConfig(t *testing.T) {
 //		)
 //	}
 //
-//	prb = prb.wildCardResource.base()
+//	prb = prb.wildCardResource
 //	if prb.staticResources["resource"] != r {
 //		t.Fatalf(
 //			"ResourceBase.ResourceUsingConfigUnder() failed to register resource",
@@ -2443,21 +2433,21 @@ func TestResourceBase_ResourceUsingConfig(t *testing.T) {
 //		)
 //	}
 //
-//	prb = parent.base()
+//	prb = parent
 //	if len(prb.patternResources) != 1 && prb.patternResources[0] != pattern {
 //		t.Fatalf(
 //			"ResoruceBase.ResourceUsingConfigUnder() failed to keep old pattern resource",
 //		)
 //	}
 //
-//	prb = pattern.base()
+//	prb = pattern
 //	if len(prb.staticResources) == 0 {
 //		t.Fatalf(
 //			"ResourceBase.ResourceUsingConfigUnder() failed to register prifix[1]",
 //		)
 //	}
 //
-//	prb = prb.staticResources["static"].base()
+//	prb = prb.staticResources["static"]
 //	if len(prb.staticResources) == 0 || prb.staticResources["resource"] != r {
 //		t.Fatalf(
 //			"ResourceBase.ResourceUsingConfigUnder() failed to register resource",
@@ -2467,13 +2457,13 @@ func TestResourceBase_ResourceUsingConfig(t *testing.T) {
 
 func TestResourceBase_RegisterResource(t *testing.T) {
 	var (
-		parent      = NewResource("parent")
-		child1      = NewResource("{name:pattern}")
-		child2      = NewResource("{name:pattern}")
-		grandChild1 = NewResource("grandChild1")
-		grandChild2 = NewResource("grandChild2")
-		grandChild3 = NewResource("/parent/{name:pattern}/grandChild3")
-		grandChild4 = NewResource("parent/{name:pattern}/{grandChild4}")
+		parent      = NewDormantResource("parent")
+		child1      = NewDormantResource("{name:pattern}")
+		child2      = NewDormantResource("{name:pattern}")
+		grandChild1 = NewDormantResource("grandChild1")
+		grandChild2 = NewDormantResource("grandChild2")
+		grandChild3 = NewDormantResource("/parent/{name:pattern}/grandChild3")
+		grandChild4 = NewDormantResource("parent/{name:pattern}/{grandChild4}")
 	)
 
 	if err := child1.RegisterResource(grandChild1); err != nil {
@@ -2500,14 +2490,14 @@ func TestResourceBase_RegisterResource(t *testing.T) {
 		t.Fatalf("ResourceBase.RegisterResource() err = %v, want nil", err)
 	}
 
-	var rb = parent.base()
+	var rb = parent
 	if len(rb.patternResources) != 1 && rb.patternResources[0] != child1 {
 		t.Fatalf(
 			"ResourceBase.RegisterResource() couldn't keep own child",
 		)
 	}
 
-	var childB = rb.patternResources[0].base()
+	var childB = rb.patternResources[0]
 	if len(childB.staticResources) != 3 {
 		t.Fatalf("ResourceBase.RegisterResource() couldn't keep grandChild2")
 	}
@@ -2530,35 +2520,35 @@ func TestResourceBase_RegisterResource(t *testing.T) {
 		t.Fatalf("ResourceBase.RegisterResource() err = nil, want non-nil")
 	}
 
-	var r = NewResource("http://example.com/parent/prefix/resource")
+	var r = NewDormantResource("http://example.com/parent/prefix/resource")
 	if err := grandChild2.RegisterResource(r); err == nil {
 		t.Fatalf("ResourceBase.RegisterResource() err = nil, want non-nil")
 	}
 
-	var h = NewHost("example.com")
+	var h = NewDormantHost("example.com")
 	h.registerResource(parent)
 
-	r = NewResource("http://example.com/parent/prefix/resource")
+	r = NewDormantResource("http://example.com/parent/prefix/resource")
 	if err := grandChild2.RegisterResource(r); err == nil {
 		t.Fatalf("ResourceBase.RegisterResource() err = nil, want non-nil")
 	}
 
-	r = NewResource("http://example.com/parent/prefix/resource")
+	r = NewDormantResource("http://example.com/parent/prefix/resource")
 	if err := parent.RegisterResource(r); err != nil {
 		t.Fatalf("ResourceBase.RegisterResource() err = %v, want nil", err)
 	}
 
-	rb = parent.base()
+	rb = parent
 	if rb.staticResources["prefix"].Template().Content() != "prefix" {
 		t.Fatalf("ResourceBase.RegisterResource() failed to register prefix")
 	}
 
-	rb = rb.staticResources["prefix"].base()
+	rb = rb.staticResources["prefix"]
 	if rb.staticResources["resource"].Template().Content() != "resource" {
 		t.Fatalf("ResourceBase.RegisterResource() failed to register resource")
 	}
 
-	r = NewResource(
+	r = NewDormantResource(
 		"http://example.com/parent/{name:pattern}/grandChild2/{r10}",
 	)
 
@@ -2566,11 +2556,11 @@ func TestResourceBase_RegisterResource(t *testing.T) {
 		t.Fatalf("ResourceBase.RegisterResource() err = %v, want nil", err)
 	}
 
-	if grandChild2.base().wildcardResource != r {
+	if grandChild2.wildcardResource != r {
 		t.Fatalf("ResourceBase.RegisterResource() failed to register resource")
 	}
 
-	r = NewResource("/parent/{name:pattern}/grandChild2/r11")
+	r = NewDormantResource("/parent/{name:pattern}/grandChild2/r11")
 	if _, err := r.Resource("{name:123}"); err != nil {
 		t.Fatal(err)
 	}
@@ -2582,10 +2572,10 @@ func TestResourceBase_RegisterResource(t *testing.T) {
 
 func TestResourceBase_RegisterResourceUnder(t *testing.T) {
 	var (
-		parent = NewResource("parent")
-		child1 = NewResource("resource1")
-		child2 = NewResource("/parent/{name:pattern}/{grandchild}/resource2")
-		child3 = NewResource("/parent/{name:pattern}/{grandchild}/resource3")
+		parent = NewDormantResource("parent")
+		child1 = NewDormantResource("resource1")
+		child2 = NewDormantResource("/parent/{name:pattern}/{grandchild}/resource2")
+		child3 = NewDormantResource("/parent/{name:pattern}/{grandchild}/resource3")
 	)
 
 	if err := parent.RegisterResourceUnder(
@@ -2609,14 +2599,14 @@ func TestResourceBase_RegisterResourceUnder(t *testing.T) {
 		t.Fatalf("ResourceBase.RegisterResourceUnder() err = %v, want nil", err)
 	}
 
-	var rb = parent.base()
+	var rb = parent
 	if len(rb.patternResources) != 1 {
 		t.Fatalf(
 			"ResourceBase.RegisterResourceUnder() failed to register prefix[0]",
 		)
 	}
 
-	rb = rb.patternResources[0].base()
+	rb = rb.patternResources[0]
 	if len(rb.staticResources) != 1 ||
 		rb.staticResources["resource1"] != child1 {
 		t.Fatalf(
@@ -2630,7 +2620,7 @@ func TestResourceBase_RegisterResourceUnder(t *testing.T) {
 		)
 	}
 
-	rb = rb.wildcardResource.base()
+	rb = rb.wildcardResource
 	if len(rb.staticResources) != 2 {
 		t.Fatalf(
 			"ResourceBase.RegisterResourceUnder() failed to register resource2 and resource3",
@@ -2649,7 +2639,7 @@ func TestResourceBase_RegisterResourceUnder(t *testing.T) {
 		)
 	}
 
-	var r = NewResource("/parent/{name2:pattern2}/{grandchild}/r4")
+	var r = NewDormantResource("/parent/{name2:pattern2}/{grandchild}/r4")
 	if err := parent.RegisterResourceUnder(
 		"/{name:pattern}/{grandchild}",
 		r, // child4 has different prefix template
@@ -2662,7 +2652,7 @@ func TestResourceBase_RegisterResourceUnder(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	r = NewResource("parent/{name:pattern}/{grandchild}/{resource4}")
+	r = NewDormantResource("parent/{name:pattern}/{grandchild}/{resource4}")
 	if err = child.RegisterResourceUnder(
 		"{grandchild}/resource2",
 		r,
@@ -2670,12 +2660,12 @@ func TestResourceBase_RegisterResourceUnder(t *testing.T) {
 		t.Fatalf("ResourceBase.RegisterResourceUnder() err = nil, want non-nil")
 	}
 
-	r = NewResource("parent/{name:pattern}/{grandchild}/{resource4}")
+	r = NewDormantResource("parent/{name:pattern}/{grandchild}/{resource4}")
 	if err = child.registerResourceUnder("{grandchild}", r); err != nil {
 		t.Fatalf("ResourceBase.RegisterResourceUnder() err = %v, want nil", err)
 	}
 
-	r = NewResource("/parent/{name:pattern}/{resource5:abc}")
+	r = NewDormantResource("/parent/{name:pattern}/{resource5:abc}")
 	if _, err = r.Resource("{name:123}"); err != nil {
 		t.Fatal(err)
 	}
@@ -2686,7 +2676,7 @@ func TestResourceBase_RegisterResourceUnder(t *testing.T) {
 		)
 	}
 
-	r = NewResource(
+	r = NewDormantResource(
 		"http://example.com/parent/{name:pattern}/grandchild2/resource5",
 	)
 
@@ -2694,9 +2684,9 @@ func TestResourceBase_RegisterResourceUnder(t *testing.T) {
 		t.Fatalf("ResourceBase.RegisterResourceUnder() err = nil, want non-nil")
 	}
 
-	var h = NewHost("example.com")
+	var h = NewDormantHost("example.com")
 	h.registerResource(parent)
-	r = NewResource(
+	r = NewDormantResource(
 		"http://example.com/parent/{name:pattern}/grandchild2/resource5",
 	)
 
@@ -2704,21 +2694,21 @@ func TestResourceBase_RegisterResourceUnder(t *testing.T) {
 		t.Fatalf("ResourceBase.RegisterResourceUnder() err = %v, want nil", err)
 	}
 
-	rb = parent.base()
+	rb = parent
 	if rb.patternResources[0] != child {
 		t.Fatalf(
 			"ResourceBase.RegisterResourceUnder() failed to pattern child",
 		)
 	}
 
-	child = child.base().staticResources["grandchild2"]
+	child = child.staticResources["grandchild2"]
 	if child == nil {
 		t.Fatalf(
 			"ResourceBase.RegisterResourceUnder() failed to register granschild2",
 		)
 	}
 
-	if child.base().staticResources["resource5"] != r {
+	if child.staticResources["resource5"] != r {
 		t.Fatalf(
 			"ResourceBase.RegisterResourceUnder() failed to register resource5",
 		)
@@ -2726,31 +2716,31 @@ func TestResourceBase_RegisterResourceUnder(t *testing.T) {
 }
 
 func TestResourceBase_RegisteredResource(t *testing.T) {
-	var root = NewResource("/")
+	var root = NewDormantResource("/")
 	var static1, err = root.Resource("static")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	var static2 Resource
+	var static2 *Resource
 	static2, err = root.Resource("$staticR1:staticR1")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	var pattern1 Resource
+	var pattern1 *Resource
 	pattern1, err = root.Resource("{patternR1:pattern}")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	var pattern2 Resource
+	var pattern2 *Resource
 	pattern2, err = root.Resource("$patternR2:{name:pattern}{wildcard}")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	var wildcard Resource
+	var wildcard *Resource
 	wildcard, err = root.Resource("{wildcard}")
 	if err != nil {
 		t.Fatal(err)
@@ -2759,7 +2749,7 @@ func TestResourceBase_RegisteredResource(t *testing.T) {
 	var cases = []struct {
 		name    string
 		tmplStr string
-		want    Resource
+		want    *Resource
 		wantErr bool
 	}{
 		{"static", "static", static1, false},
@@ -2804,7 +2794,7 @@ func TestResourceBase_RegisteredResource(t *testing.T) {
 }
 
 func TestResourceBase_ChildResourceNamed(t *testing.T) {
-	var parent = NewResource("resource").base()
+	var parent = NewDormantResource("resource")
 
 	var _, err = parent.Resource("$r1:static1")
 	if err != nil {
@@ -2816,19 +2806,19 @@ func TestResourceBase_ChildResourceNamed(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var wildcard Resource
+	var wildcard *Resource
 	wildcard, err = parent.Resource("$resource:{wildcard}")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	var static Resource
+	var static *Resource
 	static, err = parent.Resource("$static:static2")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	var pattern Resource
+	var pattern *Resource
 	pattern, err = parent.Resource("{vName:pattern}")
 	if err != nil {
 		t.Fatal(err)
@@ -2958,9 +2948,9 @@ func TestResourceBase_ChildResourceNamed(t *testing.T) {
 
 func TestResourceBase_ChildResources(t *testing.T) {
 	var (
-		root   = NewResource("/")
+		root   = NewDormantResource("/")
 		length = 5
-		rs     = make([]Resource, length)
+		rs     = make([]*Resource, length)
 		err    error
 	)
 
@@ -3017,8 +3007,8 @@ func TestResourceBase_ChildResources(t *testing.T) {
 }
 
 func TestResourceBase_HasChildResource(t *testing.T) {
-	var parent = NewResource("parent")
-	var rs = make([]Resource, 5)
+	var parent = NewDormantResource("parent")
+	var rs = make([]*Resource, 5)
 
 	var err error
 	rs[0], err = parent.Resource("static1")
@@ -3048,7 +3038,7 @@ func TestResourceBase_HasChildResource(t *testing.T) {
 
 	var cases = []struct {
 		name string
-		r    Resource
+		r    *Resource
 		want bool
 	}{
 		{"static1", rs[0], true},
@@ -3056,13 +3046,13 @@ func TestResourceBase_HasChildResource(t *testing.T) {
 		{"pattern1", rs[2], true},
 		{"pattern2", rs[3], true},
 		{"wildcard", rs[4], true},
-		{"static3", NewResource("static3"), false},
+		{"static3", NewDormantResource("static3"), false},
 		{
 			"pattern3",
-			NewResource("$pattern3:{name:pattern3}"),
+			NewDormantResource("$pattern3:{name:pattern3}"),
 			false,
 		},
-		{"wildcard2", NewResource("{wildcard}"), false},
+		{"wildcard2", NewDormantResource("{wildcard}"), false},
 	}
 
 	for _, c := range cases {
@@ -3079,7 +3069,7 @@ func TestResourceBase_HasChildResource(t *testing.T) {
 }
 
 func TestResourceBase_HasAnyChildResource(t *testing.T) {
-	var parent = NewResource("parent")
+	var parent = NewDormantResource("parent")
 	if parent.HasAnyChildResource() {
 		t.Fatalf("ResourceBase.HasAnyChildResource() = true, want false")
 	}
@@ -3094,8 +3084,8 @@ func TestResourceBase_HasAnyChildResource(t *testing.T) {
 }
 
 func TestResourceBase_SetHandlerFor(t *testing.T) {
-	var r = NewResource("resource")
-	var rb = r.base()
+	var r = NewDormantResource("resource")
+	var rb = r
 
 	var err = r.SetHandlerFor("get", http.HandlerFunc(
 		func(w http.ResponseWriter, r *http.Request) {},
@@ -3175,7 +3165,7 @@ func TestResourceBase_SetHandlerFor(t *testing.T) {
 
 func TestResourceBase_HandlerOf(t *testing.T) {
 	var strb strings.Builder
-	var r = NewResource("resource")
+	var r = NewDormantResource("resource")
 	r.SetHandlerFor("get", http.HandlerFunc(
 		func(w http.ResponseWriter, r *http.Request) {
 			strb.WriteString("get")
@@ -3224,7 +3214,7 @@ func TestResourceBase_HandlerOf(t *testing.T) {
 
 func TestResourceBase_SetHandlerForUnusedMethods(t *testing.T) {
 	var (
-		r       = NewResource("static")
+		r       = NewDormantResource("static")
 		strb    strings.Builder
 		handler = http.HandlerFunc(
 			func(w http.ResponseWriter, r *http.Request) {
@@ -3250,13 +3240,13 @@ func TestResourceBase_SetHandlerForUnusedMethods(t *testing.T) {
 		)
 	}
 
-	if r.base().unusedMethodsHandler == nil {
+	if r.unusedMethodsHandler == nil {
 		t.Fatalf(
 			"ResourceBase.SetHandlerForUnusedMethods() failed to set unused methods handler",
 		)
 	}
 
-	r.base().unusedMethodsHandler.ServeHTTP(nil, nil)
+	r.unusedMethodsHandler.ServeHTTP(nil, nil)
 	if strb.String() != "handler" {
 		t.Fatalf(
 			"ResourceBase.SetHandlerForUnusedMethods() set invalid handler for unused methods",
@@ -3265,7 +3255,7 @@ func TestResourceBase_SetHandlerForUnusedMethods(t *testing.T) {
 }
 
 func TestResourceBase_HandlerOfUnusedMethods(t *testing.T) {
-	var r = NewResource("static")
+	var r = NewDormantResource("static")
 	if err := r.SetHandlerFor(
 		"get",
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}),
@@ -3297,8 +3287,8 @@ func TestResourceBase_HandlerOfUnusedMethods(t *testing.T) {
 
 func TestResourceBase_WrapWith(t *testing.T) {
 	var (
-		r    = NewResource("static")
-		rb   = r.base()
+		r    = NewDormantResource("static")
+		rb   = r
 		strb strings.Builder
 	)
 
@@ -3363,7 +3353,7 @@ func TestResourceBase_WrapWith(t *testing.T) {
 }
 
 func TestResourceBase_WrapHandlerOf(t *testing.T) {
-	var r = NewResource("static")
+	var r = NewDormantResource("static")
 	var strb strings.Builder
 
 	if err := r.SetHandlerFor(
@@ -3423,7 +3413,7 @@ func TestResourceBase_WrapHandlerOf(t *testing.T) {
 }
 
 func TestResourceBase_WrapHandlerOfMethodsInUse(t *testing.T) {
-	var r = NewResource("static")
+	var r = NewDormantResource("static")
 	var strb strings.Builder
 	if err := r.SetHandlerFor("put post", http.HandlerFunc(
 		func(w http.ResponseWriter, r *http.Request) {
@@ -3510,7 +3500,7 @@ func TestResourceBase_WrapHandlerOfMethodsInUse(t *testing.T) {
 }
 
 func TestResourceBase_WrapHandlerOfUnusedMethods(t *testing.T) {
-	var r = NewResource("static")
+	var r = NewDormantResource("static")
 	var strb strings.Builder
 
 	if err := r.SetHandlerFor("get", http.HandlerFunc(
@@ -3577,7 +3567,7 @@ func TestResourceBase_WrapHandlerOfUnusedMethods(t *testing.T) {
 // 		t.Fatalf("resource's middlewareBundle should have been nil")
 // 	}
 
-// 	r.base().initializeMiddlewareBundleOnce()
+// 	r.initializeMiddlewareBundleOnce()
 // 	if r.middlewareBundle() == nil {
 // 		t.Fatalf(
 // 			"ResourceBase.initializeMiddlewareBundleOnce() failed to initialize middlewareBundle",
@@ -3663,8 +3653,8 @@ func TestResourceBase_WrapSubtreeHandlersOfUnusedMethods(t *testing.T) {
 
 func TestResourceBase__Resources(t *testing.T) {
 	var (
-		r   = NewResource("/")
-		rs  = make([]Resource, 5)
+		r   = NewDormantResource("/")
+		rs  = make([]*Resource, 5)
 		err error
 	)
 
@@ -3717,17 +3707,17 @@ func TestResourceBase__Resources(t *testing.T) {
 }
 
 func TestResourceBase_setRequestHandlerBase(t *testing.T) {
-	var r = NewResource("static")
+	var r = NewDormantResource("static")
 	var rhb = &_RequestHandlerBase{}
 	r.setRequestHandlerBase(rhb)
-	if r.base()._RequestHandlerBase != rhb {
+	if r._RequestHandlerBase != rhb {
 		t.Fatalf("ResourceBase.setRequestHandlerBase() failed")
 	}
 }
 
 func TestResourceBase_requestHandlerBase(t *testing.T) {
 	var (
-		r   = NewResource("static")
+		r   = NewDormantResource("static")
 		rhb = &_RequestHandlerBase{}
 	)
 
@@ -3743,7 +3733,7 @@ func TestResourceBase_requestHandlerBase(t *testing.T) {
 
 // func TestResourceBase_middlewareBundle(t *testing.T) {
 // 	var r = NewResource("static")
-// 	var rb = r.base()
+// 	var rb = r
 
 // 	if rb.middlewareBundle() != nil {
 // 		t.Fatalf(
@@ -3762,7 +3752,7 @@ func TestResourceBase_requestHandlerBase(t *testing.T) {
 func addRequestHandlerSubresources(t *testing.T, r _Resource, i, limit int) {
 	t.Helper()
 
-	var rr Resource
+	var rr *Resource
 	var err error
 
 	if err = r.SetHandlerFor("get post custom", http.HandlerFunc(
@@ -3822,7 +3812,7 @@ func addRequestHandlerSubresources(t *testing.T, r _Resource, i, limit int) {
 
 		addRequestHandlerSubresources(t, rr, i, limit)
 
-		rr = NewResourceUsingConfig(
+		rr = NewDormantResourceUsingConfig(
 			"sr"+istr+"2",
 			Config{Subtree: true},
 		)
@@ -3833,14 +3823,14 @@ func addRequestHandlerSubresources(t *testing.T, r _Resource, i, limit int) {
 
 		addRequestHandlerSubresources(t, rr, i, limit)
 
-		rr = NewResource("https:///sr" + istr + "3")
+		rr = NewDormantResource("https:///sr" + istr + "3")
 		if err = r.RegisterResource(rr); err != nil {
 			t.Fatal(err)
 		}
 
 		addRequestHandlerSubresources(t, rr, i, limit)
 
-		rr = NewResourceUsingConfig("https:///sr"+istr+"4/", Config{
+		rr = NewDormantResourceUsingConfig("https:///sr"+istr+"4/", Config{
 			Subtree: true,
 		})
 
@@ -3850,7 +3840,7 @@ func addRequestHandlerSubresources(t *testing.T, r _Resource, i, limit int) {
 
 		addRequestHandlerSubresources(t, rr, i, limit)
 
-		rr = NewResourceUsingConfig(
+		rr = NewDormantResourceUsingConfig(
 			"https:///$pr"+istr+"1:{name:pr"+istr+"1}:{id:\\d?}",
 			Config{RedirectInsecureRequest: true},
 		)
@@ -3861,7 +3851,7 @@ func addRequestHandlerSubresources(t *testing.T, r _Resource, i, limit int) {
 
 		addRequestHandlerSubresources(t, rr, i, limit)
 
-		rr = NewResourceUsingConfig(
+		rr = NewDormantResourceUsingConfig(
 			"https:///$pr"+istr+"2:{name:pr"+istr+"2}:{id:\\d?}",
 			Config{
 				Subtree:                      true,
@@ -3877,7 +3867,7 @@ func addRequestHandlerSubresources(t *testing.T, r _Resource, i, limit int) {
 
 		addRequestHandlerSubresources(t, rr, i, limit)
 
-		rr = NewResourceUsingConfig(
+		rr = NewDormantResourceUsingConfig(
 			"$pr"+istr+"3:{name:pr"+istr+"3}:{id:\\d?}",
 			Config{HandleThePathAsIs: true},
 		)
@@ -3888,7 +3878,7 @@ func addRequestHandlerSubresources(t *testing.T, r _Resource, i, limit int) {
 
 		addRequestHandlerSubresources(t, rr, i, limit)
 
-		rr = NewResourceUsingConfig(
+		rr = NewDormantResourceUsingConfig(
 			"$pr"+istr+"4:{name:pr"+istr+"4}:{id:\\d?}",
 			Config{DropRequestOnUnmatchedTslash: true},
 		)
@@ -3899,7 +3889,7 @@ func addRequestHandlerSubresources(t *testing.T, r _Resource, i, limit int) {
 
 		addRequestHandlerSubresources(t, rr, i, limit)
 
-		rr = NewResourceUsingConfig(
+		rr = NewDormantResourceUsingConfig(
 			"$pr"+istr+"5:{name:pr"+istr+"5}:{id:\\d?}/",
 			Config{
 				Subtree:                      true,
@@ -3913,7 +3903,7 @@ func addRequestHandlerSubresources(t *testing.T, r _Resource, i, limit int) {
 
 		addRequestHandlerSubresources(t, rr, i, limit)
 
-		rr = NewResourceUsingConfig(
+		rr = NewDormantResourceUsingConfig(
 			"https:///$pr"+istr+"6:{name:pr"+istr+"6}:{id:\\d?}/",
 			Config{
 				Subtree:                      true,
@@ -3929,7 +3919,7 @@ func addRequestHandlerSubresources(t *testing.T, r _Resource, i, limit int) {
 
 		addRequestHandlerSubresources(t, rr, i, limit)
 
-		rr = NewResourceUsingConfig(
+		rr = NewDormantResourceUsingConfig(
 			"https:///{wr"+istr+"}",
 			Config{
 				RedirectInsecureRequest:      true,
@@ -4014,7 +4004,7 @@ func checkRequestRouting(
 }
 
 func TestResourceBase_ServeHTTP(t *testing.T) {
-	var resource = NewResource("/")
+	var resource = NewDormantResource("/")
 	addRequestHandlerSubresources(t, resource, 0, 3)
 
 	// sr*1
@@ -6707,8 +6697,8 @@ func TestResourceBase_ServeHTTP(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var rs []Resource
-	var rr Resource
+	var rs []*Resource
+	var rr *Resource
 	rr, err = resource.RegisteredResource("sr01")
 	if err != nil {
 		t.Fatal(err)

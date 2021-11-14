@@ -11,17 +11,7 @@ import (
 	"testing"
 )
 
-func TestHostBase_base(t *testing.T) {
-	var h = &struct{ *HostBase }{}
-	h.HostBase = &HostBase{}
-
-	var base = h.base()
-	if base != h.HostBase {
-		t.Fatalf("HostBase.base() = %p, want %p", base, h.HostBase)
-	}
-}
-
-func setHandlers(t *testing.T, h Host) {
+func setHandlers(t *testing.T, h *Host) {
 	if err := h.SetHandlerFor("get post custom", http.HandlerFunc(
 		func(w http.ResponseWriter, r *http.Request) {
 			var hValues, ok = r.Context().Value(HostValuesKey).(HostValues)
@@ -68,29 +58,29 @@ func setHandlers(t *testing.T, h Host) {
 	}
 }
 
-func requestHandlerHosts(t *testing.T) []Host {
+func requestHandlerHosts(t *testing.T) []*Host {
 	t.Helper()
 
-	var hosts []Host
-	hosts = append(hosts, NewHost("example.com"))
+	var hosts []*Host
+	hosts = append(hosts, NewDormantHost("example.com"))
 	hosts = append(
 		hosts,
-		NewHostUsingConfig(
+		NewDormantHostUsingConfig(
 			"{sub:[a-zA-Z]{3}}.example.com",
 			Config{Subtree: true},
 		),
 	)
 
-	hosts = append(hosts, NewHost("https://example.com"))
+	hosts = append(hosts, NewDormantHost("https://example.com"))
 
 	hosts = append(
 		hosts,
-		NewHostUsingConfig("https://example.com/", Config{Subtree: true}),
+		NewDormantHostUsingConfig("https://example.com/", Config{Subtree: true}),
 	)
 
 	hosts = append(
 		hosts,
-		NewHostUsingConfig(
+		NewDormantHostUsingConfig(
 			"https://{sub1:[a-zA-Z]{3}}.{sub2:[a-zA-Z]{3}}.example.com",
 			Config{RedirectInsecureRequest: true},
 		),
@@ -98,7 +88,7 @@ func requestHandlerHosts(t *testing.T) []Host {
 
 	hosts = append(
 		hosts,
-		NewHostUsingConfig(
+		NewDormantHostUsingConfig(
 			"https://example.com",
 			Config{
 				Subtree:                 true,
@@ -110,7 +100,7 @@ func requestHandlerHosts(t *testing.T) []Host {
 
 	hosts = append(
 		hosts,
-		NewHostUsingConfig(
+		NewDormantHostUsingConfig(
 			"example.com",
 			Config{DropRequestOnUnmatchedTslash: true},
 		),
@@ -118,7 +108,7 @@ func requestHandlerHosts(t *testing.T) []Host {
 
 	hosts = append(
 		hosts,
-		NewHostUsingConfig(
+		NewDormantHostUsingConfig(
 			"example.com/",
 			Config{
 				Subtree:                      true,
@@ -129,7 +119,7 @@ func requestHandlerHosts(t *testing.T) []Host {
 
 	hosts = append(
 		hosts,
-		NewHostUsingConfig(
+		NewDormantHostUsingConfig(
 			"https://example.com/",
 			Config{
 				Subtree:                      true,
@@ -142,7 +132,7 @@ func requestHandlerHosts(t *testing.T) []Host {
 
 	hosts = append(
 		hosts,
-		NewHostUsingConfig(
+		NewDormantHostUsingConfig(
 			"https://example.com",
 			Config{
 				RedirectInsecureRequest:      true,
