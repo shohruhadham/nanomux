@@ -12,100 +12,125 @@ import (
 
 // --------------------------------------------------
 
-// Host interface represents the host resource.
-type Host interface {
-	_Resource
-	base() *HostBase
-}
-
-// --------------------------------------------------
-
-// HostBase implements the Host interface.
-type HostBase struct {
+// Host represents the host as a resource.
+type Host struct {
 	_ResourceBase
 }
 
-// CreateHost returns a new host from the URL template.
-// The template's scheme and tslash property values are used to configure
-// the host. The host's template must not be a wild card template.
-func CreateHost(urlTmplStr string) (Host, error) {
-	var hTmplStr, secure, tslash, err = getHost(urlTmplStr)
-	if err != nil {
-		return nil, newError("<- %w", err)
-	}
-
-	var tmpl *Template
-	tmpl, err = TryToParse(hTmplStr)
-	if err != nil {
-		return nil, newError("<- %w", err)
+// createDummyHost creates an unconfigured and dormant host.
+func createDummyHost(tmpl *Template) (*Host, error) {
+	if tmpl == nil {
+		return nil, newError("%w", ErrNilArgument)
 	}
 
 	if tmpl.IsWildCard() {
 		return nil, newError("%w", ErrWildCardHostTemplate)
 	}
 
-	var hb = &HostBase{}
-	hb.derived = hb
-
-	err = hb.configCompatibility(secure, tslash, nil)
-	if err != nil {
-		return nil, newError("<- %w", err)
-	}
-
-	hb.tmpl = tmpl
-	hb._RequestHandlerBase = sharedRequestHandlerBase
-	hb.httpHandler = http.HandlerFunc(hb.handleOrPassRequest)
-	return hb, nil
+	var h = &Host{}
+	h.derived = h
+	h.tmpl = tmpl
+	h._RequestHandlerBase = sharedRequestHandlerBase
+	h.httpHandler = http.HandlerFunc(h.handleOrPassRequest)
+	return h, nil
 }
 
-// CreateHostUsingConfig returns a new host from the URL template.
-// The host is configured with the properties in the config as well as the
-// scheme and tslash property values of the URL template. The host's template
-// must not be a wild card template.
-func CreateHostUsingConfig(urlTmplStr string, config Config) (Host, error) {
-	var hTmplStr, secure, tslash, err = getHost(urlTmplStr)
+// createHost creates an instance of the Host. RequestHandler and
+// config parameters can be nil.
+func createHost(
+	tmplStr string,
+	rh RequestHandler,
+	config *Config,
+) (*Host, error) {
+	var hTmplStr, secure, tslash, err = getHost(tmplStr)
 	if err != nil {
-		return nil, newError("<- %w", err)
-	}
-
-	if config.RedirectInsecureRequest && !secure {
-		return nil, newError("%w", ErrConflictingSecurity)
+		return nil, newError("%w", err)
 	}
 
 	var tmpl *Template
 	tmpl, err = TryToParse(hTmplStr)
 	if err != nil {
-		return nil, newError("<- %w", err)
+		return nil, newError("%w", err)
 	}
 
 	if tmpl.IsWildCard() {
 		return nil, newError("%w", ErrWildCardHostTemplate)
 	}
 
-	var hb = &HostBase{}
-	hb.derived = hb
+	var cfs *_ConfigFlags
+	if config != nil {
+		if config.RedirectInsecureRequest && !secure {
+			return nil, newError("%w", ErrConflictingSecurity)
+		}
 
-	var cfs = config.asFlags()
-	err = hb.configCompatibility(secure, tslash, &cfs)
+		var tcfs = config.asFlags()
+		cfs = &tcfs
+	}
+
+	var h = &Host{}
+	err = h.configCompatibility(secure, tslash, cfs)
+	if err != nil {
+		return nil, newError("%w", err)
+	}
+
+	if rh != nil {
+		var rhb *_RequestHandlerBase
+		rhb, err = detectHTTPMethodHandlersOf(rh)
+		if err != nil {
+			return nil, newError("%w", err)
+		}
+
+		h.requestHandler = rh
+		h._RequestHandlerBase = rhb
+	}
+
+	if h._RequestHandlerBase == nil {
+		h._RequestHandlerBase = sharedRequestHandlerBase
+	}
+
+	h.derived = h
+	h.tmpl = tmpl
+	h.httpHandler = http.HandlerFunc(h.handleOrPassRequest)
+	return h, nil
+}
+
+// CreateDormantHost returns a new dormant host (without request handlers) from
+// the URL template. The template's scheme and trailing slash property values
+// are used to configure the host. The host's template must not be a wild card
+// template.
+func CreateDormantHost(urlTmplStr string) (*Host, error) {
+	var h, err = createHost(urlTmplStr, nil, nil)
 	if err != nil {
 		return nil, newError("<- %w", err)
 	}
 
-	hb.tmpl = tmpl
-	hb._RequestHandlerBase = sharedRequestHandlerBase
-	hb.httpHandler = http.HandlerFunc(hb.handleOrPassRequest)
-	return hb, nil
+	return h, err
 }
 
-// CreateHostBase returns a pointer to a newly created instance of the HostBase
-// struct.
+// CreateDormantHostUsingConfig returns a new dormant host (without request
+// handlers) from the URL template. The host is configured with the properties
+// in the config as well as the scheme and trailing slash property values of
+// the URL template. The host's template must not be a wild card template.
+func CreateDormantHostUsingConfig(
+	urlTmplStr string,
+	config Config,
+) (*Host, error) {
+	var h, err = createHost(urlTmplStr, nil, &config)
+	if err != nil {
+		return nil, newError("<- %w", err)
+	}
+
+	return h, nil
+}
+
+// CreateHost returns a newly created host.
 //
-// The first argument URL template's scheme and tslash property values are
-// used to configure the new HostBase instance. The template must not be a wild
-// card template.
+// The first argument URL template's scheme and trailing slash property values
+// are used to configure the new host. The template must not be a wild card
+// template.
 //
 // The second argument must be an instance of a type with methods to handle
-// HTTP requests. Methods must have the signature of the http.HandlerFunc
+// the HTTP requests. Methods must have the signature of the http.HandlerFunc
 // and start with 'Handle' prefix. Remaining part of the methods' name is
 // considered as an HTTP method. For example, HandleGet, HandleCustomMethod
 // are considered as the handlers of the GET and CUSTOMMETHOD HTTP methods
@@ -118,68 +143,27 @@ func CreateHostUsingConfig(urlTmplStr string, config Config) (Host, error) {
 //		// ...
 // 	}
 //
-// 	func CreateExampleHost() (*HostBase, error) {
-// 		var hb, err = CreateHostBase("https://example.com", &ExampleHost{})
-// 		if err != nil {
-// 			return nil, err
-// 		}
-//
-// 		return hb, nil
-// 	}
-func CreateHostBase(urlTmplStr string, rh RequestHandler) (*HostBase, error) {
+// 	// ...
+// 	var exampleHost, err = CreateHost("https://example.com", &ExampleHost{})
+func CreateHost(urlTmplStr string, rh RequestHandler) (*Host, error) {
 	if rh == nil {
 		return nil, newError("%w", ErrNilArgument)
 	}
 
-	var hTmplStr, secure, tslash, err = getHost(urlTmplStr)
+	var h, err = createHost(urlTmplStr, rh, nil)
 	if err != nil {
 		return nil, newError("<- %w", err)
 	}
 
-	var tmpl *Template
-	tmpl, err = TryToParse(hTmplStr)
-	if err != nil {
-		return nil, newError("<- %w", err)
-	}
-
-	if tmpl.IsWildCard() {
-		return nil, newError("%w", ErrWildCardHostTemplate)
-	}
-
-	var rhb *_RequestHandlerBase
-	rhb, err = detectHTTPMethodHandlersOf(rh)
-	if err != nil {
-		return nil, newError("<- %w", err)
-	}
-
-	if rhb == nil {
-		rhb = sharedRequestHandlerBase
-	}
-
-	var hb = &HostBase{}
-	hb.derived = hb
-
-	err = hb.configCompatibility(secure, tslash, nil)
-	if err != nil {
-		return nil, newError("<- %w", err)
-	}
-
-	hb.requestHandler = rh
-	hb.tmpl = tmpl
-	hb._RequestHandlerBase = rhb
-	hb.httpHandler = http.HandlerFunc(hb.handleOrPassRequest)
-	return hb, nil
+	return h, nil
 }
 
-// CreateHostBaseUsingConfig returns a pointer to a newly created instance of
-// the HostBase struct.
-//
-// The new HostBase instance is configured with the properties in the config as
-// well as the scheme and tslash property values of the URL template. The
-// template must not be a wild card template.
+// CreateHost returns a newly created host. The host is configured with the
+// properties in the config as well as the scheme and trailing slash property
+// values of the URL template. The template must not be a wild card template.
 //
 // The second argument must be an instance of a type with methods to handle
-// HTTP requests. Methods must have the signature of the http.HandlerFunc
+// the HTTP requests. Methods must have the signature of the http.HandlerFunc
 // and start with 'Handle' prefix. Remaining part of the methods' name is
 // considered as an HTTP method. For example, HandleGet, HandleCustomMethod
 // are considered as the handlers of the GET and CUSTOMMETHOD HTTP methods
@@ -192,96 +176,38 @@ func CreateHostBase(urlTmplStr string, rh RequestHandler) (*HostBase, error) {
 //		// ...
 // 	}
 //
-// 	func CreateExampleHost() (*HostBase, error) {
-// 		var hb, err = CreateHostBaseUsingConfig(
-// 			"https://example.com/",
-// 			&ExampleHost{},
-// 			Config{Subtree: true, RedirectInsecureRequest: true},
-// 		)
-//
-// 		if err != nil {
-// 			return nil, err
-// 		}
-//
-// 		return hb, nil
-// 	}
-func CreateHostBaseUsingConfig(
+// 	// ...
+// 	var exampleHost, err = CreateHostUsingConfig(
+// 		"https://example.com/",
+// 		&ExampleHost{},
+// 		Config{Subtree: true, RedirectInsecureRequest: true},
+// 	)
+func CreateHostUsingConfig(
 	urlTmplStr string,
 	rh RequestHandler,
 	config Config,
-) (*HostBase, error) {
+) (*Host, error) {
 	if rh == nil {
 		return nil, newError("%w", ErrNilArgument)
 	}
 
-	var hTmplStr, secure, tslash, err = getHost(urlTmplStr)
+	var h, err = createHost(urlTmplStr, rh, &config)
 	if err != nil {
 		return nil, newError("<- %w", err)
 	}
 
-	if config.RedirectInsecureRequest && !secure {
-		return nil, newError("%w", ErrConflictingSecurity)
-	}
-
-	var tmpl *Template
-	tmpl, err = TryToParse(hTmplStr)
-	if err != nil {
-		return nil, newError("<- %w", err)
-	}
-
-	if tmpl.IsWildCard() {
-		return nil, newError("%w", ErrWildCardHostTemplate)
-	}
-
-	var rhb *_RequestHandlerBase
-	rhb, err = detectHTTPMethodHandlersOf(rh)
-	if err != nil {
-		return nil, newError("<- %w", err)
-	}
-
-	if rhb == nil {
-		rhb = sharedRequestHandlerBase
-	}
-
-	var hb = &HostBase{}
-	hb.derived = hb
-
-	var cfs = config.asFlags()
-	err = hb.configCompatibility(secure, tslash, &cfs)
-	if err != nil {
-		return nil, newError("<- %w", err)
-	}
-
-	hb.requestHandler = rh
-	hb.tmpl = tmpl
-	hb._RequestHandlerBase = rhb
-	hb.httpHandler = http.HandlerFunc(hb.handleOrPassRequest)
-	return hb, nil
-}
-
-// createHostBase creates a dummy instance of the HostBase from tmpl.
-func createHostBase(tmpl *Template) (*HostBase, error) {
-	if tmpl.IsWildCard() {
-		return nil, newError("%w", ErrWildCardHostTemplate)
-	}
-
-	var hb = &HostBase{}
-	hb.derived = hb
-	hb.tmpl = tmpl
-	hb._RequestHandlerBase = sharedRequestHandlerBase
-	hb.httpHandler = http.HandlerFunc(hb.handleOrPassRequest)
-	return hb, nil
+	return h, nil
 }
 
 // -------------------------
 
-// NewHost returns a new host from the URL template. Unlike CreateHost, NewHost
-// panics on error.
+// NewDormantHost returns a new dormant host (without request handlers) from
+// the URL template. Unlike CreateDormantHost, NewDormantHost panics on error.
 //
-// The template's scheme and tslash property values are used to configure
-// the host. The host's template must not be a wild card template.
-func NewHost(urlTmplStr string) Host {
-	var h, err = CreateHost(urlTmplStr)
+// The template's scheme and trailing slash property values are used to
+// configure the host. The host's template must not be a wild card template.
+func NewDormantHost(urlTmplStr string) *Host {
+	var h, err = CreateDormantHost(urlTmplStr)
 	if err != nil {
 		panic(newError("<- %w", err))
 	}
@@ -289,14 +215,15 @@ func NewHost(urlTmplStr string) Host {
 	return h
 }
 
-// NewHostUsingConfig returns a new host from the URL template.
-// Unlike CreateHostUsingConfig, NewHostUsingConfig panics on error.
+// NewDormantHostUsingConfig returns a new dormant host (without request
+// hanlders) from the URL template. Unlike CreateDormantHostUsingConfig,
+// NewDormantHostUsingConfig panics on error.
 //
 // The host is configured with the properties in the config as well as the
-// scheme and tslash property values of the URL template. The host's template
-// must not be a wild card template.
-func NewHostUsingConfig(urlTmplStr string, config Config) Host {
-	var h, err = CreateHostUsingConfig(urlTmplStr, config)
+// scheme and trailing slash property values of the URL template. The host's
+// template must not be a wild card template.
+func NewDormantHostUsingConfig(urlTmplStr string, config Config) *Host {
+	var h, err = CreateDormantHostUsingConfig(urlTmplStr, config)
 	if err != nil {
 		panic(newError("<- %w", err))
 	}
@@ -304,15 +231,15 @@ func NewHostUsingConfig(urlTmplStr string, config Config) Host {
 	return h
 }
 
-// NewHostBase returns a pointer to a newly created instance of the HostBase
-// struct. Unlike CreateHostBase, NewHostBase panics on error.
+// NewHost returns a newly created host. Unlike CreateHost, NewHost panics on
+// error.
 //
-// The first argument URL template's scheme and tslash property values are
-// used to configure the new HostBase instance. The template must not be a wild
-// card template.
+// The first argument URL template's scheme and trailing slash property values
+// are used to configure the new host. The template must not be a wild card
+// template.
 //
 // The second argument must be an instance of a type with methods to handle
-// HTTP requests. Methods must have the signature of the http.HandlerFunc
+// the HTTP requests. Methods must have the signature of the http.HandlerFunc
 // and start with 'Handle' prefix. Remaining part of the methods' name is
 // considered as an HTTP method. For example, HandleGet, HandleCustomMethod
 // are considered as the handlers of the GET and CUSTOMMETHOD HTTP methods
@@ -325,28 +252,26 @@ func NewHostUsingConfig(urlTmplStr string, config Config) Host {
 //		// ...
 // 	}
 //
-// 	func NewExampleHost() *HostBase {
-// 		return NewHostBase("https://example.com", &ExampleHost{})
-// 	}
-func NewHostBase(urlTmplStr string, rh RequestHandler) *HostBase {
-	var hb, err = CreateHostBase(urlTmplStr, rh)
+// 	// ...
+// 	var exampleHost = NewHost("https://example.com", &ExampleHost{})
+func NewHost(urlTmplStr string, rh RequestHandler) *Host {
+	var h, err = CreateHost(urlTmplStr, rh)
 	if err != nil {
 		panic(newError("<- %w", err))
 	}
 
-	return hb
+	return h
 }
 
-// NewHostBaseUsingConfig returns a pointer to a newly created instance of
-// the HostBase struct.
-// Unlike CreateHostBaseUsingConfig, NewHostBaseUsingConfig panics on error.
+// NewHostUsingConfig returns a newly created host. Unlike
+// CreateHostUsingConfig, NewHostUsingConfig panics on error.
 //
-// The new HostBase instance is configured with the properties in the config as
-// well as the scheme and tslash property values of the URL template. The
+// The new host is configured with the properties in the config as well as
+// the scheme and trailing slash property values of the URL template. The
 // template must not be a wild card template.
 //
 // The second argument must be an instance of a type with methods to handle
-// HTTP requests. Methods must have the signature of the http.HandlerFunc
+// the HTTP requests. Methods must have the signature of the http.HandlerFunc
 // and start with 'Handle' prefix. Remaining part of the methods' name is
 // considered as an HTTP method. For example, HandleGet, HandleCustomMethod
 // are considered as the handlers of the GET and CUSTOMMETHOD HTTP methods
@@ -359,48 +284,30 @@ func NewHostBase(urlTmplStr string, rh RequestHandler) *HostBase {
 //		// ...
 // 	}
 //
-// 	func NewExampleHost() *HostBase {
-// 		return NewHostBaseUsingConfig(
-// 			"https://example.com/",
-// 			&ExampleHost{},
-// 			Config{Subtree: true, RedirectInsecureRequest: true},
-// 		)
-// 	}
-func NewHostBaseUsingConfig(
+// 	// ...
+// 	var exampleHost = NewHostUsingConfig(
+// 		"https://example.com/",
+// 		&ExampleHost{},
+// 		Config{Subtree: true, RedirectInsecureRequest: true},
+// 	)
+func NewHostUsingConfig(
 	urlTmplStr string,
 	rh RequestHandler,
 	config Config,
-) *HostBase {
-	var hb, err = CreateHostBaseUsingConfig(urlTmplStr, rh, config)
+) *Host {
+	var h, err = CreateHostUsingConfig(urlTmplStr, rh, config)
 	if err != nil {
 		panic(newError("<- %w", err))
 	}
 
-	return hb
-}
-
-// newHostBase creates a dummy instance of the HostBase from the tmpl.
-// Unlike createHostBase, newHostBase panics on error.
-func newHostBase(tmpl *Template) *HostBase {
-	var hb, err = createHostBase(tmpl)
-	if err != nil {
-		panic(newError("<- %w", err))
-	}
-
-	return hb
-}
-
-// -------------------------
-
-func (hb *HostBase) base() *HostBase {
-	return hb
+	return h
 }
 
 // -------------------------
 
 // ServeHTTP is called when the host is used without a router and the host's
 // template matches the request's host.
-func (hb *HostBase) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (hb *Host) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var host = r.URL.Host
 	if host == "" {
 		host = r.Host
@@ -461,7 +368,7 @@ func (hb *HostBase) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // is no matching child resource and the host was configured as a subtree,
 // request is handled by the host itself, otherwise "404 Not Found", status
 // code is returned.
-func (hb *HostBase) handleOrPassRequest(
+func (hb *Host) handleOrPassRequest(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {

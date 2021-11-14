@@ -337,7 +337,7 @@ func resourceURL(
 loop:
 	for p := _Parent(r); p != nil; p = p.parent() {
 		switch p := p.(type) {
-		case Resource:
+		case *Resource:
 			if p.IsRoot() {
 				// We'll add root's "/" later when we join segments.
 				continue
@@ -365,7 +365,7 @@ loop:
 			}
 
 			pss = append(pss, ps)
-		case Host:
+		case *Host:
 			var tmpl = p.Template()
 			if tmpl.IsStatic() {
 				host = tmpl.Content()
@@ -388,11 +388,11 @@ loop:
 	}
 
 	switch rr := r.(type) {
-	case Resource:
+	case *Resource:
 		if rr.IsSubtree() && !rr.IsRoot() {
 			strb.WriteByte('/')
 		}
-	case Host:
+	case *Host:
 		if rr.IsSubtree() {
 			strb.WriteByte('/')
 		}
