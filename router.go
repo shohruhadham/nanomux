@@ -226,6 +226,53 @@ func (ro *Router) registered_Resource(urlTmplStr string) (
 
 // -------------------------
 
+// SetRequestHandler sets the request handlers for a host or resource from
+// the passed RequestHandler. If the host or resource doesn't exist, the
+// function creates them. The host or resource keeps the RequestHandler for
+// futre retrieval. Existing handlers of the host or resource are discarded.
+//
+// Scheme and tslash property values in the URL template must be compatible
+// with the existing host or resource's properties, otherwise the function
+// returns an error. Newly created host or resource is configured with the
+// values in the URL template.
+func (ro *Router) SetRequestHandlerFor(
+	urlTmplStr string,
+	rh RequestHandler,
+) error {
+	var _r, err = ro._Resource(urlTmplStr)
+	if err != nil {
+		return newError("<- %w", err)
+	}
+
+	err = _r.SetRequestHandler(rh)
+	if err != nil {
+		return newError("<- %w", err)
+	}
+
+	return nil
+}
+
+// RequestHandler returns the RequestHandler of the host or resource.
+// If the host or resource doesn't exist or they were not created from a
+// RequestHandler or they have no RequestHandler set, nil is returned.
+//
+// Scheme and tslash property values in the URL template must be compatible with
+// the host or resource's properties, otherwise the function returns an error.
+func (ro *Router) RequestHandlerOf(urlTmplStr string) (RequestHandler, error) {
+	var _r, _, err = ro.registered_Resource(urlTmplStr)
+	if err != nil {
+		return nil, newError("<- %w", err)
+	}
+
+	if _r != nil {
+		return _r.RequestHandler(), nil
+	}
+
+	return nil, nil
+}
+
+// -------------------------
+
 // SetHandlerFor sets the HTTP methods' handler for a host or resource.
 // If the host or resource doesn't exist, the function creates them.
 //
@@ -235,15 +282,16 @@ func (ro *Router) registered_Resource(urlTmplStr string) (
 // values in the URL template.
 func (ro *Router) SetHandlerFor(
 	methods string,
-	uTmplStr string,
+	urlTmplStr string,
 	handler http.Handler,
 ) error {
-	var r, err = ro._Resource(uTmplStr)
+	var _r, err = ro._Resource(urlTmplStr)
 	if err != nil {
 		return newError("<- %w", err)
 	}
 
-	if err = r.SetHandlerFor(methods, handler); err != nil {
+	err = _r.SetHandlerFor(methods, handler)
+	if err != nil {
 		return newError("<- %w", err)
 	}
 
@@ -259,10 +307,10 @@ func (ro *Router) SetHandlerFor(
 // values in the URL template.
 func (ro *Router) SetHandlerFuncFor(
 	methods string,
-	uTmplStr string,
+	urlTmplStr string,
 	handlerFunc http.HandlerFunc,
 ) error {
-	if err := ro.SetHandlerFor(methods, uTmplStr, handlerFunc); err != nil {
+	if err := ro.SetHandlerFor(methods, urlTmplStr, handlerFunc); err != nil {
 		return newError("<- %w", err)
 	}
 
@@ -274,17 +322,17 @@ func (ro *Router) SetHandlerFuncFor(
 //
 // Scheme and tslash property values in the URL template must be compatible with
 // the host or resource's properties, otherwise the function returns an error.
-func (ro *Router) HandlerOf(method string, uTmplStr string) (
+func (ro *Router) HandlerOf(method string, urlTmplStr string) (
 	http.Handler,
 	error,
 ) {
-	var r, _, err = ro.registered_Resource(uTmplStr)
+	var _r, _, err = ro.registered_Resource(urlTmplStr)
 	if err != nil {
 		return nil, newError("<- %w", err)
 	}
 
-	if r != nil {
-		return r.HandlerOf(method), nil
+	if _r != nil {
+		return _r.HandlerOf(method), nil
 	}
 
 	return nil, nil
@@ -299,10 +347,10 @@ func (ro *Router) HandlerOf(method string, uTmplStr string) (
 // returns an error. Newly created host or resource is configured with the
 // values in the URL template.
 func (ro *Router) SetHandlerForUnusedMethods(
-	uTmplStr string,
+	urlTmplStr string,
 	handler http.Handler,
 ) error {
-	var r, err = ro._Resource(uTmplStr)
+	var r, err = ro._Resource(urlTmplStr)
 	if err != nil {
 		return newError("<- %w", err)
 	}
@@ -323,10 +371,10 @@ func (ro *Router) SetHandlerForUnusedMethods(
 // returns an error. Newly created host or resource is configured with the
 // values in the URL template.
 func (ro *Router) SetHandlerFuncForUnusedMethods(
-	uTmplStr string,
+	urlTmplStr string,
 	handlerFunc http.HandlerFunc,
 ) error {
-	if err := ro.SetHandlerForUnusedMethods(uTmplStr, handlerFunc); err != nil {
+	if err := ro.SetHandlerForUnusedMethods(urlTmplStr, handlerFunc); err != nil {
 		return newError("<- %w", err)
 	}
 
@@ -338,11 +386,11 @@ func (ro *Router) SetHandlerFuncForUnusedMethods(
 //
 // Scheme and tslash property values in the URL template must be compatible with
 // the host or resource's properties, otherwise the function returns an error.
-func (ro *Router) HandlerOfUnusedMethods(uTmplStr string) (
+func (ro *Router) HandlerOfUnusedMethods(urlTmplStr string) (
 	http.Handler,
 	error,
 ) {
-	var r, _, err = ro.registered_Resource(uTmplStr)
+	var r, _, err = ro.registered_Resource(urlTmplStr)
 	if err != nil {
 		return nil, newError("<- %w", err)
 	}
@@ -361,10 +409,10 @@ func (ro *Router) HandlerOfUnusedMethods(uTmplStr string) (
 // function returns an error.
 func (ro *Router) WrapHandlerOf(
 	methods string,
-	uTmplStr string,
+	urlTmplStr string,
 	middlewares ...Middleware,
 ) error {
-	var r, rIsHost, err = ro.registered_Resource(uTmplStr)
+	var r, rIsHost, err = ro.registered_Resource(urlTmplStr)
 	if err != nil {
 		return newError("<- %w", err)
 	}
@@ -383,7 +431,7 @@ func (ro *Router) WrapHandlerOf(
 		err = ErrNonExistentResource
 	}
 
-	return newError("%w %q", err, uTmplStr)
+	return newError("%w %q", err, urlTmplStr)
 }
 
 // WrapHandlerOfMethodsInUse wraps all the HTTP method handlers of the host or
@@ -392,10 +440,10 @@ func (ro *Router) WrapHandlerOf(
 // If the host or resource doesn't exist, or they don't have any HTTP method's
 // handler set, the function returns an error.
 func (ro *Router) WrapHandlerOfMethodsInUse(
-	uTmplStr string,
+	urlTmplStr string,
 	middlewares ...Middleware,
 ) error {
-	var r, rIsHost, err = ro.registered_Resource(uTmplStr)
+	var r, rIsHost, err = ro.registered_Resource(urlTmplStr)
 	if err != nil {
 		return newError("<- %w", err)
 	}
@@ -414,7 +462,7 @@ func (ro *Router) WrapHandlerOfMethodsInUse(
 		err = ErrNonExistentResource
 	}
 
-	return newError("%w %q", err, uTmplStr)
+	return newError("%w %q", err, urlTmplStr)
 }
 
 // WrapHandlerOfUnusedMethods wraps the handler of an unused HTTP methods of
@@ -423,10 +471,10 @@ func (ro *Router) WrapHandlerOfMethodsInUse(
 // If the host or resource doesn't exist, or they don't have any HTTP method's
 // handler set, the function returns an error.
 func (ro *Router) WrapHandlerOfUnusedMethods(
-	uTmplStr string,
+	urlTmplStr string,
 	middlewares ...Middleware,
 ) error {
-	var r, rIsHost, err = ro.registered_Resource(uTmplStr)
+	var r, rIsHost, err = ro.registered_Resource(urlTmplStr)
 	if err != nil {
 		return newError("<- %w", err)
 	}
@@ -445,7 +493,7 @@ func (ro *Router) WrapHandlerOfUnusedMethods(
 		err = ErrNonExistentResource
 	}
 
-	return newError("%w %q", err, uTmplStr)
+	return newError("%w %q", err, urlTmplStr)
 }
 
 // -------------------------

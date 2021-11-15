@@ -292,6 +292,9 @@ type _Resource interface {
 	HasChildResource(r *Resource) bool
 	HasAnyChildResource() bool
 
+	SetRequestHandler(rh RequestHandler) error
+	RequestHandler() RequestHandler
+
 	SetHandlerFor(methods string, handler http.Handler) error
 	SetHandlerFuncFor(methods string, handlerFunc http.HandlerFunc) error
 	HandlerOf(method string) http.Handler
@@ -307,8 +310,6 @@ type _Resource interface {
 	WrapSubtreeHandlersOf(methods string, middlewares ...Middleware) error
 	WrapSubtreeHandlersOfMethodsInUse(middlewares ...Middleware) error
 	WrapSubtreeHandlersOfUnusedMethods(middlewares ...Middleware) error
-
-	RequestHandler() RequestHandler
 
 	_Resources() []_Resource
 	setRequestHandlerBase(rhb *_RequestHandlerBase)
@@ -1584,6 +1585,37 @@ func (rb *_ResourceBase) HasAnyChildResource() bool {
 
 // -------------------------
 
+// SetRequestHandler sets the request handlers from the passed argument.
+// Passed argument is also kept for future retrieval. All existing handlers are
+// discarded.
+func (rb *_ResourceBase) SetRequestHandler(rh RequestHandler) error {
+	if rh == nil {
+		return newError("%w", ErrNilArgument)
+	}
+
+	var rhb, err = detectHTTPMethodHandlersOf(rh)
+	if err != nil {
+		return newError("<- %w", err)
+	}
+
+	rb.requestHandler = rh
+
+	if rhb != nil {
+		rb._RequestHandlerBase = rhb
+	}
+
+	return nil
+}
+
+// RequestHandler returns the RequestHandler of the host or resource.
+// If the host or resource wasn't created from a RequestHandler or they have
+// no RequestHandler set, nil is returned.
+func (rb *_ResourceBase) RequestHandler() RequestHandler {
+	return rb.requestHandler
+}
+
+// -------------------------
+
 // SetHandlerFor sets the handler as a request handler for the HTTP methods.
 // Methods are case-insensitive and separated with a space " ".
 // For example, "get", "PUT POST".
@@ -1795,14 +1827,6 @@ func (rb *_ResourceBase) WrapSubtreeHandlersOfUnusedMethods(
 	}
 
 	return nil
-}
-
-// -------------------------
-
-// RequestHandler returns the RequestHandler of the host or resource.
-// If the host or resource wasn't created from a RequestHandler nil is returned.
-func (rb *_ResourceBase) RequestHandler() RequestHandler {
-	return rb.requestHandler
 }
 
 // -------------------------

@@ -27,7 +27,7 @@ var ErrConflictingStatusCode = fmt.Errorf("conflicting status code")
 
 // --------------------------------------------------
 
-// RequestHandler is used to accept any type that has methods to handle
+// RequestHandler is used to accept any type that has methods to handle the
 // HTTP requests. Methods must have the signature of the http.HandlerFunc
 // and start with 'Handle' prefix. Remaining part of the methods' name is
 // considered as HTTP method. For example, HandleGet, HandleCustomMethod
@@ -273,6 +273,21 @@ func (rhb *_RequestHandlerBase) handleRequest(
 	rhb.handleUnusedMethod(w, r)
 }
 
+func (rhb *_RequestHandlerBase) handleUnusedMethod(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+	for m := range rhb.handlers {
+		w.Header().Add("Allow", strings.ToUpper(m))
+	}
+
+	http.Error(
+		w,
+		http.StatusText(http.StatusMethodNotAllowed),
+		http.StatusMethodNotAllowed,
+	)
+}
+
 // -------------------------
 
 // AllowedMethods returns the HTTP methods in use.
@@ -287,23 +302,6 @@ func (rhb *_RequestHandlerBase) AllowedMethods() []string {
 	}
 
 	return ms
-}
-
-// -------------------------
-
-func (rhb *_RequestHandlerBase) handleUnusedMethod(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
-	for m := range rhb.handlers {
-		w.Header().Add("Allow", strings.ToUpper(m))
-	}
-
-	http.Error(
-		w,
-		http.StatusText(http.StatusMethodNotAllowed),
-		http.StatusMethodNotAllowed,
-	)
 }
 
 // -------------------------
