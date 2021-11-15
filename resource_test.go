@@ -3146,15 +3146,441 @@ func TestResourceBase_WrapHandlerOfUnusedMethods(t *testing.T) {
 }
 
 func TestResourceBase_WrapSubtreeHandlersOf(t *testing.T) {
+	var h = NewDormantHost("http://example.com")
 
+	var r00, err = h.Resource("https:///r00")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var r01 *Resource
+	r01, err = h.Resource("r01")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var urlTmpls = []string{
+		// r00
+		"https:///r00",
+		"http:///r00/{r10:abc}/",
+		"http:///r00/{r11:123}",
+
+		// r01
+		"http:///r01",
+		"https:///r01/{r10}",
+		"http:///r01/{r10}/r20/",
+	}
+
+	var rh = &rhType{}
+	for _, urlTmpl := range urlTmpls {
+		var r *Resource
+		r, err = h.Resource(urlTmpl)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		err = r.SetRequestHandler(rh)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Changing urls to match patterns. httptest.NewRequest requires host.
+	urlTmpls[0] = "https://example.com/r00"
+	urlTmpls[1] = "http://example.com/r00/abc/"
+	urlTmpls[2] = "http://example.com/r00/123"
+
+	urlTmpls[3] = "http://example.com/r01"
+	urlTmpls[4] = "https://example.com/r01/r10"
+	urlTmpls[5] = "http://example.com/r01/r10/r20/"
+
+	var strb = strings.Builder{}
+	var mws = []Middleware{
+		MiddlewareFunc(
+			func(handler http.Handler) http.Handler {
+				return http.HandlerFunc(
+					func(w http.ResponseWriter, r *http.Request) {
+						strb.WriteByte('B')
+						handler.ServeHTTP(w, r)
+					},
+				)
+			},
+		),
+		MiddlewareFunc(
+			func(handler http.Handler) http.Handler {
+				return http.HandlerFunc(
+					func(w http.ResponseWriter, r *http.Request) {
+						strb.WriteByte('A')
+						handler.ServeHTTP(w, r)
+					},
+				)
+			},
+		),
+	}
+
+	err = r00.WrapSubtreeHandlersOf("get custom", mws...)
+	if err != nil {
+		t.Fatalf("ResourceBase.WrapSubtreeHandlersOf() err = %v, want nil", err)
+	}
+
+	for i := 1; i < 3; i++ {
+		var rr = httptest.NewRecorder()
+		var r = httptest.NewRequest("get", urlTmpls[i], nil)
+
+		strb.Reset()
+		h.ServeHTTP(rr, r)
+		if strb.String() != "AB" {
+			t.Fatalf(
+				"ResourceBase.WrapSubtreeHandlersOf() has failed to wrap GET method's handler",
+			)
+		}
+
+		r = httptest.NewRequest("custom", urlTmpls[i], nil)
+
+		strb.Reset()
+		h.ServeHTTP(rr, r)
+		if strb.String() != "AB" {
+			t.Fatalf(
+				"ResourceBase.WrapSubtreeHandlersOf() has failed to wrap CUSTOM method's handler",
+			)
+		}
+
+		r = httptest.NewRequest("post", urlTmpls[i], nil)
+
+		strb.Reset()
+		h.ServeHTTP(rr, r)
+		if strb.Len() != 0 {
+			t.Fatalf(
+				"ResourceBase.WrapSubtreeHandlersOf() has wrapped unspecified POST method's handler",
+			)
+		}
+
+		r = httptest.NewRequest("unused", urlTmpls[i], nil)
+
+		h.ServeHTTP(rr, r)
+		if strb.Len() != 0 {
+			t.Fatalf(
+				"ResourceBase.WrapSubtreeHandlersOf() has wrapped unused methods' handler",
+			)
+		}
+	}
+
+	err = r01.WrapSubtreeHandlersOf("post", mws...)
+	if err != nil {
+		t.Fatalf("ResourceBase.WrapSubtreeHandlersOf() err = %v, want nil", err)
+	}
+
+	for i := 4; i < 6; i++ {
+		var rr = httptest.NewRecorder()
+		var r = httptest.NewRequest("get", urlTmpls[i], nil)
+
+		strb.Reset()
+		h.ServeHTTP(rr, r)
+		if strb.Len() != 0 {
+			t.Fatalf(
+				"ResourceBase.WrapSubtreeHandlersOf() has wrappped unspecified GET method's handler",
+			)
+		}
+
+		r = httptest.NewRequest("custom", urlTmpls[i], nil)
+
+		h.ServeHTTP(rr, r)
+		if strb.Len() != 0 {
+			t.Fatalf(
+				"ResourceBase.WrapSubtreeHandlersOf() has wrappped unspecified CUSTOM method's handler",
+			)
+		}
+
+		r = httptest.NewRequest("post", urlTmpls[i], nil)
+
+		h.ServeHTTP(rr, r)
+		if strb.String() != "AB" {
+			t.Fatalf(
+				"ResourceBase.WrapSubtreeHandlersOf() has failed to wrap POST method's handler",
+			)
+		}
+
+		r = httptest.NewRequest("unused", urlTmpls[i], nil)
+
+		strb.Reset()
+		h.ServeHTTP(rr, r)
+		if strb.Len() != 0 {
+			t.Fatalf(
+				"ResourceBase.WrapSubtreeHandlersOf() has wrapped unused methods' handler",
+			)
+		}
+	}
 }
 
 func TestResourceBase_WrapSubtreeHandlersOfMethodsInUse(t *testing.T) {
+	var h = NewDormantHost("http://example.com")
 
+	var r00, err = h.Resource("https:///r00")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var r01 *Resource
+	r01, err = h.Resource("r01")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var urlTmpls = []string{
+		// r00
+		"https:///r00",
+		"http:///r00/{r10:abc}/",
+		"http:///r00/{r11:123}",
+
+		// r01
+		"http:///r01",
+		"https:///r01/{r10}",
+		"http:///r01/{r10}/r20/",
+	}
+
+	var rh = &rhType{}
+	for _, urlTmpl := range urlTmpls {
+		var r *Resource
+		r, err = h.Resource(urlTmpl)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		err = r.SetRequestHandler(rh)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Changing urls to match patterns. httptest.NewRequest requires host.
+	urlTmpls[0] = "https://example.com/r00"
+	urlTmpls[1] = "http://example.com/r00/abc/"
+	urlTmpls[2] = "http://example.com/r00/123"
+
+	urlTmpls[3] = "http://example.com/r01"
+	urlTmpls[4] = "https://example.com/r01/r10"
+	urlTmpls[5] = "http://example.com/r01/r10/r20/"
+
+	var strb = strings.Builder{}
+	var mws = []Middleware{
+		MiddlewareFunc(
+			func(handler http.Handler) http.Handler {
+				return http.HandlerFunc(
+					func(w http.ResponseWriter, r *http.Request) {
+						strb.WriteByte('B')
+						handler.ServeHTTP(w, r)
+					},
+				)
+			},
+		),
+		MiddlewareFunc(
+			func(handler http.Handler) http.Handler {
+				return http.HandlerFunc(
+					func(w http.ResponseWriter, r *http.Request) {
+						strb.WriteByte('A')
+						handler.ServeHTTP(w, r)
+					},
+				)
+			},
+		),
+	}
+
+	err = r00.WrapSubtreeHandlersOfMethodsInUse(mws...)
+	if err != nil {
+		t.Fatalf(
+			"ResourceBase.WrapSubtreeHandlersOfMethodsInUse() err = %v, want nil",
+			err,
+		)
+	}
+
+	err = r01.WrapSubtreeHandlersOfMethodsInUse(mws...)
+	if err != nil {
+		t.Fatalf(
+			"ResourceBase.WrapSubtreeHandlersOfMethodsInUse() err = %v, want nil",
+			err,
+		)
+	}
+
+	for i, urlTmpl := range urlTmpls {
+		if i == 0 || i == 3 { // Unwrapped resources.
+			continue
+		}
+
+		var rr = httptest.NewRecorder()
+		var r = httptest.NewRequest("get", urlTmpl, nil)
+
+		strb.Reset()
+		h.ServeHTTP(rr, r)
+		if strb.String() != "AB" {
+			t.Fatalf(
+				"ResourceBase.WrapSubtreeHandlersOfMethodsInUse() has failed to wrap GET method's handler",
+			)
+		}
+
+		r = httptest.NewRequest("post", urlTmpl, nil)
+
+		strb.Reset()
+		h.ServeHTTP(rr, r)
+		if strb.String() != "AB" {
+			t.Fatalf(
+				"ResourceBase.WrapSubtreeHandlersOfMethodsInUse() has failed to wrap POST method's handler",
+			)
+		}
+
+		r = httptest.NewRequest("custom", urlTmpl, nil)
+
+		strb.Reset()
+		h.ServeHTTP(rr, r)
+		if strb.String() != "AB" {
+			t.Fatalf(
+				"ResourceBase.WrapSubtreeHandlersOfMethodsInUse() has failed to wrap CUSTOM method's handler",
+			)
+		}
+
+		r = httptest.NewRequest("unused", urlTmpl, nil)
+
+		strb.Reset()
+		h.ServeHTTP(rr, r)
+		if strb.Len() != 0 {
+			t.Fatalf(
+				"ResourceBase.WrapSubtreeHandlersOfMethodsInUse() has wrapped unused methods' handler",
+			)
+		}
+	}
 }
 
 func TestResourceBase_WrapSubtreeHandlersOfUnusedMethods(t *testing.T) {
+	var h = NewDormantHost("http://example.com")
 
+	var r00, err = h.Resource("https:///r00")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var r01 *Resource
+	r01, err = h.Resource("r01")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var urlTmpls = []string{
+		// r00
+		"https:///r00",
+		"http:///r00/{r10:abc}/",
+		"http:///r00/{r11:123}",
+
+		// r01
+		"http:///r01",
+		"https:///r01/{r10}",
+		"http:///r01/{r10}/r20/",
+	}
+
+	var rh = &rhType{}
+	for _, urlTmpl := range urlTmpls {
+		var r *Resource
+		r, err = h.Resource(urlTmpl)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		err = r.SetRequestHandler(rh)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Changing urls to match patterns. httptest.NewRequest requires host.
+	urlTmpls[0] = "https://example.com/r00"
+	urlTmpls[1] = "http://example.com/r00/abc/"
+	urlTmpls[2] = "http://example.com/r00/123"
+
+	urlTmpls[3] = "http://example.com/r01"
+	urlTmpls[4] = "https://example.com/r01/r10"
+	urlTmpls[5] = "http://example.com/r01/r10/r20/"
+
+	var strb = strings.Builder{}
+	var mws = []Middleware{
+		MiddlewareFunc(
+			func(handler http.Handler) http.Handler {
+				return http.HandlerFunc(
+					func(w http.ResponseWriter, r *http.Request) {
+						strb.WriteByte('B')
+						handler.ServeHTTP(w, r)
+					},
+				)
+			},
+		),
+		MiddlewareFunc(
+			func(handler http.Handler) http.Handler {
+				return http.HandlerFunc(
+					func(w http.ResponseWriter, r *http.Request) {
+						strb.WriteByte('A')
+						handler.ServeHTTP(w, r)
+					},
+				)
+			},
+		),
+	}
+
+	err = r00.WrapSubtreeHandlersOfUnusedMethods(mws...)
+	if err != nil {
+		t.Fatalf(
+			"ResourceBase.WrapSubtreeHandlersOfUnusedMethods() err = %v, want nil",
+			err,
+		)
+	}
+
+	err = r01.WrapSubtreeHandlersOfUnusedMethods(mws...)
+	if err != nil {
+		t.Fatalf(
+			"ResourceBase.WrapSubtreeHandlersOfUnusedMethods() err = %v, want nil",
+			err,
+		)
+	}
+
+	for i, urlTmpl := range urlTmpls {
+		if i == 0 || i == 3 { // Unwrapped resources.
+			continue
+		}
+
+		var rr = httptest.NewRecorder()
+		var r = httptest.NewRequest("get", urlTmpl, nil)
+
+		strb.Reset()
+		h.ServeHTTP(rr, r)
+		if strb.Len() != 0 {
+			t.Fatalf(
+				"ResourceBase.WrapSubtreeHandlersOfUnusedMethods() has wrapped GET method's handler",
+			)
+		}
+
+		r = httptest.NewRequest("post", urlTmpl, nil)
+
+		h.ServeHTTP(rr, r)
+		if strb.Len() != 0 {
+			t.Fatalf(
+				"ResourceBase.WrapSubtreeHandlersOfUnusedMethods() has wrapped POST method's handler",
+			)
+		}
+
+		r = httptest.NewRequest("custom", urlTmpl, nil)
+
+		h.ServeHTTP(rr, r)
+		if strb.Len() != 0 {
+			t.Fatalf(
+				"ResourceBase.WrapSubtreeHandlersOfUnusedMethods() has wrapped CUSTOM method's handler",
+			)
+		}
+
+		r = httptest.NewRequest("unused", urlTmpl, nil)
+
+		h.ServeHTTP(rr, r)
+		if strb.String() != "AB" {
+			t.Fatalf(
+				"ResourceBase.WrapSubtreeHandlersOfUnusedMethods() has failed to wrap unused methods' handler",
+			)
+		}
+	}
 }
 
 func TestResourceBase__Resources(t *testing.T) {

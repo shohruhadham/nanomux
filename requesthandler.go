@@ -260,7 +260,7 @@ func (rhb *_RequestHandlerBase) handleRequest(
 		return
 	}
 
-	if handler := rhb.handlers[r.Method]; handler != nil {
+	if handler := rhb.handlers[strings.ToUpper(r.Method)]; handler != nil {
 		handler.ServeHTTP(w, r)
 		return
 	}

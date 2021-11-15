@@ -3310,16 +3310,328 @@ func TestRouter_WrapWith(t *testing.T) {
 	}
 }
 
-func TestRouter_AddMiddlewareFor(t *testing.T) {
+func TestRouter_WrapAllHandlersOf(t *testing.T) {
+	var ro = NewRouter()
+	var rh = &rhType{}
+	var urlTmpls = []string{
+		"https://example.com",
+		"https://example.com/r00",
+		"https://example.com/r01",
+		"https://example.com/r01/{r10}",
+		"http://example1.com/r00/{r10:abc}/",
+		"http://example1.com/r00/{r11:123}",
+		"{r00}/",
+		"r01/{r10:abc}",
+		"r01/{r11:123}/",
+		"https:///r01/r11",
+	}
 
+	var err error
+	for _, urlTmpl := range urlTmpls {
+		err = ro.SetRequestHandlerFor(urlTmpl, rh)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Changing urls to match patterns.
+	urlTmpls[3] = "https://example.com/r01/r10"
+	urlTmpls[4] = "http://example1.com/r00/abc/"
+	urlTmpls[5] = "http://example1.com/r00/123"
+
+	// httptest.NewRequest requires host.
+	urlTmpls[6] = "http://non-existent.com/r00/"
+	urlTmpls[7] = "http://non-existent.com/r01/abc"
+	urlTmpls[8] = "http://non_existent.com/r01/123/"
+
+	var strb = strings.Builder{}
+	var mws = []Middleware{
+		MiddlewareFunc(
+			func(handler http.Handler) http.Handler {
+				return http.HandlerFunc(
+					func(w http.ResponseWriter, r *http.Request) {
+						strb.WriteByte('B')
+						handler.ServeHTTP(w, r)
+					},
+				)
+			},
+		),
+		MiddlewareFunc(
+			func(handler http.Handler) http.Handler {
+				return http.HandlerFunc(
+					func(w http.ResponseWriter, r *http.Request) {
+						strb.WriteByte('A')
+						handler.ServeHTTP(w, r)
+					},
+				)
+			},
+		),
+	}
+
+	err = ro.WrapAllHandlersOf("get custom", mws...)
+	if err != nil {
+		t.Fatalf("Router.WrapAllHandlersOf() err = %v, want nil", err)
+	}
+
+	for _, urlTmpl := range urlTmpls {
+		var rr = httptest.NewRecorder()
+		var r = httptest.NewRequest("get", urlTmpl, nil)
+
+		strb.Reset()
+		ro.ServeHTTP(rr, r)
+		if strb.String() != "AB" {
+			t.Fatalf(
+				"Router.WrapAllHandlersOf() has failed to wrap GET method's handler",
+			)
+		}
+
+		r = httptest.NewRequest("custom", urlTmpl, nil)
+
+		strb.Reset()
+		ro.ServeHTTP(rr, r)
+		if strb.String() != "AB" {
+			t.Fatalf(
+				"Router.WrapAllHandlersOf() has failed to wrap CUSTOM method's handler",
+			)
+		}
+
+		r = httptest.NewRequest("post", urlTmpl, nil)
+
+		strb.Reset()
+		ro.ServeHTTP(rr, r)
+		if strb.Len() != 0 {
+			t.Fatalf(
+				"Router.WrapAllHandlersOf() has wrapped unspecified POST method's handler",
+			)
+		}
+
+		r = httptest.NewRequest("unused", urlTmpl, nil)
+
+		ro.ServeHTTP(rr, r)
+		if strb.Len() != 0 {
+			t.Fatalf(
+				"Router.WrapAllHandlersOf() has wrapped unused methods' handler",
+			)
+		}
+	}
 }
 
-func TestRouter_AddMiddlewareForMethodsInUse(t *testing.T) {
+func TestRouter_WrapAllHandlersOfMethodsInUse(t *testing.T) {
+	var ro = NewRouter()
+	var rh = &rhType{}
+	var urlTmpls = []string{
+		"https://example.com",
+		"https://example.com/r00",
+		"https://example.com/r01",
+		"https://example.com/r01/{r10}",
+		"http://example1.com/r00/{r10:abc}/",
+		"http://example1.com/r00/{r11:123}",
+		"{r00}/",
+		"r01/{r10:abc}",
+		"r01/{r11:123}/",
+		"https:///r01/r11",
+	}
 
+	var err error
+	for _, urlTmpl := range urlTmpls {
+		err = ro.SetRequestHandlerFor(urlTmpl, rh)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Changing urls to match patterns.
+	urlTmpls[3] = "https://example.com/r01/r10"
+	urlTmpls[4] = "http://example1.com/r00/abc/"
+	urlTmpls[5] = "http://example1.com/r00/123"
+
+	// httptest.NewRequest requires host.
+	urlTmpls[6] = "http://non-existent.com/r00/"
+	urlTmpls[7] = "http://non-existent.com/r01/abc"
+	urlTmpls[8] = "http://non_existent.com/r01/123/"
+
+	var strb = strings.Builder{}
+	var mws = []Middleware{
+		MiddlewareFunc(
+			func(handler http.Handler) http.Handler {
+				return http.HandlerFunc(
+					func(w http.ResponseWriter, r *http.Request) {
+						strb.WriteByte('B')
+						handler.ServeHTTP(w, r)
+					},
+				)
+			},
+		),
+		MiddlewareFunc(
+			func(handler http.Handler) http.Handler {
+				return http.HandlerFunc(
+					func(w http.ResponseWriter, r *http.Request) {
+						strb.WriteByte('A')
+						handler.ServeHTTP(w, r)
+					},
+				)
+			},
+		),
+	}
+
+	err = ro.WrapAllHandlersOfMethodsInUse(mws...)
+	if err != nil {
+		t.Fatalf(
+			"Router.WrapAllHandlersOfMethodsInUse() err = %v, want nil",
+			err,
+		)
+	}
+
+	for _, urlTmpl := range urlTmpls {
+		var rr = httptest.NewRecorder()
+		var r = httptest.NewRequest("get", urlTmpl, nil)
+
+		strb.Reset()
+		ro.ServeHTTP(rr, r)
+		if strb.String() != "AB" {
+			t.Fatalf(
+				"Router.WrapAllHandlersOfMethodsInUse() has failed to wrap GET method's handler",
+			)
+		}
+
+		r = httptest.NewRequest("post", urlTmpl, nil)
+
+		strb.Reset()
+		ro.ServeHTTP(rr, r)
+		if strb.String() != "AB" {
+			t.Fatalf(
+				"Router.WrapAllHandlersOfMethodsInUse() has failed to wrap POST method's handler",
+			)
+		}
+
+		r = httptest.NewRequest("custom", urlTmpl, nil)
+
+		strb.Reset()
+		ro.ServeHTTP(rr, r)
+		if strb.String() != "AB" {
+			t.Fatalf(
+				"Router.WrapAllHandlersOfMethodsInUse() has failed to wrap CUSTOM method's handler",
+			)
+		}
+
+		r = httptest.NewRequest("unused", urlTmpl, nil)
+
+		strb.Reset()
+		ro.ServeHTTP(rr, r)
+		if strb.Len() != 0 {
+			t.Fatalf(
+				"Router.WrapAllHandlersOfMethodsInUse() has wrapped unused methods' handler",
+			)
+		}
+	}
 }
 
-func TestRouter_AddMiddlewareForUnusedMethods(t *testing.T) {
+func TestRouter_WrapAllHandlersOfUnusedMethods(t *testing.T) {
+	var ro = NewRouter()
+	var rh = &rhType{}
+	var urlTmpls = []string{
+		"https://example.com",
+		"https://example.com/r00",
+		"https://example.com/r01",
+		"https://example.com/r01/{r10}",
+		"http://example1.com/r00/{r10:abc}/",
+		"http://example1.com/r00/{r11:123}",
+		"{r00}/",
+		"r01/{r10:abc}",
+		"r01/{r11:123}/",
+		"https:///r01/r11",
+	}
 
+	var err error
+	for _, urlTmpl := range urlTmpls {
+		err = ro.SetRequestHandlerFor(urlTmpl, rh)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Changing urls to match patterns.
+	urlTmpls[3] = "https://example.com/r01/r10"
+	urlTmpls[4] = "http://example1.com/r00/abc/"
+	urlTmpls[5] = "http://example1.com/r00/123"
+
+	// httptest.NewRequest requires host.
+	urlTmpls[6] = "http://non-existent.com/r00/"
+	urlTmpls[7] = "http://non-existent.com/r01/abc"
+	urlTmpls[8] = "http://non_existent.com/r01/123/"
+
+	var strb = strings.Builder{}
+	var mws = []Middleware{
+		MiddlewareFunc(
+			func(handler http.Handler) http.Handler {
+				return http.HandlerFunc(
+					func(w http.ResponseWriter, r *http.Request) {
+						strb.WriteByte('B')
+						handler.ServeHTTP(w, r)
+					},
+				)
+			},
+		),
+		MiddlewareFunc(
+			func(handler http.Handler) http.Handler {
+				return http.HandlerFunc(
+					func(w http.ResponseWriter, r *http.Request) {
+						strb.WriteByte('A')
+						handler.ServeHTTP(w, r)
+					},
+				)
+			},
+		),
+	}
+
+	err = ro.WrapAllHandlersOfUnusedMethods(mws...)
+	if err != nil {
+		t.Fatalf(
+			"Router.WrapAllHandlersOfUnusedMethods() err = %v, want nil",
+			err,
+		)
+	}
+
+	for _, urlTmpl := range urlTmpls {
+		var rr = httptest.NewRecorder()
+		var r = httptest.NewRequest("get", urlTmpl, nil)
+
+		strb.Reset()
+		ro.ServeHTTP(rr, r)
+
+		if strb.Len() != 0 {
+			t.Fatalf(
+				"Router.WrapAllHandlersOfUnusedMethods() has wrapped GET method's handler",
+			)
+		}
+
+		r = httptest.NewRequest("post", urlTmpl, nil)
+
+		ro.ServeHTTP(rr, r)
+		if strb.Len() != 0 {
+			t.Fatalf(
+				"Router.WrapAllHandlersOfUnusedMethods() has wrappped POST method's handler",
+			)
+		}
+
+		r = httptest.NewRequest("custom", urlTmpl, nil)
+
+		ro.ServeHTTP(rr, r)
+		if strb.Len() != 0 {
+			t.Fatalf(
+				"Router.WrapAllHandlersOfUnusedMethods() has wrappped CUSTOM method's handler",
+			)
+		}
+
+		r = httptest.NewRequest("unused", urlTmpl, nil)
+
+		ro.ServeHTTP(rr, r)
+		if strb.String() != "AB" {
+			t.Fatalf(
+				"Router.WrapAllHandlersOfUnusedMethods() has failed to wrap unused methods' handler",
+			)
+		}
+	}
 }
 
 func TestRouter__Resources(t *testing.T) {
