@@ -8,8 +8,6 @@ import (
 	"net/url"
 )
 
-// TODO: 1. Implement default "OPTIONS" handler.
-
 // --------------------------------------------------
 
 // Resource represents the path segment resource.
@@ -27,7 +25,6 @@ func createDummyResource(tmpl *Template) (*Resource, error) {
 	var rb = &Resource{}
 	rb.derived = rb
 	rb.tmpl = tmpl
-	rb._RequestHandlerBase = sharedRequestHandlerBase
 	rb.httpHandler = http.HandlerFunc(rb.handleOrPassRequest)
 	return rb, nil
 }
@@ -85,10 +82,6 @@ func createResource(
 
 		r.requestHandler = rh
 		r._RequestHandlerBase = rhb
-	}
-
-	if r._RequestHandlerBase == nil {
-		r._RequestHandlerBase = sharedRequestHandlerBase
 	}
 
 	if hTmplStr != "" || pTmplStr != "" {
@@ -576,6 +569,10 @@ func (rb *Resource) handleOrPassRequest(
 ) {
 	var rd = r.Context().Value(routingDataKey).(*_RoutingData)
 	if rb.IsSubtree() {
+		// If there is no resource in the hierarchy below that matches the
+		// request's path, this resource handles the request.
+		// subtreeExists indicates this to the resources below in the hierarchy,
+		// so the notFoundResourceHandler is not called.
 		rd.subtreeExists = true
 	}
 

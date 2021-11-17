@@ -46,10 +46,6 @@ type _RequestHandlerBase struct {
 	unusedMethodsHandler http.Handler
 }
 
-// sharedRequestHandlerBase is used to initialize the embeded field of
-// *_RequestHandlerBase of the  dummy host and resources.
-var sharedRequestHandlerBase = &_RequestHandlerBase{}
-
 // -------------------------
 
 // detectHTTPMethodHandlersOf detects the HTTP method handlers of the
@@ -255,7 +251,7 @@ func (rhb *_RequestHandlerBase) handleRequest(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
-	if len(rhb.handlers) == 0 {
+	if rhb == nil || len(rhb.handlers) == 0 {
 		notFoundResourceHandler.ServeHTTP(w, r)
 		return
 	}
@@ -292,7 +288,7 @@ func (rhb *_RequestHandlerBase) handleUnusedMethod(
 
 // AllowedMethods returns the HTTP methods in use.
 func (rhb *_RequestHandlerBase) AllowedMethods() []string {
-	if len(rhb.handlers) == 0 {
+	if rhb == nil || len(rhb.handlers) == 0 {
 		return nil
 	}
 

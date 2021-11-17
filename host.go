@@ -30,7 +30,6 @@ func createDummyHost(tmpl *Template) (*Host, error) {
 	var h = &Host{}
 	h.derived = h
 	h.tmpl = tmpl
-	h._RequestHandlerBase = sharedRequestHandlerBase
 	h.httpHandler = http.HandlerFunc(h.handleOrPassRequest)
 	return h, nil
 }
@@ -82,10 +81,6 @@ func createHost(
 
 		h.requestHandler = rh
 		h._RequestHandlerBase = rhb
-	}
-
-	if h._RequestHandlerBase == nil {
-		h._RequestHandlerBase = sharedRequestHandlerBase
 	}
 
 	h.derived = h
