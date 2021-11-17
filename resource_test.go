@@ -2703,7 +2703,7 @@ func TestResourceBase_SetHandlerFor(t *testing.T) {
 		t.Fatalf("ResourceBase.SetHandlerOf() = %v, want nil", err)
 	}
 
-	if r._RequestHandlerBase == sharedRequestHandlerBase {
+	if r._RequestHandlerBase == nil {
 		t.Fatalf(
 			"ResourceBase.SetHandlerOf() didn't create new _RequestHandlerBase",
 		)

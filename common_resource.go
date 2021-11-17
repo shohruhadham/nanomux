@@ -10,8 +10,6 @@ import (
 	"strings"
 )
 
-// TODO: 1. Implement default "OPTIONS" handler.
-
 // ErrNilArgument is returned when one of the function arguments is nil.
 var ErrNilArgument = fmt.Errorf("nil argument")
 
@@ -579,7 +577,8 @@ func (rb *_ResourceBase) HandlesThePathAsIs() bool {
 
 // canHandleRequest returns true if the resource has any HTTP method handler.
 func (rb *_ResourceBase) canHandleRequest() bool {
-	return len(rb._RequestHandlerBase.handlers) > 0
+	return rb._RequestHandlerBase != nil &&
+		len(rb._RequestHandlerBase.handlers) > 0
 }
 
 // -------------------------
@@ -1623,7 +1622,7 @@ func (rb *_ResourceBase) SetHandlerFor(
 	methods string,
 	handler http.Handler,
 ) error {
-	if rb._RequestHandlerBase == sharedRequestHandlerBase {
+	if rb._RequestHandlerBase == nil {
 		rb._RequestHandlerBase = &_RequestHandlerBase{}
 	}
 
@@ -1664,7 +1663,7 @@ func (rb *_ResourceBase) HandlerOf(method string) http.Handler {
 func (rb *_ResourceBase) SetHandlerForUnusedMethods(
 	handler http.Handler,
 ) error {
-	if rb._RequestHandlerBase == sharedRequestHandlerBase {
+	if rb._RequestHandlerBase == nil {
 		if _, ok := rb.derived.(*Host); ok {
 			return newError("%w", ErrDummyHost)
 		}
@@ -1728,7 +1727,7 @@ func (rb *_ResourceBase) WrapHandlerOf(
 	methods string,
 	mws ...Middleware,
 ) error {
-	if rb._RequestHandlerBase == sharedRequestHandlerBase {
+	if rb._RequestHandlerBase == nil {
 		if _, ok := rb.derived.(*Host); ok {
 			return newError("%w", ErrDummyHost)
 		}
@@ -1747,7 +1746,7 @@ func (rb *_ResourceBase) WrapHandlerOf(
 // WrapHandlerOfMethodsInUse wraps the existing HTTP method handlers of the
 // resource with middlewares in their passed order.
 func (rb *_ResourceBase) WrapHandlerOfMethodsInUse(mws ...Middleware) error {
-	if rb._RequestHandlerBase == sharedRequestHandlerBase {
+	if rb._RequestHandlerBase == nil {
 		if _, ok := rb.derived.(*Host); ok {
 			return newError("%w", ErrDummyHost)
 		}
@@ -1766,7 +1765,7 @@ func (rb *_ResourceBase) WrapHandlerOfMethodsInUse(mws ...Middleware) error {
 // WrapHandlerOfUnusedMethods wraps the resource's handler of an unused HTTP
 // methods with the middlewares in their passed order.
 func (rb *_ResourceBase) WrapHandlerOfUnusedMethods(mws ...Middleware) error {
-	if rb._RequestHandlerBase == sharedRequestHandlerBase {
+	if rb._RequestHandlerBase == nil {
 		if _, ok := rb.derived.(*Host); ok {
 			return newError("%w", ErrDummyHost)
 		}
@@ -1851,7 +1850,7 @@ func (rb *_ResourceBase) requestHandlerBase() *_RequestHandlerBase {
 
 // -------------------------
 
-// serveHTTP calls the resources HTTP request handler.
+// serveHTTP calls the resource's HTTP request handler.
 func (rb *_ResourceBase) serveHTTP(
 	w http.ResponseWriter,
 	r *http.Request,
