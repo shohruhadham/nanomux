@@ -254,7 +254,9 @@ const rhTypeHTTPMethods = "get post custom"
 func TestRouter_SetRequestHandlerFor(t *testing.T) {
 	var ro = NewRouter()
 	var rh = &rhType{}
-	var nHandlers = len(toUpperSplitBySpace(rhTypeHTTPMethods))
+
+	// Number of handlers with default options handler.
+	var nHandlers = len(toUpperSplitBySpace(rhTypeHTTPMethods)) + 1
 
 	var cases = []struct {
 		name, urlTmpl, urlToCheck string
@@ -422,13 +424,13 @@ func TestRouter_SetHandlerFor(t *testing.T) {
 		numberOfHandlers                   int
 		wantErr                            bool
 	}{
-		{"h0", "get put", "http://example.com", "http://example.com", 2, false},
+		{"h0", "get put", "http://example.com", "http://example.com", 3, false},
 		{
 			"r10",
 			"post",
 			"http://example.com/r10/",
 			"http://example.com/r10/",
-			1,
+			2,
 			false,
 		},
 		{
@@ -436,19 +438,19 @@ func TestRouter_SetHandlerFor(t *testing.T) {
 			"custom",
 			"http://example.com/r10/{r20:123}",
 			"http://example.com/r10/{r20:123}",
-			1,
+			2,
 			false,
 		},
-		{"r00", "get", "/r00/", "/r00/", 1, false},
-		{"r00", "post", "r00/", "r00/", 2, false},
-		{"r11", "get post custom", "{r01}/r11", "{r01}/r11", 3, false},
-		{"r11", "put", "{r01}/r11", "{r01}/r11", 4, false},
+		{"r00", "get", "/r00/", "/r00/", 2, false},
+		{"r00", "post", "r00/", "r00/", 3, false},
+		{"r11", "get post custom", "{r01}/r11", "{r01}/r11", 4, false},
+		{"r11", "put", "{r01}/r11", "{r01}/r11", 5, false},
 		{
 			"h0 error #1",
 			"post",
 			"https://example.com",
 			"http://example.com",
-			2,
+			3,
 			true,
 		},
 		{
@@ -456,7 +458,7 @@ func TestRouter_SetHandlerFor(t *testing.T) {
 			"post",
 			"http://example.com/",
 			"http://example.com",
-			2,
+			3,
 			true,
 		},
 		{
@@ -464,7 +466,7 @@ func TestRouter_SetHandlerFor(t *testing.T) {
 			"get",
 			"https://example.com/r10",
 			"http://example.com/r10/",
-			1,
+			2,
 			true,
 		},
 		{
@@ -472,11 +474,11 @@ func TestRouter_SetHandlerFor(t *testing.T) {
 			"get",
 			"http://example.com/r10",
 			"http://example.com/r10/",
-			1,
+			2,
 			true,
 		},
-		{"r11 error #1", "header", "{r01}/r11/", "{r01}/r11", 4, true},
-		{"r00 error #1", "", "/r00", "/r00", 2, true},
+		{"r11 error #1", "header", "{r01}/r11/", "{r01}/r11", 5, true},
+		{"r00 error #1", "", "/r00", "/r00", 3, true},
 		{"empty url", "get", "", "", 0, true},
 	}
 
@@ -537,13 +539,13 @@ func TestRouter_SetHandlerFuncFor(t *testing.T) {
 		numberOfHandlers                   int
 		wantErr                            bool
 	}{
-		{"h0", "get put", "http://example.com", "http://example.com", 2, false},
+		{"h0", "get put", "http://example.com", "http://example.com", 3, false},
 		{
 			"r10",
 			"post",
 			"http://example.com/r10/",
 			"http://example.com/r10/",
-			1,
+			2,
 			false,
 		},
 		{
@@ -551,19 +553,19 @@ func TestRouter_SetHandlerFuncFor(t *testing.T) {
 			"custom",
 			"http://example.com/r10/{r20:123}",
 			"http://example.com/r10/{r20:123}",
-			1,
+			2,
 			false,
 		},
-		{"r00", "get", "/r00/", "/r00/", 1, false},
-		{"r00", "post", "r00/", "r00/", 2, false},
-		{"r11", "get post custom", "{r01}/r11", "{r01}/r11", 3, false},
-		{"r11", "put", "{r01}/r11", "{r01}/r11", 4, false},
+		{"r00", "get", "/r00/", "/r00/", 2, false},
+		{"r00", "post", "r00/", "r00/", 3, false},
+		{"r11", "get post custom", "{r01}/r11", "{r01}/r11", 4, false},
+		{"r11", "put", "{r01}/r11", "{r01}/r11", 5, false},
 		{
 			"h0 error #1",
 			"post",
 			"https://example.com",
 			"http://example.com",
-			2,
+			3,
 			true,
 		},
 		{
@@ -571,7 +573,7 @@ func TestRouter_SetHandlerFuncFor(t *testing.T) {
 			"post",
 			"http://example.com/",
 			"http://example.com",
-			2,
+			3,
 			true,
 		},
 		{
@@ -579,7 +581,7 @@ func TestRouter_SetHandlerFuncFor(t *testing.T) {
 			"get",
 			"https://example.com/r10",
 			"http://example.com/r10/",
-			1,
+			2,
 			true,
 		},
 		{
@@ -587,11 +589,11 @@ func TestRouter_SetHandlerFuncFor(t *testing.T) {
 			"get",
 			"http://example.com/r10",
 			"http://example.com/r10/",
-			1,
+			2,
 			true,
 		},
-		{"r11 error #1", "header", "{r01}/r11/", "{r01}/r11", 4, true},
-		{"r00 error #1", "", "/r00", "/r00", 2, true},
+		{"r11 error #1", "header", "{r01}/r11/", "{r01}/r11", 5, true},
+		{"r00 error #1", "", "/r00", "/r00", 3, true},
 		{"empty url", "get", "", "", 0, true},
 	}
 

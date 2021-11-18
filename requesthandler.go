@@ -30,9 +30,10 @@ var ErrConflictingStatusCode = fmt.Errorf("conflicting status code")
 // RequestHandler is used to accept any type that has methods to handle the
 // HTTP requests. Methods must have the signature of the http.HandlerFunc
 // and start with 'Handle' prefix. Remaining part of the methods' name is
-// considered as HTTP method. For example, HandleGet, HandleCustomMethod
-// are considered as the handlers of the GET and CUSTOMMETHOD HTTP methods
-// respectively.
+// considered as an HTTP method. For example, HandleGet, HandleCustom are
+// considered as the handlers of the GET and CUSTOM HTTP methods respectively.
+// If the type has HandleUnusedMethod then it's used as the handler of
+// the unused methods.
 type RequestHandler interface{}
 
 // --------------------------------------------------
@@ -102,18 +103,24 @@ func detectHTTPMethodHandlersOf(rh RequestHandler) (
 	}
 
 	var lhandlers = len(handlers)
-	if lhandlers > 0 || unusedMethodsHandler != nil {
-		if lhandlers == 0 {
-			handlers = nil
-		}
-
-		return &_RequestHandlerBase{
-			handlers,
-			unusedMethodsHandler,
-		}, nil
+	if lhandlers == 0 && unusedMethodsHandler == nil {
+		return nil, nil
 	}
 
-	return nil, nil
+	var rhb = &_RequestHandlerBase{handlers, unusedMethodsHandler}
+	if lhandlers > 0 {
+		var hf = rhb.handlers[http.MethodOptions]
+		if hf == nil {
+			rhb.handlers[http.MethodOptions] = http.HandlerFunc(
+				rhb.handleOptionsMethod,
+			)
+		}
+	} else {
+		rhb.handlers = nil
+	}
+
+	return rhb, nil
+
 }
 
 // -------------------------
@@ -137,6 +144,13 @@ func (rhb *_RequestHandlerBase) setHandlerFor(
 
 	for _, m := range ms {
 		rhb.handlers[m] = h
+	}
+
+	h = rhb.handlers[http.MethodOptions]
+	if h == nil {
+		rhb.handlers[http.MethodOptions] = http.HandlerFunc(
+			rhb.handleOptionsMethod,
+		)
 	}
 
 	return nil
@@ -267,6 +281,17 @@ func (rhb *_RequestHandlerBase) handleRequest(
 	}
 
 	rhb.handleUnusedMethod(w, r)
+}
+
+func (rhb *_RequestHandlerBase) handleOptionsMethod(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+	for m := range rhb.handlers {
+		w.Header().Add("Allow", m)
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (rhb *_RequestHandlerBase) handleUnusedMethod(
