@@ -1789,7 +1789,7 @@ func (rb *_ResourceBase) WrapSubtreeHandlersOf(
 	methods string,
 	mws ...Middleware,
 ) error {
-	var ms = splitBySpace(methods)
+	var ms = toUpperSplitBySpace(methods)
 	if len(ms) == 0 {
 		return newError("%w", ErrNoMethod)
 	}

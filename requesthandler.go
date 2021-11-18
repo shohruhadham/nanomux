@@ -126,16 +126,16 @@ func (rhb *_RequestHandlerBase) setHandlerFor(
 		return newError("%w", ErrNilArgument)
 	}
 
-	var ms = splitBySpace(methods)
+	var ms = toUpperSplitBySpace(methods)
 	if len(ms) == 0 {
 		return newError("%w", ErrNoMethod)
 	}
 
-	for _, m := range ms {
-		if rhb.handlers == nil {
-			rhb.handlers = make(map[string]http.Handler)
-		}
+	if rhb.handlers == nil {
+		rhb.handlers = make(map[string]http.Handler)
+	}
 
+	for _, m := range ms {
 		rhb.handlers[m] = h
 	}
 
@@ -174,7 +174,7 @@ func (rhb *_RequestHandlerBase) wrapHandlerOf(
 		return newError("%w", ErrNoMiddleware)
 	}
 
-	var ms = splitBySpace(methods)
+	var ms = toUpperSplitBySpace(methods)
 	if len(ms) == 0 {
 		return newError("%w", ErrNoMethod)
 	}
@@ -274,7 +274,7 @@ func (rhb *_RequestHandlerBase) handleUnusedMethod(
 	r *http.Request,
 ) {
 	for m := range rhb.handlers {
-		w.Header().Add("Allow", strings.ToUpper(m))
+		w.Header().Add("Allow", m)
 	}
 
 	http.Error(
