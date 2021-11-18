@@ -127,9 +127,10 @@ func CreateDormantHostUsingConfig(
 // The second argument must be an instance of a type with methods to handle
 // the HTTP requests. Methods must have the signature of the http.HandlerFunc
 // and start with 'Handle' prefix. Remaining part of the methods' name is
-// considered as an HTTP method. For example, HandleGet, HandleCustomMethod
-// are considered as the handlers of the GET and CUSTOMMETHOD HTTP methods
-// respectively.
+// considered as an HTTP method. For example, HandleGet, HandleCustom are
+// considered as the handlers of the GET and CUSTOM HTTP methods respectively.
+// If the second argument has HandleUnusedMethod then it's used as the handler
+// of the unused methods.
 //
 // Example:
 // 	type ExampleHost struct{}
@@ -160,9 +161,10 @@ func CreateHost(urlTmplStr string, rh RequestHandler) (*Host, error) {
 // The second argument must be an instance of a type with methods to handle
 // the HTTP requests. Methods must have the signature of the http.HandlerFunc
 // and start with 'Handle' prefix. Remaining part of the methods' name is
-// considered as an HTTP method. For example, HandleGet, HandleCustomMethod
-// are considered as the handlers of the GET and CUSTOMMETHOD HTTP methods
-// respectively.
+// considered as an HTTP method. For example, HandleGet, HandleCustom are
+// considered as the handlers of the GET and CUSTOM HTTP methods respectively.
+// If the second argument has HandleUnusedMethod then it's used as the handler
+// of the unused methods.
 //
 // Example:
 // 	type ExampleHost struct{}
@@ -236,9 +238,10 @@ func NewDormantHostUsingConfig(urlTmplStr string, config Config) *Host {
 // The second argument must be an instance of a type with methods to handle
 // the HTTP requests. Methods must have the signature of the http.HandlerFunc
 // and start with 'Handle' prefix. Remaining part of the methods' name is
-// considered as an HTTP method. For example, HandleGet, HandleCustomMethod
-// are considered as the handlers of the GET and CUSTOMMETHOD HTTP methods
-// respectively.
+// considered as an HTTP method. For example, HandleGet, HandleCustom are
+// considered as the handlers of the GET and CUSTOM HTTP methods respectively.
+// If the second argument has HandleUnusedMethod then it's used as the handler
+// of the unused methods.
 //
 // Example:
 // 	type ExampleHost struct{}
@@ -268,9 +271,10 @@ func NewHost(urlTmplStr string, rh RequestHandler) *Host {
 // The second argument must be an instance of a type with methods to handle
 // the HTTP requests. Methods must have the signature of the http.HandlerFunc
 // and start with 'Handle' prefix. Remaining part of the methods' name is
-// considered as an HTTP method. For example, HandleGet, HandleCustomMethod
-// are considered as the handlers of the GET and CUSTOMMETHOD HTTP methods
-// respectively.
+// considered as an HTTP method. For example, HandleGet, HandleCustom are
+// considered as the handlers of the GET and CUSTOM HTTP methods respectively.
+// If the second argument has HandleUnusedMethod then it's used as the handler
+// of the unused methods.
 //
 // Example:
 // 	type ExampleHost struct{}

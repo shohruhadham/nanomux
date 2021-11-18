@@ -157,9 +157,10 @@ func CreateDormantResourceUsingConfig(
 // The second argument must be an instance of a type with methods to handle
 // the HTTP requests. Methods must have the signature of the http.HandlerFunc
 // and start with 'Handle' prefix. Remaining part of the methods' name is
-// considered as an HTTP method. For example, HandleGet, HandleCustomMethod
-// are considered as the handlers of the GET and CUSTOMMETHOD HTTP methods
-// respectively.
+// considered as an HTTP method. For example, HandleGet, HandleCustom are
+// considered as the handlers of the GET and CUSTOM HTTP methods respectively.
+// If the second argument has HandleUnusedMethod then it's used as the handler
+// of the unused methods.
 //
 // Example:
 // 	type ExampleResource struct{}
@@ -213,9 +214,10 @@ func CreateResource(
 // The second argument must be an instance of a type with methods to handle
 // the HTTP requests. Methods must have the signature of the http.HandlerFunc
 // and start with 'Handle' prefix. Remaining part of the methods' name is
-// considered as an HTTP method. For example, HandleGet, HandleCustomMethod
-// are considered as the handlers of the GET and CUSTOMMETHOD HTTP methods
-// respectively.
+// considered as an HTTP method. For example, HandleGet, HandleCustom are
+// considered as the handlers of the GET and CUSTOM HTTP methods respectively.
+// If the second argument has HandleUnusedMethod then it's used as the handler
+// of the unused methods.
 //
 // Example:
 // 	type ExampleResource struct{}
@@ -332,9 +334,10 @@ func NewDormantResourceUsingConfig(urlTmplStr string, config Config) *Resource {
 // The second argument must be an instance of a type with methods to handle
 // the HTTP requests. Methods must have the signature of the http.HandlerFunc
 // and start with 'Handle' prefix. Remaining part of the methods' name is
-// considered as an HTTP method. For example, HandleGet, HandleCustomMethod
-// are considered as the handlers of the GET and CUSTOMMETHOD HTTP methods
-// respectively.
+// considered as an HTTP method. For example, HandleGet, HandleCustom are
+// considered as the handlers of the GET and CUSTOM HTTP methods respectively.
+// If the second argument has HandleUnusedMethod then it's used as the handler
+// of the unused methods.
 //
 // Example:
 // 	type ExampleResource struct{}
@@ -384,9 +387,10 @@ func NewResource(urlTmplStr string, rh RequestHandler) *Resource {
 // The second argument must be an instance of a type with methods to handle
 // the HTTP requests. Methods must have the signature of the http.HandlerFunc
 // and start with 'Handle' prefix. Remaining part of the methods' name is
-// considered as an HTTP method. For example, HandleGet, HandleCustomMethod
-// are considered as the handlers of the GET and CUSTOMMETHOD HTTP methods
-// respectively.
+// considered as an HTTP method. For example, HandleGet, HandleCustom are
+// considered as the handlers of the GET and CUSTOM HTTP methods respectively.
+// If the second argument has HandleUnusedMethod then it's used as the handler
+// of the unused methods.
 //
 // Example:
 // 	type ExampleResource struct{}

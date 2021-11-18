@@ -2639,7 +2639,9 @@ func TestResourceBase_HasAnyChildResource(t *testing.T) {
 func TestResourceBase_SetRequestHandler(t *testing.T) {
 	var r = NewDormantResource("/")
 	var rh = &rhType{}
-	var nHandlers = len(toUpperSplitBySpace(rhTypeHTTPMethods))
+
+	// Number of handlers with default options handler.
+	var nHandlers = len(toUpperSplitBySpace(rhTypeHTTPMethods)) + 1
 
 	var err = r.SetRequestHandler(rh)
 	if err != nil {
@@ -2709,7 +2711,8 @@ func TestResourceBase_SetHandlerFor(t *testing.T) {
 		)
 	}
 
-	if count := len(r.handlers); count != 3 {
+	// Count of handlers with default options handler.
+	if count := len(r.handlers); count != 4 {
 		t.Fatalf(
 			"ResourceBase.SetHandlerOf(): count of handlers = %d, want %d",
 			count,
