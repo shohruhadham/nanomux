@@ -2639,7 +2639,7 @@ func TestResourceBase_HasAnyChildResource(t *testing.T) {
 func TestResourceBase_SetRequestHandler(t *testing.T) {
 	var r = NewDormantResource("/")
 	var rh = &rhType{}
-	var nHandlers = len(splitBySpace(rhTypeHTTPMethods))
+	var nHandlers = len(toUpperSplitBySpace(rhTypeHTTPMethods))
 
 	var err = r.SetRequestHandler(rh)
 	if err != nil {

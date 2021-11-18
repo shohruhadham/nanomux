@@ -254,7 +254,7 @@ const rhTypeHTTPMethods = "get post custom"
 func TestRouter_SetRequestHandlerFor(t *testing.T) {
 	var ro = NewRouter()
 	var rh = &rhType{}
-	var nHandlers = len(splitBySpace(rhTypeHTTPMethods))
+	var nHandlers = len(toUpperSplitBySpace(rhTypeHTTPMethods))
 
 	var cases = []struct {
 		name, urlTmpl, urlToCheck string

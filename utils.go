@@ -126,7 +126,7 @@ func cleanPath(p string) string {
 	return np
 }
 
-func splitBySpace(str string) []string {
+func toUpperSplitBySpace(str string) []string {
 	str = strings.TrimSpace(str)
 	var strs = strings.Split(str, " ")
 

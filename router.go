@@ -1421,7 +1421,7 @@ func (ro *Router) WrapWith(mws ...Middleware) error {
 // WrapAllHandlersOf wraps the handlers of the HTTP methods of all the hosts and
 // resources. Handlers are wrapped in the order of the passed middlewares.
 func (ro *Router) WrapAllHandlersOf(methods string, mws ...Middleware) error {
-	var ms = splitBySpace(methods)
+	var ms = toUpperSplitBySpace(methods)
 	if len(ms) == 0 {
 		return newError("<- %w", ErrNoMethod)
 	}
