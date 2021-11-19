@@ -58,6 +58,7 @@ func createHost(
 
 	var cfs *_ConfigFlags
 	if config != nil {
+		config.Secure, config.Tslash = secure, tslash
 		if config.RedirectInsecureRequest && !secure {
 			return nil, newError("%w", ErrConflictingSecurity)
 		}
@@ -105,7 +106,8 @@ func CreateDormantHost(urlTmplStr string) (*Host, error) {
 // CreateDormantHostUsingConfig returns a new dormant host (without request
 // handlers) from the URL template. The host is configured with the properties
 // in the config as well as the scheme and trailing slash property values of
-// the URL template. The host's template must not be a wild card template.
+// the URL template (config's Secure and Tslash values are ignored and may not
+// be set). The host's template must not be a wild card template.
 func CreateDormantHostUsingConfig(
 	urlTmplStr string,
 	config Config,
@@ -156,7 +158,8 @@ func CreateHost(urlTmplStr string, rh RequestHandler) (*Host, error) {
 
 // CreateHost returns a newly created host. The host is configured with the
 // properties in the config as well as the scheme and trailing slash property
-// values of the URL template. The template must not be a wild card template.
+// values of the URL template (config's Secure and Tslash values are ignored
+// and may not be set). The template must not be a wild card template.
 //
 // The second argument must be an instance of a type with methods to handle
 // the HTTP requests. Methods must have the signature of the http.HandlerFunc
@@ -217,7 +220,8 @@ func NewDormantHost(urlTmplStr string) *Host {
 // NewDormantHostUsingConfig panics on error.
 //
 // The host is configured with the properties in the config as well as the
-// scheme and trailing slash property values of the URL template. The host's
+// scheme and trailing slash property values of the URL template (config's
+// Secure and Tslash values are ignored and may not be set). The host's
 // template must not be a wild card template.
 func NewDormantHostUsingConfig(urlTmplStr string, config Config) *Host {
 	var h, err = CreateDormantHostUsingConfig(urlTmplStr, config)
@@ -265,8 +269,9 @@ func NewHost(urlTmplStr string, rh RequestHandler) *Host {
 // CreateHostUsingConfig, NewHostUsingConfig panics on error.
 //
 // The new host is configured with the properties in the config as well as
-// the scheme and trailing slash property values of the URL template. The
-// template must not be a wild card template.
+// the scheme and trailing slash property values of the URL template (config's
+// Secure and Tslash values are ignored and may not be set). The template must
+// not be a wild card template.
 //
 // The second argument must be an instance of a type with methods to handle
 // the HTTP requests. Methods must have the signature of the http.HandlerFunc

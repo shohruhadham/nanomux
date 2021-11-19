@@ -130,10 +130,18 @@ type Config struct {
 	// and can be retrieved with the RemainingPathKey.
 	Subtree bool
 
+	// Secure means that a host or resource can be available only under https.
+	Secure bool
+
 	// RedirectInsecureRequest allows the resource to redirect the request from
 	// an insecure endpoint to a secure one, i.e. from http to https, instead
 	// of responding with "404 Not Found" status code.
 	RedirectInsecureRequest bool
+
+	// Tslash means that a host or resource has a trailing slash in their URL.
+	// If request is made to a URL without a trailing slash the host or resource
+	// redirects it to a URL with a trailing slash.
+	Tslash bool
 
 	// DropRequestOnUnmatchedTslash tells the resource to drop the request
 	// when the existence or absence of the tslash in the request's URL didn't
@@ -215,6 +223,19 @@ func (cfs _ConfigFlags) has(flags _ConfigFlags) bool {
 	return (cfs & flags) == flags
 }
 
+func (cfs _ConfigFlags) asConfig() Config {
+	return Config{
+		Subtree:                      cfs.has(flagSubtree),
+		Secure:                       cfs.has(flagSecure),
+		RedirectInsecureRequest:      cfs.has(flagRedirectInsecure),
+		Tslash:                       cfs.has(flagTslash),
+		DropRequestOnUnmatchedTslash: cfs.has(flagDropOnUnmatchedTslash),
+		LeniencyOnTslash:             cfs.has(flagLeniencyOnTslash),
+		LeniencyOnUncleanPath:        cfs.has(flagLeniencyOnUncleanPath),
+		HandleThePathAsIs:            cfs.has(flagHandleThePathAsIs),
+	}
+}
+
 // --------------------------------------------------
 
 // _Resource interface is the common interface of the Host and Resource
@@ -238,6 +259,9 @@ type _Resource interface {
 	updateConfigFlags(cfs _ConfigFlags)
 	configFlags() _ConfigFlags
 	configCompatibility(secure, tslash bool, cfs *_ConfigFlags) error
+
+	Configure(config Config)
+	Config() Config
 
 	IsSubtree() bool
 	IsSecure() bool
@@ -296,6 +320,7 @@ type _Resource interface {
 	SetHandlerFor(methods string, handler http.Handler) error
 	SetHandlerFuncFor(methods string, handlerFunc http.HandlerFunc) error
 	HandlerOf(method string) http.Handler
+
 	SetHandlerForUnusedMethods(handler http.Handler) error
 	SetHandlerFuncForUnusedMethods(handlerFunc http.HandlerFunc) error
 	HandlerOfUnusedMethods() http.Handler
@@ -518,6 +543,17 @@ func (rb *_ResourceBase) configCompatibility(
 	}
 
 	return nil
+}
+
+// Configure configures the host or resource with config.
+// If the host or resource has been configured before they're reconfigured.
+func (rb *_ResourceBase) Configure(config Config) {
+	rb.updateConfigFlags(flagActive | config.asFlags())
+}
+
+// Config returns the configuration of the host or resource.
+func (rb *_ResourceBase) Config() Config {
+	return rb.cfs.asConfig()
 }
 
 // IsSubtree returns true if the resource was configured as a subtree.

@@ -59,6 +59,7 @@ func createResource(
 
 	var cfs *_ConfigFlags
 	if config != nil {
+		config.Secure, config.Tslash = secure, tslash
 		if config.RedirectInsecureRequest && !secure {
 			return nil, newError("%w", ErrConflictingSecurity)
 		}
@@ -123,7 +124,8 @@ func CreateDormantResource(urlTmplStr string) (*Resource, error) {
 // request handlers) from the URL template.
 //
 // The resource is configured with the properties in the config as well as the
-// scheme and trailing slash property values of the URL template.
+// scheme and trailing slash property values of the URL template (config's
+// Secure and Tslash values are ignored and may not be set).
 //
 // When the URL template contains a host and/or prefix path segment templates,
 // the resource keeps them. Templates are used when the resource is being
@@ -209,7 +211,8 @@ func CreateResource(
 
 // CreateResourceUsingConfig returns a newly created resource. The resource
 // is configured with the properties in the config as well as the scheme and
-// trailing slash property values of the URL template.
+// trailing slash property values of the URL template (config's Secure and
+// Tslash values are ignored and may not be set).
 //
 // The second argument must be an instance of a type with methods to handle
 // the HTTP requests. Methods must have the signature of the http.HandlerFunc
@@ -301,8 +304,9 @@ func NewDormantResource(urlTmplStr string) *Resource {
 // Unlike CreateDormantResourceUsingConfig, NewDormantResourceUsingConfig
 // panics on error.
 //
-// The resource is configured with the properties in the config as well as the
-// scheme and trailing slash property values of the URL template.
+// The resource is configured with the properties in the config as well as
+// the scheme and trailing slash property values of the URL template (config's
+// Secure and Tslash values are ignored and may not be set).
 //
 // When the URL template contains a host and/or prefix path segment templates,
 // the resource keeps them. Templates are used when the resource is being
@@ -382,7 +386,7 @@ func NewResource(urlTmplStr string, rh RequestHandler) *Resource {
 //
 // The new ResourceBase instance is configured with the properties in the
 // config as well as the scheme and trailing slash property values of the URL
-// template.
+// template (config's Secure and Tslash values are ignored and may not be set).
 //
 // The second argument must be an instance of a type with methods to handle
 // the HTTP requests. Methods must have the signature of the http.HandlerFunc
