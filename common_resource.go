@@ -175,8 +175,16 @@ func (config Config) asFlags() _ConfigFlags {
 		cfs.set(flagSubtree)
 	}
 
+	if config.Secure {
+		cfs.set(flagSecure)
+	}
+
 	if config.RedirectInsecureRequest {
 		cfs.set(flagSecure | flagRedirectInsecure)
+	}
+
+	if config.Tslash {
+		cfs.set(flagTslash)
 	}
 
 	if config.DropRequestOnUnmatchedTslash {
@@ -329,6 +337,31 @@ type _Resource interface {
 	WrapHandlerOf(methods string, middlewares ...Middleware) error
 	WrapHandlerOfMethodsInUse(middlewares ...Middleware) error
 	WrapHandlerOfUnusedMethods(middlewares ...Middleware) error
+
+	ConfigurePath(path string, config Config) error
+	PathConfig(path string) (Config, error)
+
+	SetPathRequestHandler(path string, rh RequestHandler) error
+	PathRequestHandler(path string) (RequestHandler, error)
+
+	SetPathHandlerFor(methods, path string, handler http.Handler) error
+	SetPathHandlerFuncFor(methods, path string, handler http.HandlerFunc) error
+	PathHandlerOf(method, path string) (http.Handler, error)
+
+	SetPathHandlerForUnusedMethods(path string, handler http.Handler) error
+	SetPathHandlerFuncForUnusedMethods(
+		path string,
+		handler http.HandlerFunc,
+	) error
+
+	PathHandlerOfUnusedMethods(path string) (http.Handler, error)
+
+	WrapPath(path string, middlewares ...Middleware) error
+	WrapPathHandlerOf(methods, path string, middlewares ...Middleware) error
+	WrapPathHandlerOfMethodsInUse(path string, middlewares ...Middleware) error
+	WrapPathHandlerOfUnusedMethods(path string, middlewares ...Middleware) error
+
+	ConfigureSubtree(config Config)
 
 	WrapSubtreeHandlersOf(methods string, middlewares ...Middleware) error
 	WrapSubtreeHandlersOfMethodsInUse(middlewares ...Middleware) error
@@ -517,7 +550,7 @@ func (rb *_ResourceBase) configCompatibility(
 			return newError("%w", ErrConflictingSecurity)
 		}
 
-		if rbcfs.has(flagTslash) != tslash {
+		if !rbcfs.has(flagLeniencyOnTslash) && rbcfs.has(flagTslash) != tslash {
 			return newError("%w", ErrConflictingTslash)
 		}
 
@@ -1492,9 +1525,10 @@ func (rb *_ResourceBase) RegisterResourceUnder(
 //
 // Scheme and tslash properties must be compatible with the resource's,
 // otherwise the function returns an error.
-func (rb *_ResourceBase) RegisteredResource(
-	pathTmplStr string,
-) (*Resource, error) {
+func (rb *_ResourceBase) RegisteredResource(pathTmplStr string) (
+	*Resource,
+	error,
+) {
 	var (
 		hTmplStr       string
 		secure, tslash bool
@@ -1815,6 +1849,346 @@ func (rb *_ResourceBase) WrapHandlerOfUnusedMethods(mws ...Middleware) error {
 	}
 
 	return nil
+}
+
+// -------------------------
+
+// ConfigurePath configures the existing resource at the path. If the resource
+// was configured before, it is reconfigured.
+func (rb *_ResourceBase) ConfigurePath(path string, config Config) error {
+	var r, err = rb.RegisteredResource(path)
+	if err != nil {
+		return newError("<- %w", err)
+	}
+
+	if r == nil {
+		return newError("%w", ErrNonExistentResource)
+	}
+
+	r.Configure(config)
+	return nil
+}
+
+// PathConfig returns the configuration of the existing resource.
+func (rb *_ResourceBase) PathConfig(path string) (Config, error) {
+	var r, err = rb.RegisteredResource(path)
+	if err != nil {
+		return Config{}, newError("<- %w", err)
+	}
+
+	if r == nil {
+		return Config{}, newError("%w", ErrNonExistentResource)
+	}
+
+	return r.Config(), nil
+}
+
+// -------------------------
+
+// SetPathRequestHandler sets the request handlers for a resource at the path
+// from the passed RequestHandler. If the resource doesn't exist, the function
+// creates it. The resource keeps the RequestHandler for future retrieval.
+// Existing handlers of the resource are discarded.
+//
+// Scheme and trailing slash property values in the path template must be
+// compatible with the existing resource's properties, otherwise the function
+// returns an error. A newly created resource is configured with the values in
+// the path template.
+func (rb *_ResourceBase) SetPathRequestHandler(
+	path string,
+	rh RequestHandler,
+) error {
+	var r, err = rb.Resource(path)
+	if err != nil {
+		return newError("<- %w", err)
+	}
+
+	err = r.SetRequestHandler(rh)
+	if err != nil {
+		return newError("<- %w", err)
+	}
+
+	return nil
+}
+
+// PathRequestHandler returns the RequestHandler of the resource at the path.
+// If the resource doesn't exist or it wasn't created from a RequestHandler or
+// it has no RequestHandler set, nil is returned.
+//
+// Scheme and trailing slash property values in the path template must be
+// compatible with the resource's properties, otherwise the function returns an
+// error.
+func (rb *_ResourceBase) PathRequestHandler(path string) (
+	RequestHandler,
+	error,
+) {
+	var r, err = rb.RegisteredResource(path)
+	if err != nil {
+		return nil, newError("<- %w", err)
+	}
+
+	if r == nil {
+		return nil, newError("%w", ErrNonExistentResource)
+	}
+
+	return r.RequestHandler(), nil
+}
+
+// -------------------------
+
+// SetPathHandlerFor sets the HTTP methods' handler for a resource at the path.
+// If the resource doesn't exist, it is created.
+//
+// Scheme and trailing slash property values in the path template must be
+// compatible with the existing resource's properties, otherwise the function
+// returns an error. A newly created resource is configured with the values in
+// the path template.
+func (rb *_ResourceBase) SetPathHandlerFor(
+	methods, path string,
+	handler http.Handler,
+) error {
+	var r, err = rb.Resource(path)
+	if err != nil {
+		return newError("<- %w", err)
+	}
+
+	err = r.SetHandlerFor(methods, handler)
+	if err != nil {
+		return newError("<- %w", err)
+	}
+
+	return nil
+}
+
+// SetPathHandlerFuncFor sets the HTTP methods' handler function for a
+// resource at the path. If the resource doesn't exist, it is created.
+//
+// Scheme and trailing slash property values in the path template must be
+// compatible with the existing resource's properties, otherwise the function
+// returns an error. A newly created resource is configured with the values in
+// the path template.
+func (rb *_ResourceBase) SetPathHandlerFuncFor(
+	methods, path string,
+	handler http.HandlerFunc,
+) error {
+	var r, err = rb.Resource(path)
+	if err != nil {
+		return newError("<- %w", err)
+	}
+
+	err = r.SetHandlerFor(methods, handler)
+	if err != nil {
+		return newError("<- %w", err)
+	}
+
+	return nil
+}
+
+// PathHandlerOf returns the HTTP method's handler of the resource at the path.
+// If the resource doesn't exist, nil is returned.
+//
+// Scheme and trailing slash property values in the path template must be
+// compatible with the resource's properties, otherwise the function returns
+// an error.
+func (rb *_ResourceBase) PathHandlerOf(method, path string) (
+	http.Handler,
+	error,
+) {
+	var r, err = rb.RegisteredResource(path)
+	if err != nil {
+		return nil, newError("<- %w", err)
+	}
+
+	if r == nil {
+		return nil, newError("%w", ErrNonExistentResource)
+	}
+
+	return r.handlerOf(method), nil
+}
+
+// SetPathHandlerForUnusedMethods sets the unused HTTP methods' handler for a
+// resource at the path. If the resource doesn't exist, it is created.
+//
+// Scheme and trailing slash property values in the path template must be
+// compatible with the existing resource's properties, otherwise the function
+// returns an error. A newly created resource is configured with the values in
+// the path template.
+func (rb *_ResourceBase) SetPathHandlerForUnusedMethods(
+	path string,
+	handler http.Handler,
+) error {
+	var r, err = rb.Resource(path)
+	if err != nil {
+		return newError("<- %w", err)
+	}
+
+	err = r.SetHandlerForUnusedMethods(handler)
+	if err != nil {
+		return newError("<- %w", err)
+	}
+
+	return nil
+}
+
+// SetPathHandlerFuncForUnusedMethods sets the unused HTTP methods' handler
+// for a resource at the path. If the resource doesn't exist, it is created.
+//
+// Scheme and trailing slash property values in the path template must be
+// compatible with the existing resource's properties, otherwise the function
+// returns an error. A newly created resource is configured with the values in
+// the path template.
+func (rb *_ResourceBase) SetPathHandlerFuncForUnusedMethods(
+	path string,
+	handler http.HandlerFunc,
+) error {
+	var r, err = rb.Resource(path)
+	if err != nil {
+		return newError("<- %w", err)
+	}
+
+	err = r.SetHandlerForUnusedMethods(handler)
+	if err != nil {
+		return newError("<- %w", err)
+	}
+
+	return nil
+}
+
+// PathHandlerOfUnusedMethods returns the unused HTTP methods' handler of the
+// resource at the path. If the resource doesn't exist, nil is returned.
+//
+// Scheme and trailing slash property values in the path template must be
+// compatible with the resource's properties, otherwise the function returns
+// an error.
+func (rb *_ResourceBase) PathHandlerOfUnusedMethods(path string) (
+	http.Handler,
+	error,
+) {
+	var r, err = rb.RegisteredResource(path)
+	if err != nil {
+		return nil, newError("<- %w", err)
+	}
+
+	if r == nil {
+		return nil, newError("%w", err)
+	}
+
+	return r.HandlerOfUnusedMethods(), err
+}
+
+// WrapPath wraps the HTTP handler of the resource at the path. Handler is
+// wrapped in the middlewares' passed order. If the resource doesn't exist,
+// error is returned.
+func (rb *_ResourceBase) WrapPath(
+	path string,
+	middlewares ...Middleware,
+) error {
+	var r, err = rb.RegisteredResource(path)
+	if err != nil {
+		return newError("<- %w", err)
+	}
+
+	if r == nil {
+		return newError("%w", ErrNonExistentResource)
+	}
+
+	err = r.WrapWith(middlewares...)
+	if err != nil {
+		return newError("<- %w", err)
+	}
+
+	return nil
+}
+
+// WrapPathHandlerOf wraps the handlers of the HTTP methods of the resource
+// at the path. Handlers are wrapped in the middlewares' passed order.
+//
+// If the resource or the handler of any HTTP method doesn't exist, the
+// function returns an error.
+func (rb *_ResourceBase) WrapPathHandlerOf(
+	methods, path string,
+	middlewares ...Middleware,
+) error {
+	var r, err = rb.RegisteredResource(path)
+	if err != nil {
+		return newError("<- %w", err)
+	}
+
+	if r == nil {
+		return newError("<- %w", err)
+	}
+
+	err = r.WrapHandlerOf(methods, middlewares...)
+	if err != nil {
+		return newError("<- %w", err)
+	}
+
+	return nil
+}
+
+// WrapPathHandlerOfMethodsInUse wraps all the HTTP method handlers of
+// the resource. Handlers are wrapped in the middlewares' passed order.
+//
+// If the resource doesn't exist or it doesn't have any HTTP method's
+// handler set, the function returns an error.
+func (rb *_ResourceBase) WrapPathHandlerOfMethodsInUse(
+	path string,
+	middlewares ...Middleware,
+) error {
+	var r, err = rb.RegisteredResource(path)
+	if err != nil {
+		return newError("<- %w", err)
+	}
+
+	if r == nil {
+		return newError("%w", ErrNonExistentResource)
+	}
+
+	err = r.WrapHandlerOfMethodsInUse(middlewares...)
+	if err != nil {
+		return newError("<- %w", err)
+	}
+
+	return nil
+}
+
+// WrapPathHandlerOfUnusedMethods wraps the handler of an unused HTTP methods
+// of the resource. Handler is wrapped in the middlewares' passed order.
+//
+// If the resource doesn't exist or it doesn't have any HTTP method's handler
+// set, the function returns an error.
+func (rb *_ResourceBase) WrapPathHandlerOfUnusedMethods(
+	path string,
+	middlewares ...Middleware,
+) error {
+	var r, err = rb.RegisteredResource(path)
+	if err != nil {
+		return newError("<- %w", err)
+	}
+
+	if r == nil {
+		return newError("%w", ErrNonExistentResource)
+	}
+
+	err = r.WrapHandlerOfUnusedMethods(middlewares...)
+	if err != nil {
+		return newError("<- %w", err)
+	}
+
+	return nil
+}
+
+// -------------------------
+
+// ConfigureSubtree configures all the resources below in the hierarchy.
+func (rb *_ResourceBase) ConfigureSubtree(config Config) {
+	traverseAndCall(
+		rb._Resources(),
+		func(_r _Resource) error {
+			_r.Configure(config)
+			return nil
+		},
+	)
 }
 
 // -------------------------

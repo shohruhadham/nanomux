@@ -398,6 +398,20 @@ func TestResourceBase_SharedData(t *testing.T) {
 	}
 }
 
+func TestResourceBase_setConfigFlag(t *testing.T) {
+	var r = NewDormantResource("resource")
+	var cfs = flagTslash | flagDropOnUnmatchedTslash
+	r.setConfigFlags(cfs)
+	cfs |= flagActive
+	if gotCfs := r.configFlags(); gotCfs != cfs {
+		t.Fatalf(
+			"ResourceBase.setConfigFlag() failed to set %d, got %d",
+			cfs,
+			gotCfs,
+		)
+	}
+}
+
 func TestResourceBase_configFlags(t *testing.T) {
 	var r = NewDormantResourceUsingConfig(
 		"https:///resource/",
@@ -415,17 +429,17 @@ func TestResourceBase_configFlags(t *testing.T) {
 	}
 }
 
-func TestResourceBase_setConfigFlag(t *testing.T) {
-	var r = NewDormantResource("resource")
-	var cfs = flagTslash | flagDropOnUnmatchedTslash
-	r.setConfigFlags(cfs)
-	cfs |= flagActive
-	if gotCfs := r.configFlags(); gotCfs != cfs {
-		t.Fatalf(
-			"ResourceBase.setConfigFlag() failed to set %d, got %d",
-			cfs,
-			gotCfs,
-		)
+func TestResourceBase_Configure(t *testing.T) {
+	var r = NewDormantResourceUsingConfig("/", Config{Subtree: true})
+	r.Configure(Config{RedirectInsecureRequest: true, HandleThePathAsIs: true})
+	if r.Config() != (Config{
+		Secure:                  true,
+		RedirectInsecureRequest: true,
+		LeniencyOnTslash:        true,
+		LeniencyOnUncleanPath:   true,
+		HandleThePathAsIs:       true,
+	}) {
+		t.Fatalf("ResourceBase_Configure() has failed.")
 	}
 }
 
@@ -1924,7 +1938,7 @@ func TestResourceBase_ResourceUsingConfig(t *testing.T) {
 			"{name:pattern}",
 			Config{HandleThePathAsIs: true},
 			nil,
-			true,
+			false,
 		},
 		{"pattern #4", "{name:pattern}/", Config{Subtree: true}, nil, true},
 
@@ -3145,6 +3159,1009 @@ func TestResourceBase_WrapHandlerOfUnusedMethods(t *testing.T) {
 		t.Fatalf(
 			"ResourceBase.WrapHandlerOfUnusedMethods() shouldn't have wrapped handler of GET",
 		)
+	}
+}
+
+func TestResourceBase_ConfigurePath(t *testing.T) {
+	var root = NewDormantResource("/")
+	var r00, err = root.Resource("r00")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var r10 *Resource
+	r10, err = r00.Resource("https:///{r10:abc}")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var r20 *Resource
+	r20, err = r10.Resource("{r20}/")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var r11 *Resource
+	r11, err = r00.Resource("r11")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var config = Config{
+		Secure:                       true,
+		RedirectInsecureRequest:      true,
+		DropRequestOnUnmatchedTslash: true,
+	}
+
+	var cases = []struct {
+		name, path string
+		r          *Resource
+		wantErr    bool
+	}{
+		{"r00", "r00", r00, false},
+		{"r10", "https:///r00/{r10:abc}", r10, false},
+		{"r20", "/r00/{r10:abc}/{r20}/", r20, false},
+		{"r11", "/r00/r11", r11, false},
+		{"r10 error", "/r00/{r10:abc}", r10, true},
+		{"non-existent", "/r00/{r12}", nil, true},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			var err = root.ConfigurePath(c.path, config)
+			if (err != nil) != c.wantErr {
+				t.Fatalf(
+					"ResourceBase.ConfigurePath() = %v, wantErr = %t",
+					err,
+					c.wantErr,
+				)
+			}
+
+			if c.r == nil {
+				return
+			}
+
+			if c.r.Config() != config {
+				t.Fatalf("ResourceBase.ConfigurePath() has failed")
+			}
+		})
+	}
+}
+
+func TestResourceBase_PathConfig(t *testing.T) {
+	var root = NewDormantResource("/")
+
+	var config = Config{
+		Secure:                       true,
+		RedirectInsecureRequest:      true,
+		DropRequestOnUnmatchedTslash: true,
+	}
+
+	var cases = []struct {
+		name, path, pathToCheck string
+		wantErr                 bool
+	}{
+		{"r00", "r00", "https:///r00", false},
+		{"r10", "https:///r00/{r10:abc}", "https:///r00/{r10:abc}", false},
+		{
+			"r20",
+			"/r00/{r10:abc}/{r20}/",
+			"https:///r00/{r10:abc}/{r20}",
+			false,
+		},
+		{"r11", "/r00/r11", "https:///r00/r11", false},
+		{"r00 error", "", "https:///r00/", true},
+		{"non-existent", "", "https:///r00/{r12}", true},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if !c.wantErr {
+				var _, err = root.Resource(c.path)
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				err = root.ConfigurePath(c.path, config)
+				if (err != nil) != c.wantErr {
+					t.Fatal(err)
+				}
+			}
+
+			var gotConfig, err = root.PathConfig(c.pathToCheck)
+			if (err != nil) != c.wantErr {
+				t.Fatalf(
+					"ResourceBase.PathConfig() = %v, wantErr = %t",
+					err,
+					c.wantErr,
+				)
+			}
+
+			if !c.wantErr {
+				if gotConfig != config {
+					t.Fatalf("ResourceBase.PathConfig() has failed")
+				}
+			}
+		})
+	}
+}
+
+func TestResourceBase_SetPathRequestHandler(t *testing.T) {
+	var root = NewDormantResource("/")
+	var rh = &rhType{}
+	var ms = toUpperSplitBySpace(rhTypeHTTPMethods)
+	ms = append(ms, "OPTIONS")
+
+	var cases = []struct {
+		name, path string
+		wantErr    bool
+	}{
+		{"r00", "https:///r00", false},
+		{"r01", "{r01}", false},
+		{"r10", "/{r01}/{r10:abc}/", false},
+		{"r11", "{r01}/{r11}", false},
+		{"r12", "https:///{r01}/r12/{r20:123}", false},
+		{"r12 error #1", "{r01}/r12/{r20:123}", true},
+		{"r12 error #2", "https:///{r01}/r12/{r20:123}/", true},
+		{"empty path", "", true},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			var err = root.SetPathRequestHandler(c.path, rh)
+			if (err != nil) != c.wantErr {
+				t.Fatalf(
+					"ResourceBase.SetPathRequestHandler() = %v, wantErr = %t",
+					err,
+					c.wantErr,
+				)
+			}
+
+			if c.wantErr {
+				return
+			}
+
+			var r *Resource
+			r, err = root.Resource(c.path)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if r.RequestHandler() != rh {
+				t.Fatalf(
+					"ResourceBase.SetPathRequestHandler() has failed to set RequestHandler.",
+				)
+			}
+
+			for _, m := range ms {
+				if r.HandlerOf(m) == nil {
+					t.Fatalf(
+						"ResourceBase.SetPathRequestHandler() has failed to set the handler of the HTTP method %s",
+						m,
+					)
+				}
+			}
+
+			if r.HandlerOfUnusedMethods() == nil {
+				t.Fatalf(
+					"ResourceBase.SetPathRequestHandler(0 has failed to set unused methods' handler",
+				)
+			}
+		})
+	}
+}
+
+func TestResourceBase_PathRequestHandler(t *testing.T) {
+	var root = NewDormantResource("/")
+	var rh = &rhType{}
+
+	var cases = []struct {
+		name, path string
+		wantErr    bool
+	}{
+		{"r00", "https:///r00", false},
+		{"r01", "{r01}", false},
+		{"r10", "/{r01}/{r10:abc}/", false},
+		{"r11", "{r01}/{r11}", false},
+		{"r12", "https:///{r01}/r12/{r20:123}", false},
+		{"r12 error #1", "{r01}/r12/{r20:123}", true},
+		{"r12 error #2", "https:///{r01}/r12/{r20:123}/", true},
+		{"non-existent", "r00/non-existent", true},
+		{"empty path", "", true},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			var err error
+			if !c.wantErr {
+				err = root.SetPathRequestHandler(c.path, rh)
+				if (err != nil) != c.wantErr {
+					t.Fatal(err)
+				}
+			}
+
+			var gotRh RequestHandler
+			gotRh, err = root.PathRequestHandler(c.path)
+			if (err != nil) != c.wantErr {
+				t.Fatalf(
+					"ResourceBase.PathRequestHandler() err = %v, wantErr = %t",
+					err,
+					c.wantErr,
+				)
+			}
+
+			if !c.wantErr && gotRh != rh {
+				t.Fatalf(
+					"ResourceBase.PathRequestHandler() has failed to return RequestHandler",
+				)
+			}
+		})
+	}
+}
+
+func TestResourceBase_SetPathHandlerFor(t *testing.T) {
+	var root = NewDormantResource("/")
+	var h = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
+	var ms = toUpperSplitBySpace(rhTypeHTTPMethods)
+	ms = append(ms, "OPTIONS")
+
+	var cases = []struct {
+		name, path string
+		wantErr    bool
+	}{
+		{"r00", "https:///r00", false},
+		{"r01", "{r01}", false},
+		{"r10", "/{r01}/{r10:abc}/", false},
+		{"r11", "{r01}/{r11}", false},
+		{"r12", "https:///{r01}/r12/{r20:123}", false},
+		{"r12 error #1", "{r01}/r12/{r20:123}", true},
+		{"r12 error #2", "https:///{r01}/r12/{r20:123}/", true},
+		{"empty path", "", true},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			var err = root.SetPathHandlerFor(rhTypeHTTPMethods, c.path, h)
+			if (err != nil) != c.wantErr {
+				t.Fatalf(
+					"ResourceBase.SetPathHandlerFor() = %v, wantErr = %t",
+					err,
+					c.wantErr,
+				)
+			}
+
+			if c.wantErr {
+				return
+			}
+
+			var r *Resource
+			r, err = root.Resource(c.path)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			for _, m := range ms {
+				if r.HandlerOf(m) == nil {
+					t.Fatalf(
+						"ResourceBase.SetPathHandlerFor() has failed to set the handler of the HTTP method %s",
+						m,
+					)
+				}
+			}
+		})
+	}
+}
+
+func TestResourceBase_SetPathHandlerFuncFor(t *testing.T) {
+	var root = NewDormantResource("/")
+	var h = func(w http.ResponseWriter, r *http.Request) {}
+	var ms = toUpperSplitBySpace(rhTypeHTTPMethods)
+	ms = append(ms, "OPTIONS")
+
+	var cases = []struct {
+		name, path string
+		wantErr    bool
+	}{
+		{"r00", "https:///r00", false},
+		{"r01", "{r01}", false},
+		{"r10", "/{r01}/{r10:abc}/", false},
+		{"r11", "{r01}/{r11}", false},
+		{"r12", "https:///{r01}/r12/{r20:123}", false},
+		{"r12 error #1", "{r01}/r12/{r20:123}", true},
+		{"r12 error #2", "https:///{r01}/r12/{r20:123}/", true},
+		{"empty path", "", true},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			var err = root.SetPathHandlerFuncFor(rhTypeHTTPMethods, c.path, h)
+			if (err != nil) != c.wantErr {
+				t.Fatalf(
+					"ResourceBase.SetPathHandlerFuncFor() = %v, wantErr = %t",
+					err,
+					c.wantErr,
+				)
+			}
+
+			if c.wantErr {
+				return
+			}
+
+			var r *Resource
+			r, err = root.Resource(c.path)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			for _, m := range ms {
+				if r.HandlerOf(m) == nil {
+					t.Fatalf(
+						"ResourceBase.SetPathHandlerFuncFor() has failed to set the handler of the HTTP method %s",
+						m,
+					)
+				}
+			}
+		})
+	}
+}
+
+func TestResourceBase_PathHandlerOf(t *testing.T) {
+	var root = NewDormantResource("/")
+	var h = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
+	var ms = toUpperSplitBySpace(rhTypeHTTPMethods)
+	ms = append(ms, "OPTIONS")
+
+	var cases = []struct {
+		name, path string
+		wantErr    bool
+	}{
+		{"r00", "https:///r00", false},
+		{"r01", "{r01}", false},
+		{"r10", "/{r01}/{r10:abc}/", false},
+		{"r11", "{r01}/{r11}", false},
+		{"r12", "https:///{r01}/r12/{r20:123}", false},
+		{"r12 error #1", "{r01}/r12/{r20:123}", true},
+		{"r12 error #2", "https:///{r01}/r12/{r20:123}/", true},
+		{"empty path", "", true},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if !c.wantErr {
+				var err = root.SetPathHandlerFor(rhTypeHTTPMethods, c.path, h)
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			for _, m := range ms {
+				var h, err = root.PathHandlerOf(m, c.path)
+				if (err != nil) != c.wantErr {
+					t.Fatalf(
+						"ResourceBase.PathHandlerOf() err = %v, wantErr = %t",
+						err,
+						c.wantErr,
+					)
+				}
+
+				if !c.wantErr && h == nil {
+					t.Fatalf("ResourceBase.PathHandlerOf() has failed")
+				}
+			}
+		})
+	}
+}
+
+func TestResourceBase_SetPathHandlerForUnusedMethods(t *testing.T) {
+	var root = NewDormantResource("/")
+	var h = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
+
+	var cases = []struct {
+		name, path string
+		wantErr    bool
+	}{
+		{"r00", "https:///r00", false},
+		{"r01", "{r01}", false},
+		{"r10", "/{r01}/{r10:abc}/", false},
+		{"r11", "{r01}/{r11}", false},
+		{"r12", "https:///{r01}/r12/{r20:123}", false},
+		{"r12 error #1", "{r01}/r12/{r20:123}", true},
+		{"r12 error #2", "https:///{r01}/r12/{r20:123}/", true},
+		{"empty path", "", true},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if !c.wantErr {
+				var err = root.SetPathHandlerFor("get", c.path, h)
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			var err = root.SetPathHandlerForUnusedMethods(c.path, h)
+			if (err != nil) != c.wantErr {
+				t.Fatalf(
+					"ResourceBase.SetPathHandlerForUnusedMethods() = %v, wantErr = %t",
+					err,
+					c.wantErr,
+				)
+			}
+
+			if c.wantErr {
+				return
+			}
+
+			var r *Resource
+			r, err = root.Resource(c.path)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if r.HandlerOfUnusedMethods() == nil {
+				t.Fatalf(
+					"ResourceBase.SetPathHandlerForUnusedMethods() has failed.",
+				)
+			}
+		})
+	}
+}
+
+func TestResourceBase_SetPathHandlerFuncForUnusedMethods(t *testing.T) {
+	var root = NewDormantResource("/")
+	var h = func(w http.ResponseWriter, r *http.Request) {}
+
+	var cases = []struct {
+		name, path string
+		wantErr    bool
+	}{
+		{"r00", "https:///r00", false},
+		{"r01", "{r01}", false},
+		{"r10", "/{r01}/{r10:abc}/", false},
+		{"r11", "{r01}/{r11}", false},
+		{"r12", "https:///{r01}/r12/{r20:123}", false},
+		{"r12 error #1", "{r01}/r12/{r20:123}", true},
+		{"r12 error #2", "https:///{r01}/r12/{r20:123}/", true},
+		{"empty path", "", true},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if !c.wantErr {
+				var err = root.SetPathHandlerFor(
+					"get",
+					c.path,
+					http.HandlerFunc(h),
+				)
+
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			var err = root.SetPathHandlerFuncForUnusedMethods(c.path, h)
+			if (err != nil) != c.wantErr {
+				t.Fatalf(
+					"ResourceBase.SetPathHandlerFuncForUnusedMethods() = %v, wantErr = %t",
+					err,
+					c.wantErr,
+				)
+			}
+
+			if c.wantErr {
+				return
+			}
+
+			var r *Resource
+			r, err = root.Resource(c.path)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if r.HandlerOfUnusedMethods() == nil {
+				t.Fatalf(
+					"ResourceBase.SetPathHandlerFuncForUnusedMethods() has failed.",
+				)
+			}
+		})
+	}
+}
+
+func TestResourceBase_PathHandlerOfUnusedMethods(t *testing.T) {
+	var root = NewDormantResource("/")
+	var h = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
+
+	var cases = []struct {
+		name, path string
+		wantErr    bool
+	}{
+		{"r00", "https:///r00", false},
+		{"r01", "{r01}", false},
+		{"r10", "/{r01}/{r10:abc}/", false},
+		{"r11", "{r01}/{r11}", false},
+		{"r12", "https:///{r01}/r12/{r20:123}", false},
+		{"r12 error #1", "{r01}/r12/{r20:123}", true},
+		{"r12 error #2", "https:///{r01}/r12/{r20:123}/", true},
+		{"empty path", "", true},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if !c.wantErr {
+				var err = root.SetPathHandlerFor("get", c.path, h)
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				err = root.SetPathHandlerForUnusedMethods(c.path, h)
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			var h, err = root.PathHandlerOfUnusedMethods(c.path)
+			if (err != nil) != c.wantErr {
+				t.Fatalf(
+					"ResourceBase.PathHandlerOfUnusedMethods() err = %v, wantErr = %t",
+					err,
+					c.wantErr,
+				)
+			}
+
+			if !c.wantErr && h == nil {
+				t.Fatalf("ResourceBase.PathHandlerOfUnusedMethods() has failed")
+			}
+		})
+	}
+}
+
+func TestResourceBase_WrapPath(t *testing.T) {
+	var root = NewDormantResource("/")
+
+	var strb strings.Builder
+	var mws = []Middleware{
+		MiddlewareFunc(
+			func(handler http.Handler) http.Handler {
+				return http.HandlerFunc(
+					func(w http.ResponseWriter, r *http.Request) {
+						strb.WriteByte('b')
+						handler.ServeHTTP(w, r)
+					},
+				)
+			},
+		),
+		MiddlewareFunc(
+			func(handler http.Handler) http.Handler {
+				return http.HandlerFunc(
+					func(w http.ResponseWriter, r *http.Request) {
+						strb.WriteByte('a')
+						handler.ServeHTTP(w, r)
+					},
+				)
+			},
+		),
+	}
+
+	var cases = []struct {
+		name, path, requestPath, wantStr string
+		wantErr                          bool
+	}{
+		{"r00", "https:///r00", "/r00", "ab", false},
+		{"r01", "{r01}", "/r01", "ab", false},
+		{"r10", "/{r01}/{r10:abc}/", "/r01/abc/", "abab", false},
+		{"r11", "{r01}/{r11}", "/r01/r11", "abab", false},
+		{
+			// r12 won't be wrapped.
+			"r20", "https:///{r01}/r12/{r20:123}", "/r01/r12/123", "abab",
+			false,
+		},
+		{"r12 error #1", "{r01}/r12/{r20:123}", "", "", true},
+		{"r12 error #2", "https:///{r01}/r12/{r20:123}/", "", "", true},
+		{"empty path", "", "", "", true},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			var r *Resource
+			var err error
+
+			if !c.wantErr {
+				r, err = root.Resource(c.path)
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			err = root.WrapPath(c.path, mws...)
+			if (err != nil) != c.wantErr {
+				t.Fatalf(
+					"ResourceBase.WrapPath() err = %v, wantErr = %t",
+					err,
+					c.wantErr,
+				)
+			}
+
+			if r != nil {
+				strb.Reset()
+				var w = httptest.NewRecorder()
+				var r = httptest.NewRequest("GET", c.requestPath, nil)
+				root.ServeHTTP(w, r)
+
+				var str = strb.String()
+				if str != c.wantStr {
+					t.Fatalf("ResourceBase.WrapPath() gotStr = %s, want = %s",
+						str,
+						c.wantStr,
+					)
+				}
+			}
+		})
+	}
+}
+
+func TestResourceBasse_WrapPathHandlerOf(t *testing.T) {
+	var root = NewDormantResource("/")
+	var h = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
+
+	var strb strings.Builder
+	var mws = []Middleware{
+		MiddlewareFunc(
+			func(handler http.Handler) http.Handler {
+				return http.HandlerFunc(
+					func(w http.ResponseWriter, r *http.Request) {
+						strb.WriteByte('b')
+						handler.ServeHTTP(w, r)
+					},
+				)
+			},
+		),
+		MiddlewareFunc(
+			func(handler http.Handler) http.Handler {
+				return http.HandlerFunc(
+					func(w http.ResponseWriter, r *http.Request) {
+						strb.WriteByte('a')
+						handler.ServeHTTP(w, r)
+					},
+				)
+			},
+		),
+	}
+
+	var cases = []struct {
+		name, path, requestPath, wantStr string
+		wantErr                          bool
+	}{
+		{"r00", "https:///r00", "/r00", "ab", false},
+		{"r01", "{r01}", "/r01", "ab", false},
+		{"r10", "/{r01}/{r10:abc}/", "/r01/abc/", "abab", false},
+		{"r11", "{r01}/{r11}", "/r01/r11", "abab", false},
+		{
+			// r12 won't be wrapped.
+			"r20", "https:///{r01}/r12/{r20:123}", "/r01/r12/123", "abab",
+			false,
+		},
+		{"r12 error #1", "{r01}/r12/{r20:123}", "", "", true},
+		{"r12 error #2", "https:///{r01}/r12/{r20:123}/", "", "", true},
+		{"empty path", "", "", "", true},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			var r *Resource
+			var err error
+
+			if !c.wantErr {
+				err = root.SetPathHandlerFor("get put", c.path, h)
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			err = root.WrapPathHandlerOf("put", c.path, mws...)
+			if (err != nil) != c.wantErr {
+				t.Fatalf(
+					"ResourceBase.WrapPathHandlerOf() err = %v, wantErr = %t",
+					err,
+					c.wantErr,
+				)
+			}
+
+			if r != nil {
+				strb.Reset()
+				var w = httptest.NewRecorder()
+				var r = httptest.NewRequest("GET", c.requestPath, nil)
+				root.ServeHTTP(w, r)
+
+				if strb.String() != "" {
+					t.Fatalf(
+						"ResourceBase.WrapPathHandlerOf() wrapped the wrong handler",
+					)
+				}
+
+				r = httptest.NewRequest("PUT", c.requestPath, nil)
+				root.ServeHTTP(w, r)
+
+				var str = strb.String()
+				if str != c.wantStr {
+					t.Fatalf(
+						"ResourceBase.WrapPathHandlerOf() gotStr = %s, want = %s",
+						str,
+						c.wantStr,
+					)
+				}
+			}
+		})
+	}
+}
+
+func TestResourceBase_WrapPathHandlerOfMethodsInUse(t *testing.T) {
+	var root = NewDormantResource("/")
+	var h = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
+	var ms = toUpperSplitBySpace(rhTypeHTTPMethods)
+	ms = append(ms, "OPTIONS")
+
+	var strb strings.Builder
+	var mws = []Middleware{
+		MiddlewareFunc(
+			func(handler http.Handler) http.Handler {
+				return http.HandlerFunc(
+					func(w http.ResponseWriter, r *http.Request) {
+						strb.WriteByte('b')
+						handler.ServeHTTP(w, r)
+					},
+				)
+			},
+		),
+		MiddlewareFunc(
+			func(handler http.Handler) http.Handler {
+				return http.HandlerFunc(
+					func(w http.ResponseWriter, r *http.Request) {
+						strb.WriteByte('a')
+						handler.ServeHTTP(w, r)
+					},
+				)
+			},
+		),
+	}
+
+	var cases = []struct {
+		name, path, requestPath, wantStr string
+		wantErr                          bool
+	}{
+		{"r00", "https:///r00", "/r00", "ab", false},
+		{"r01", "{r01}", "/r01", "ab", false},
+		{"r10", "/{r01}/{r10:abc}/", "/r01/abc/", "abab", false},
+		{"r11", "{r01}/{r11}", "/r01/r11", "abab", false},
+		{
+			// r12 won't be wrapped.
+			"r20", "https:///{r01}/r12/{r20:123}", "/r01/r12/123", "abab",
+			false,
+		},
+		{"r12 error #1", "{r01}/r12/{r20:123}", "", "", true},
+		{"r12 error #2", "https:///{r01}/r12/{r20:123}/", "", "", true},
+		{"empty path", "", "", "", true},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			var r *Resource
+			var err error
+
+			if !c.wantErr {
+				err = root.SetPathHandlerFor("get put", c.path, h)
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			err = root.WrapPathHandlerOfMethodsInUse(c.path, mws...)
+			if (err != nil) != c.wantErr {
+				t.Fatalf(
+					"ResourceBase.WrapPathHandlerOfMethodsInUse() err = %v, wantErr = %t",
+					err,
+					c.wantErr,
+				)
+			}
+
+			if r != nil {
+				strb.Reset()
+				var w = httptest.NewRecorder()
+				var r = httptest.NewRequest("WRONG", c.requestPath, nil)
+
+				// Calls the unused methods' handler.
+				root.ServeHTTP(w, r)
+
+				if strb.String() != "" {
+					t.Fatalf(
+						"ResourceBase.WrapPathHandlerOfMethodsInUse() wrapped the unused methods' handler",
+					)
+				}
+
+				for _, m := range ms {
+					r = httptest.NewRequest(m, c.requestPath, nil)
+					root.ServeHTTP(w, r)
+
+					var str = strb.String()
+					if str != c.wantStr {
+						t.Fatalf(
+							"ResourceBase.WrapPathHandlerOfMethodsInUse() gotStr = %s, want = %s",
+							str,
+							c.wantStr,
+						)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestResourceBase_WrapPathhandlerOfUnusedMethods(t *testing.T) {
+	var root = NewDormantResource("/")
+	var h = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
+
+	var strb strings.Builder
+	var mws = []Middleware{
+		MiddlewareFunc(
+			func(handler http.Handler) http.Handler {
+				return http.HandlerFunc(
+					func(w http.ResponseWriter, r *http.Request) {
+						strb.WriteByte('b')
+						handler.ServeHTTP(w, r)
+					},
+				)
+			},
+		),
+		MiddlewareFunc(
+			func(handler http.Handler) http.Handler {
+				return http.HandlerFunc(
+					func(w http.ResponseWriter, r *http.Request) {
+						strb.WriteByte('a')
+						handler.ServeHTTP(w, r)
+					},
+				)
+			},
+		),
+	}
+
+	var cases = []struct {
+		name, path, requestPath, wantStr string
+		wantErr                          bool
+	}{
+		{"r00", "https:///r00", "/r00", "ab", false},
+		{"r01", "{r01}", "/r01", "ab", false},
+		{"r10", "/{r01}/{r10:abc}/", "/r01/abc/", "abab", false},
+		{"r11", "{r01}/{r11}", "/r01/r11", "abab", false},
+		{
+			// r12 won't be wrapped.
+			"r20", "https:///{r01}/r12/{r20:123}", "/r01/r12/123", "abab",
+			false,
+		},
+		{"r12 error #1", "{r01}/r12/{r20:123}", "", "", true},
+		{"r12 error #2", "https:///{r01}/r12/{r20:123}/", "", "", true},
+		{"empty path", "", "", "", true},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			var r *Resource
+			var err error
+
+			if !c.wantErr {
+				err = root.SetPathHandlerFor("get put", c.path, h)
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			err = root.WrapPathHandlerOfUnusedMethods(c.path, mws...)
+			if (err != nil) != c.wantErr {
+				t.Fatalf(
+					"ResourceBase.WrapPathHandlerOfUnusedMethods() err = %v, wantErr = %t",
+					err,
+					c.wantErr,
+				)
+			}
+
+			if r != nil {
+				strb.Reset()
+				var w = httptest.NewRecorder()
+				var r = httptest.NewRequest("GET", c.requestPath, nil)
+				root.ServeHTTP(w, r)
+
+				if strb.String() != "" {
+					t.Fatalf(
+						"ResourceBase.WrapPathHandlerOfUnusedMethods() wrapped the HTTP method handler",
+					)
+				}
+
+				r = httptest.NewRequest("WRONG", c.requestPath, nil)
+
+				// Calls the unused methods' handler.
+				root.ServeHTTP(w, r)
+
+				var str = strb.String()
+				if str != c.wantStr {
+					t.Fatalf(
+						"ResourceBase.WrapPathHandlerOfUnusedMethods() gotStr = %s, want = %s",
+						str,
+						c.wantStr,
+					)
+				}
+			}
+		})
+	}
+}
+
+func TestResourceBase_ConfigureSubtree(t *testing.T) {
+	var root = NewDormantResource("/")
+	var config = Config{RedirectInsecureRequest: true, HandleThePathAsIs: true}
+
+	var cases = []struct {
+		name, path, pathToCheck string
+	}{
+		{"r00", "https:///r00", "https:///r00/"},
+		{"r10 #1", "/r00/{r10}/", "https:///r00/{r10}"},
+		{"r01", "{r01}", "https:///{r01}/"},
+		{"r10", "/{r01}/{r10:abc}/", "https:///{r01}/{r10:abc}"},
+		{"r11", "{r01}/{r11}", "https:///{r01}/{r11}/"},
+		{
+			"r20",
+			"https:///{r01}/r12/{r20:123}",
+			"https:///{r01}/r12/{r20:123}/",
+		},
+	}
+
+	for _, c := range cases {
+		var _, err = root.Resource(c.path)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	root.ConfigureSubtree(config)
+
+	// Because the RedirectInsecureRequest and HandleThePathAsIs are true, the
+	// returned config's Secure, LeniencyOnTslash and LeniencyOnUncleanPath
+	// fields will be true too.
+	config.Secure = true
+	config.LeniencyOnTslash = true
+	config.LeniencyOnUncleanPath = true
+
+	{
+		var r, err = root.RegisteredResource("https:///{r01}/r12")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if r == nil {
+			t.Fatal(ErrNonExistentResource)
+		}
+
+		var gotConfig = r.Config()
+		if gotConfig != config {
+			t.Fatalf(
+				"ResourceBase.ConfigureSubtree has failed. Got config = %v, want = %v",
+				gotConfig,
+				config,
+			)
+		}
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			var r, err = root.RegisteredResource(c.pathToCheck)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if r == nil {
+				t.Fatal(ErrNonExistentResource)
+			}
+
+			if r.Config() != config {
+				t.Fatalf("ResourceBase.ConfigureSubtree() has failed")
+			}
+		})
 	}
 }
 
