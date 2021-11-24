@@ -151,8 +151,8 @@ func (ro *Router) registeredHost(
 // host is set to true when the URL template contains only a host template,
 // even if that host doesn't exist.
 //
-// Scheme and tslash properties of the host or resource are compared with
-// the values given in the URL template. If there is a difference, function
+// Scheme and trailing slash properties of the host or resource are compared
+// with the values given in the URL template. If there is a difference, function
 // returns an error.
 func (ro *Router) registered_Resource(urlTmplStr string) (
 	_r _Resource, host bool, err error,
@@ -219,6 +219,8 @@ func (ro *Router) registered_Resource(urlTmplStr string) (
 		if err != nil {
 			return nil, false, newError("<- %w", err)
 		}
+	} else {
+		return nil, host, nil
 	}
 
 	return _r, host, nil
@@ -226,15 +228,47 @@ func (ro *Router) registered_Resource(urlTmplStr string) (
 
 // -------------------------
 
+// ConfigureURL configures the existing host or resource. If the host or
+// resource was configured before, it is reconfigured.
+func (ro *Router) ConfigureURL(urlTmplStr string, config Config) error {
+	var _r, _, err = ro.registered_Resource(urlTmplStr)
+	if err != nil {
+		return newError("<- %w", err)
+	}
+
+	if _r == nil {
+		return newError("%w", ErrNonExistentResource)
+	}
+
+	_r.Configure(config)
+	return nil
+}
+
+// URLConfig returns the configuration of the existing host or resource.
+func (ro *Router) URLConfig(urlTmplStr string) (Config, error) {
+	var _r, _, err = ro.registered_Resource(urlTmplStr)
+	if err != nil {
+		return Config{}, newError("<- %w", err)
+	}
+
+	if _r == nil {
+		return Config{}, newError("%w", ErrNonExistentResource)
+	}
+
+	return _r.Config(), nil
+}
+
+// -------------------------
+
 // SetRequestHandler sets the request handlers for a host or resource from
 // the passed RequestHandler. If the host or resource doesn't exist, the
 // function creates them. The host or resource keeps the RequestHandler for
-// futre retrieval. Existing handlers of the host or resource are discarded.
+// future retrieval. Existing handlers of the host or resource are discarded.
 //
-// Scheme and tslash property values in the URL template must be compatible
-// with the existing host or resource's properties, otherwise the function
-// returns an error. Newly created host or resource is configured with the
-// values in the URL template.
+// Scheme and trailing slash property values in the URL template must be
+// compatible with the existing host or resource's properties, otherwise the
+// function returns an error. A newly created host or resource is configured
+// with the values in the URL template.
 func (ro *Router) SetRequestHandlerFor(
 	urlTmplStr string,
 	rh RequestHandler,
@@ -256,8 +290,9 @@ func (ro *Router) SetRequestHandlerFor(
 // If the host or resource doesn't exist or they were not created from a
 // RequestHandler or they have no RequestHandler set, nil is returned.
 //
-// Scheme and tslash property values in the URL template must be compatible with
-// the host or resource's properties, otherwise the function returns an error.
+// Scheme and trailing slash property values in the URL template must be
+// compatible with the host or resource's properties, otherwise the function
+// returns an error.
 func (ro *Router) RequestHandlerOf(urlTmplStr string) (RequestHandler, error) {
 	var _r, _, err = ro.registered_Resource(urlTmplStr)
 	if err != nil {
@@ -276,10 +311,10 @@ func (ro *Router) RequestHandlerOf(urlTmplStr string) (RequestHandler, error) {
 // SetHandlerFor sets the HTTP methods' handler for a host or resource.
 // If the host or resource doesn't exist, the function creates them.
 //
-// Scheme and tslash property values in the URL template must be compatible
-// with the existing host or resource's properties, otherwise the function
-// returns an error. Newly created host or resource is configured with the
-// values in the URL template.
+// Scheme and trailing slash property values in the URL template must be
+// compatible with the existing host or resource's properties, otherwise the
+// function returns an error. A newly created host or resource is configured
+// with the values in the URL template.
 func (ro *Router) SetHandlerFor(
 	methods string,
 	urlTmplStr string,
@@ -301,10 +336,10 @@ func (ro *Router) SetHandlerFor(
 // SetHandlerFuncFor sets the HTTP methods' handler function for a host or
 // resource. If the host or resource doesn't exist, the function creates them.
 //
-// Scheme and tslash property values in the URL template must be compatible
-// with the existing host or resource's properties, otherwise the function
-// returns an error. Newly created host or resource is configured with the
-// values in the URL template.
+// Scheme and trailing slash property values in the URL template must be
+// compatible with the existing host or resource's properties, otherwise the
+// function returns an error. A newly created host or resource is configured
+// with the values in the URL template.
 func (ro *Router) SetHandlerFuncFor(
 	methods string,
 	urlTmplStr string,
@@ -320,8 +355,9 @@ func (ro *Router) SetHandlerFuncFor(
 // HandlerOf returns the HTTP method's handler of the host or resource.
 // If the host or resource doesn't exist, the function returns nil.
 //
-// Scheme and tslash property values in the URL template must be compatible with
-// the host or resource's properties, otherwise the function returns an error.
+// Scheme and trailing slash property values in the URL template must be
+// compatible with the host or resource's properties, otherwise the function
+// returns an error.
 func (ro *Router) HandlerOf(method string, urlTmplStr string) (
 	http.Handler,
 	error,
@@ -342,10 +378,10 @@ func (ro *Router) HandlerOf(method string, urlTmplStr string) (
 // host or resource. If the host or resource doesn't exist, the function
 // creates them.
 //
-// Scheme and tslash property values in the URL template must be compatible
-// with the existing host or resource's properties, otherwise the function
-// returns an error. Newly created host or resource is configured with the
-// values in the URL template.
+// Scheme and trailing slash property values in the URL template must be
+// compatible with the existing host or resource's properties, otherwise the
+// function returns an error. A newly created host or resource is configured
+// with the values in the URL template.
 func (ro *Router) SetHandlerForUnusedMethods(
 	urlTmplStr string,
 	handler http.Handler,
@@ -366,10 +402,10 @@ func (ro *Router) SetHandlerForUnusedMethods(
 // function for a host or resource. If the host or resource doesn't exist,
 // the function creates them.
 //
-// Scheme and tslash property values in the URL template must be compatible
-// with the existing host or resource's properties, otherwise the function
-// returns an error. Newly created host or resource is configured with the
-// values in the URL template.
+// Scheme and trailing slash property values in the URL template must be
+// compatible with the existing host or resource's properties, otherwise the
+// function returns an error. Newly created host or resource is configured with
+// the values in the URL template.
 func (ro *Router) SetHandlerFuncForUnusedMethods(
 	urlTmplStr string,
 	handlerFunc http.HandlerFunc,
@@ -384,8 +420,9 @@ func (ro *Router) SetHandlerFuncForUnusedMethods(
 // HandlerOfUnusedMethods returns the unused HTTP methods' handler of the host
 // or resource. If the host or resource doesn't exist, the function returns nil.
 //
-// Scheme and tslash property values in the URL template must be compatible with
-// the host or resource's properties, otherwise the function returns an error.
+// Scheme and trailing slash property values in the URL template must be
+// compatible with the host or resource's properties, otherwise the function
+// returns an error.
 func (ro *Router) HandlerOfUnusedMethods(urlTmplStr string) (
 	http.Handler,
 	error,
@@ -400,6 +437,32 @@ func (ro *Router) HandlerOfUnusedMethods(urlTmplStr string) (
 	}
 
 	return nil, nil
+}
+
+// WrapURL wraps the HTTP handler of the host or resource. Handler is wrapped
+// in the middlewares' passed order. If the host or resource doesn't exist,
+// error is returned.
+func (ro *Router) WrapURL(urlTmplStr string, middlewares ...Middleware) error {
+	var r, rIsHost, err = ro.registered_Resource(urlTmplStr)
+	if err != nil {
+		return newError("<- %w", err)
+	}
+
+	if r != nil {
+		if err = r.WrapWith(middlewares...); err != nil {
+			return newError("<- %w", err)
+		}
+
+		return nil
+	}
+
+	if rIsHost {
+		err = ErrNonExistentHost
+	} else {
+		err = ErrNonExistentResource
+	}
+
+	return newError("%w %q", err, urlTmplStr)
 }
 
 // WrapHandlerOf wraps the handlers of the HTTP methods of the host or resource.
@@ -1414,6 +1477,19 @@ func (ro *Router) WrapWith(mws ...Middleware) error {
 	}
 
 	return nil
+}
+
+// -------------------------
+
+// ConfigureAll configures all the host and resources with the config.
+func (ro *Router) ConfigureAll(config Config) {
+	traverseAndCall(
+		ro._Resources(),
+		func(_r _Resource) error {
+			_r.Configure(config)
+			return nil
+		},
+	)
 }
 
 // -------------------------

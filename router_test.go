@@ -14,7 +14,7 @@ import (
 	"testing"
 )
 
-func TestRouter_resource(t *testing.T) {
+func TestRouter__Resource(t *testing.T) {
 	var (
 		ro  = NewRouter()
 		h0  = NewDormantHost("example.com")
@@ -151,7 +151,7 @@ func TestRouter_resource(t *testing.T) {
 	}
 }
 
-func TestRouter_registeredResource(t *testing.T) {
+func TestRouter_registered_Resource(t *testing.T) {
 	var (
 		ro  = NewRouter()
 		h0  = NewDormantHost("example.com")
@@ -241,6 +241,165 @@ func TestRouter_registeredResource(t *testing.T) {
 	}
 }
 
+func TestRouter_ConfigureURL(t *testing.T) {
+	var ro = NewRouter()
+	var config = Config{
+		RedirectInsecureRequest:      true,
+		Tslash:                       true,
+		DropRequestOnUnmatchedTslash: true,
+	}
+
+	var wantConfig = config
+	wantConfig.Secure = true
+
+	var cases = []struct {
+		name, url string
+		wantErr   bool
+	}{
+		{"host #1", "https://example.com", false},
+		{
+			"host #1 r00",
+			"http://example.com/{r00:abc}",
+			false,
+		},
+		{
+			"host #2 r10",
+			"http://example2.com/r00/{r10}/",
+			false,
+		},
+		{"r00", "r00", false},
+		{"r10", "https:///r00/{r10:abc}", false},
+		{
+			"r20",
+			"/r00/{r10:abc}/{r20}/",
+			false,
+		},
+		{"r11", "/r00/r11", false},
+		{"host #1 error", "http://example.com", true},
+		{"host #2 r10 error", "http://example2.com/r00/{r10}", true},
+		{"r10 error", "/r00/{r10:abc}", true},
+		{"r20 error", "/r00/{r10:abc}/{r20}", true},
+		{"non-existent", "/r00/{r12}", true},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			var _r _Resource
+			var err error
+
+			if !c.wantErr {
+				_r, err = ro._Resource(c.url)
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			err = ro.ConfigureURL(c.url, config)
+			if (err != nil) != c.wantErr {
+				t.Fatalf(
+					"Router.ConfigureURL() = %v, wantErr = %t",
+					err,
+					c.wantErr,
+				)
+			}
+
+			if _r != nil {
+				var _rConfig = _r.Config()
+				if _rConfig != wantConfig {
+					t.Fatalf(
+						"Router.ConfigurePath() config = %v, want = %v",
+						_rConfig,
+						wantConfig,
+					)
+				}
+			}
+		})
+	}
+}
+
+func TestRouter_URLConfig(t *testing.T) {
+	var ro = NewRouter()
+	var config = Config{
+		RedirectInsecureRequest:      true,
+		Tslash:                       true,
+		DropRequestOnUnmatchedTslash: true,
+	}
+
+	var wantConfig = config
+	wantConfig.Secure = true
+
+	var cases = []struct {
+		name, url, urlToCheck string
+		wantErr               bool
+	}{
+		{"host #1", "https://example.com", "https://example.com/", false},
+		{
+			"host #1 r00",
+			"http://example.com/{r00:abc}",
+			"https://example.com/{r00:abc}/",
+			false,
+		},
+		{
+			"host #2 r10",
+			"http://example2.com/r00/{r10}/",
+			"https://example2.com/r00/{r10}/",
+			false,
+		},
+		{"r00", "r00", "https:///r00/", false},
+		{"r10", "https:///r00/{r10:abc}", "https:///r00/{r10:abc}/", false},
+		{
+			"r20",
+			"/r00/{r10:abc}/{r20}/",
+			"https:///r00/{r10:abc}/{r20}/",
+			false,
+		},
+		{"r11", "/r00/r11", "https:///r00/r11/", false},
+		{"host #1 error", "", "http://example.com", true},
+		{"host #2 r10 error", "", "http://example2.com/r00/{r10}", true},
+		{"r10 error", "", "/r00/{r10:abc}", true},
+		{"r20 error", "", "/r00/{r10:abc}/{r20}", true},
+		{"non-existent", "", "/r00/{r12}", true},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			var err error
+			if !c.wantErr {
+				_, err = ro._Resource(c.url)
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				err = ro.ConfigureURL(c.url, config)
+				if (err != nil) != c.wantErr {
+					t.Fatal(err)
+				}
+			}
+
+			var _rConfig Config
+			_rConfig, err = ro.URLConfig(c.urlToCheck)
+			if (err != nil) != c.wantErr {
+				t.Fatalf(
+					"Router.URLConfig() = %v, wantErr = %t",
+					err,
+					c.wantErr,
+				)
+			}
+
+			if !c.wantErr {
+				if _rConfig != wantConfig {
+					t.Fatalf(
+						"Router.URLConfig() = %v, want = %v",
+						_rConfig,
+						wantConfig,
+					)
+				}
+			}
+		})
+	}
+}
+
+// rhType is usef in other test files too.
 type rhType struct{}
 
 func (rht *rhType) HandleGet(w http.ResponseWriter, r *http.Request)          {}
@@ -951,6 +1110,123 @@ func TestRouter_HandlerOfUnusedMethods(t *testing.T) {
 	}
 }
 
+func TestRouter_WrapURL(t *testing.T) {
+	var ro = NewRouter()
+
+	var strb strings.Builder
+	var mws = []Middleware{
+		MiddlewareFunc(
+			func(handler http.Handler) http.Handler {
+				return http.HandlerFunc(
+					func(w http.ResponseWriter, r *http.Request) {
+						strb.WriteByte('b')
+						handler.ServeHTTP(w, r)
+					},
+				)
+			},
+		),
+		MiddlewareFunc(
+			func(handler http.Handler) http.Handler {
+				return http.HandlerFunc(
+					func(w http.ResponseWriter, r *http.Request) {
+						strb.WriteByte('a')
+						handler.ServeHTTP(w, r)
+					},
+				)
+			},
+		),
+	}
+
+	var cases = []struct {
+		name, url, requestURL, wantStr string
+		wantErr                        bool
+	}{
+		{
+			"example1.com",
+			"http://example1.com",
+			"http://example1.com",
+			"ab",
+			false,
+		},
+		{
+			"example1.com r10",
+			"https://example1.com/r00/{r10:abc}/",
+			"https://example1.com/r00/abc/",
+			"abab",
+			false,
+		},
+		{
+			"example1.com r11",
+			"http://example1.com/r00/{r11}",
+			"http://example1.com/r00/r11",
+			"abab",
+			false,
+		},
+		{
+			"example2.com r20",
+			"https://example2.com/r00/{r10:123}/r20",
+			"https://example2.com/r00/123/r20",
+			"ab",
+			false,
+		},
+		{"r00", "https:///r00", "/r00", "ab", false},
+		{"r01", "{r01}", "/r01", "ab", false},
+		{"r10", "/{r01}/{r10:abc}/", "/r01/abc/", "abab", false},
+		{"r11", "{r01}/{r11}", "/r01/r11", "abab", false},
+		{
+			"r20", "https:///{r01}/r12/{r20:123}", "/r01/r12/123", "abab",
+			false,
+		},
+		{
+			"example1.com r10",
+			"http://example1.com/r00/{r10:abc}/",
+			"",
+			"",
+			true,
+		},
+		{"r12 error #1", "{r01}/r12/{r20:123}", "", "", true},
+		{"r12 error #2", "https:///{r01}/r12/{r20:123}/", "", "", true},
+		{"empty URL", "", "", "", true},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			var err error
+
+			if !c.wantErr {
+				_, err = ro._Resource(c.url)
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			err = ro.WrapURL(c.url, mws...)
+			if (err != nil) != c.wantErr {
+				t.Fatalf(
+					"Router.WrapURL() err = %v, wantErr = %t",
+					err,
+					c.wantErr,
+				)
+			}
+
+			if !c.wantErr {
+				strb.Reset()
+				var w = httptest.NewRecorder()
+				var r = httptest.NewRequest("GET", c.requestURL, nil)
+				ro.ServeHTTP(w, r)
+
+				var str = strb.String()
+				if str != c.wantStr {
+					t.Fatalf("Router.WrapURL() gotStr = %s, want = %s",
+						str,
+						c.wantStr,
+					)
+				}
+			}
+		})
+	}
+}
+
 func TestRouter_WrapHandlerOf(t *testing.T) {
 	var (
 		ro      = NewRouter()
@@ -1542,7 +1818,7 @@ func TestRouter_WrapHandlerOfUnusedMethods(t *testing.T) {
 	}
 }
 
-func TestRouterHostByTemplate(t *testing.T) {
+func TestRouter_hostWithTemplate(t *testing.T) {
 	var (
 		ro    = NewRouter()
 		host1 = NewDormantHost("example.com")
@@ -1805,7 +2081,7 @@ func TestRouter_registerHost(t *testing.T) {
 	}
 }
 
-func TestRouterHost(t *testing.T) {
+func TestRouter_Host(t *testing.T) {
 	var (
 		ro      = NewRouter()
 		static  = NewDormantHostUsingConfig("example.com", Config{Subtree: true})
@@ -1832,7 +2108,7 @@ func TestRouterHost(t *testing.T) {
 		{"static #3", "example.com/", nil, true},
 
 		{"pattern #1", "https://{sub:name}.example.com", pattern, false},
-		{"pattern #2", "https://{sub:name}.example.com/", nil, true},
+		{"pattern #2", "https://{sub:name}.example.com/", pattern, false},
 		{"pattern #3", "http://{sub:name}.example.com", nil, true},
 
 		{"wildcardSub #1", "http://{sub}.example.com/", wildcardSub, false},
@@ -1901,7 +2177,7 @@ func TestRouterHost(t *testing.T) {
 	}
 }
 
-func TestRouterHostUsingConfig(t *testing.T) {
+func TestRouter_HostUsingConfig(t *testing.T) {
 	var (
 		ro      = NewRouter()
 		static  = NewDormantHostUsingConfig("example.com", Config{Subtree: true})
@@ -1974,8 +2250,8 @@ func TestRouterHostUsingConfig(t *testing.T) {
 			"pattern #3",
 			"{sub:name}.example.com",
 			Config{HandleThePathAsIs: true},
-			nil,
-			true,
+			pattern,
+			false,
 		},
 		{
 			"pattern #4",
@@ -2229,7 +2505,7 @@ func TestRouter_RegisteredHost(t *testing.T) {
 	}
 }
 
-func TestRouterHostNamed(t *testing.T) {
+func TestRouter_HostNamed(t *testing.T) {
 	var ro = NewRouter()
 
 	var _, err = ro.Host("$host:example.com")
@@ -2277,7 +2553,7 @@ func TestRouterHostNamed(t *testing.T) {
 	}
 }
 
-func TestRouterHosts(t *testing.T) {
+func TestRouter_Hosts(t *testing.T) {
 	var (
 		ro     = NewRouter()
 		length = 5
@@ -2584,8 +2860,8 @@ func TestRouter_ResourceUsingConfig(t *testing.T) {
 			"pattern #3",
 			"{name:pattern}",
 			Config{HandleThePathAsIs: true},
-			nil,
-			true,
+			pattern,
+			false,
 		},
 		{"pattern #4", "{name:pattern}/", Config{Subtree: true}, nil, true},
 
@@ -2862,7 +3138,6 @@ func TestRouter_registerNewRoot(t *testing.T) {
 	}
 }
 
-// TODO: Check every test case.
 func TestRouter_RegisterResource(t *testing.T) {
 	var (
 		ro          = NewRouter()
@@ -3309,6 +3584,76 @@ func TestRouter_WrapWith(t *testing.T) {
 		t.Fatalf(
 			"Router.WrapWith() failed to wrap resource's httpHandler",
 		)
+	}
+}
+
+func TestRouter_ConfigureALL(t *testing.T) {
+	var ro = NewRouter()
+
+	var cases = []struct {
+		name, url, urlToCheck string
+	}{
+		{
+			"example1.com",
+			"http://example1.com",
+			"https://example1.com/",
+		},
+		{
+			"example1.com h1r10",
+			"https://example1.com/h1r00/{h1r10:abc}/",
+			"https://example1.com/h1r00/{h1r10:abc}/",
+		},
+		{
+			"example1.com h1r11",
+			"http://example1.com/h1r00/{h1r11}",
+			"https://example1.com/h1r00/{h1r11}/",
+		},
+		{
+			"example2.com h2r20",
+			"https://example2.com/h2r00/{h2r10:123}/h2r20",
+			"https://example2.com/h2r00/{h2r10:123}/h2r20/",
+		},
+		{"r00", "https:///r00", "https:///r00/"},
+		{"r01", "{r01}", "https:///{r01}/"},
+		{"r10", "/{r01}/{r10:abc}/", "https:///{r01}/{r10:abc}/"},
+		{"r11", "{r01}/{r11}", "https:///{r01}/{r11}/"},
+		{
+			"r20",
+			"https:///{r01}/r12/{r20:123}",
+			"https:///{r01}/r12/{r20:123}/",
+		},
+	}
+
+	var err error
+	var lc = len(cases)
+	for i := 0; i < lc; i++ {
+		_, err = ro._Resource(cases[i].url)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	var config = Config{
+		Subtree:                 true,
+		RedirectInsecureRequest: true,
+		Tslash:                  true,
+	}
+
+	ro.ConfigureAll(config)
+	config.Secure = true
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			var _r _Resource
+			_r, _, err = ro.registered_Resource(c.urlToCheck)
+			var _rConfig = _r.Config()
+			if _rConfig != config {
+				t.Fatalf("Router.ConfigureAll() config = %v, want = %v",
+					_rConfig,
+					config,
+				)
+			}
+		})
 	}
 }
 

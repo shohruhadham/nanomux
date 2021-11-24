@@ -625,7 +625,12 @@ func (c *_Context) Value(key interface{}) interface{} {
 func newError(description string, args ...interface{}) error {
 	if pc, _, _, ok := runtime.Caller(1); ok {
 		if fn := runtime.FuncForPC(pc); fn != nil {
-			return fmt.Errorf(fn.Name()+"() "+description, args...)
+			var strb strings.Builder
+			strb.WriteString(fn.Name())
+			strb.WriteString("() ")
+			strb.WriteString(description)
+
+			return fmt.Errorf(strb.String(), args...)
 		}
 	}
 
@@ -633,3 +638,40 @@ func newError(description string, args ...interface{}) error {
 }
 
 // --------------------------------------------------
+
+// traverseAndCall traverses all the _Resources in the passed _Resource trees
+// and calls the f on each _Resource.
+func traverseAndCall(rs []_Resource, f func(_Resource) error) error {
+	type node struct {
+		rs   []_Resource
+		next *node
+	}
+
+	var (
+		crs, irs []_Resource
+		lcrs     int
+		err      error
+	)
+
+	var n = &node{rs: rs}
+	var currentN = n
+	for currentN != nil {
+		crs, lcrs = currentN.rs, len(currentN.rs)
+		for i := 0; i < lcrs; i++ {
+			err = f(crs[i])
+			if err != nil {
+				return err
+			}
+
+			irs = crs[i]._Resources()
+			if irs != nil {
+				n.next = &node{rs: irs}
+				n = n.next
+			}
+		}
+
+		currentN = currentN.next
+	}
+
+	return nil
+}
