@@ -25,7 +25,7 @@ func createDummyResource(tmpl *Template) (*Resource, error) {
 	var rb = &Resource{}
 	rb.derived = rb
 	rb.tmpl = tmpl
-	rb.httpHandler = http.HandlerFunc(rb.handleOrPassRequest)
+	rb.segmentHandler = http.HandlerFunc(rb.handleOrPassRequest)
 	return rb, nil
 }
 
@@ -59,7 +59,7 @@ func createResource(
 
 	var cfs *_ConfigFlags
 	if config != nil {
-		config.Secure, config.Tslash = secure, tslash
+		config.Secure, config.TrailingSlash = secure, tslash
 		if config.RedirectInsecureRequest && !secure {
 			return nil, newError("%w", ErrConflictingSecurity)
 		}
@@ -91,7 +91,7 @@ func createResource(
 
 	r.derived = r
 	r.tmpl = tmpl
-	r.httpHandler = http.HandlerFunc(r.handleOrPassRequest)
+	r.segmentHandler = http.HandlerFunc(r.handleOrPassRequest)
 	return r, nil
 }
 
@@ -104,12 +104,12 @@ func createResource(
 // registered. When the resource is being registered by a router, the host and
 // path segment templates indicate where in the hierarchy it must be placed.
 // When the resource is being registered by a host, the host template is checked
-// for compatibility and the prefix path segment templates show where in the
-// hierearchy the resource must be placed under the host. When the resource
+// for compatibility, and the prefix path segment templates show where in the
+// hierarchy the resource must be placed under the host. When the resource
 // is being registered by another resource, the host and prefix path segment
 // templates are checked for compatibility with the registering resource's host
 // and corresponding prefix path segments. If there are remaining path segments
-// that comes below the registering resource, they show where in the hierarchy
+// that come below the registering resource, they show where in the hierarchy
 // the resource must be placed under the registering resource.
 func CreateDormantResource(urlTmplStr string) (*Resource, error) {
 	var r, err = createResource(urlTmplStr, nil, nil)
@@ -124,20 +124,20 @@ func CreateDormantResource(urlTmplStr string) (*Resource, error) {
 // request handlers) from the URL template.
 //
 // The resource is configured with the properties in the config as well as the
-// scheme and trailing slash property values of the URL template (config's
-// Secure and Tslash values are ignored and may not be set).
+// scheme and trailing slash property values of the URL template (the config's
+// Secure and TrailingSlash values are ignored and may not be set).
 //
 // When the URL template contains a host and/or prefix path segment templates,
 // the resource keeps them. Templates are used when the resource is being
 // registered. When the resource is being registered by a router, the host and
 // path segment templates indicate where in the hierarchy it must be placed.
 // When the resource is being registered by a host, the host template is checked
-// for compatibility and the prefix path segment templates show where in the
-// hierearchy the resource must be placed under the host. When the resource
+// for compatibility, and the prefix path segment templates show where in the
+// hierarchy the resource must be placed under the host. When the resource
 // is being registered by another resource, the host and prefix path segment
 // templates are checked for compatibility with the registering resource's host
 // and corresponding prefix path segments. If there are remaining path segments
-// that comes below the registering resource, they show where in the hierarchy
+// that come below the registering resource, they show where in the hierarchy
 // the resource must be placed under the registering resource.
 func CreateDormantResourceUsingConfig(
 	urlTmplStr string,
@@ -158,11 +158,11 @@ func CreateDormantResourceUsingConfig(
 //
 // The second argument must be an instance of a type with methods to handle
 // the HTTP requests. Methods must have the signature of the http.HandlerFunc
-// and start with 'Handle' prefix. Remaining part of the methods' name is
-// considered as an HTTP method. For example, HandleGet, HandleCustom are
-// considered as the handlers of the GET and CUSTOM HTTP methods respectively.
-// If the second argument has HandleUnusedMethod then it's used as the handler
-// of the unused methods.
+// and must start with the "Handle" prefix. The remaining part of the method's
+// name is considered an HTTP method. For example, HandleGet and HandleCustom
+// are considered the handlers of the GET and CUSTOM HTTP methods,
+// respectively. If the value of the RequestHandler has a HandleUnusedMethod
+// method, then it's used as the handler of the unused methods.
 //
 // Example:
 // 	type ExampleResource struct{}
@@ -185,12 +185,12 @@ func CreateDormantResourceUsingConfig(
 // resource is being registered. When the resource is being registered by
 // a router, the host and path segment templates indicate where in the
 // hierarchy it must be placed. When the resource is being registered by a
-// host, the host template is checked for compatibility and the prefix path
-// segment templates show where in the hierearchy the resource must be placed
+// host, the host template is checked for compatibility, and the prefix path
+// segment templates show where in the hierarchy the resource must be placed
 // under the host. When the resource is being registered by another resource,
 // the host and prefix path segment templates are checked for compatibility
 // with the registering resource's host and corresponding prefix path segments.
-// If there are remaining path segments that comes below the registering
+// If there are remaining path segments that come below the registering
 // resource, they show where in the hierarchy the resource must be placed under
 // the registering resource.
 func CreateResource(
@@ -211,16 +211,16 @@ func CreateResource(
 
 // CreateResourceUsingConfig returns a newly created resource. The resource
 // is configured with the properties in the config as well as the scheme and
-// trailing slash property values of the URL template (config's Secure and
-// Tslash values are ignored and may not be set).
+// trailing slash property values of the URL template (the config's Secure
+// and TrailingSlash values are ignored and may not be set).
 //
 // The second argument must be an instance of a type with methods to handle
 // the HTTP requests. Methods must have the signature of the http.HandlerFunc
-// and start with 'Handle' prefix. Remaining part of the methods' name is
-// considered as an HTTP method. For example, HandleGet, HandleCustom are
-// considered as the handlers of the GET and CUSTOM HTTP methods respectively.
-// If the second argument has HandleUnusedMethod then it's used as the handler
-// of the unused methods.
+// and must start with the "Handle" prefix. The remaining part of the method's
+// name is considered an HTTP method. For example, HandleGet and HandleCustom
+// are considered the handlers of the GET and CUSTOM HTTP methods,
+// respectively. If the value of the RequestHandler has a HandleUnusedMethod
+// method, then it's used as the handler of the unused methods.
 //
 // Example:
 // 	type ExampleResource struct{}
@@ -244,12 +244,12 @@ func CreateResource(
 // resource is being registered. When the resource is being registered by
 // a router, the host and path segment templates indicate where in the
 // hierarchy it must be placed. When the resource is being registered by a
-// host, the host template is checked for compatibility and the prefix path
-// segment templates show where in the hierearchy the resource must be placed
+// host, the host template is checked for compatibility, and the prefix path
+// segment templates show where in the hierarchy the resource must be placed
 // under the host. When the resource is being registered by another resource,
 // the host and prefix path segment templates are checked for compatibility
 // with the registering resource's host and corresponding prefix path segments.
-// If there are remaining path segments that comes below the registering
+// If there are remaining path segments that come below the registering
 // resource, they show where in the hierarchy the resource must be placed under
 // the registering resource.
 func CreateResourceUsingConfig(
@@ -283,12 +283,12 @@ func CreateResourceUsingConfig(
 // registered. When the resource is being registered by a router, the host and
 // path segment templates indicate where in the hierarchy it must be placed.
 // When the resource is being registered by a host, the host template is checked
-// for compatibility and the prefix path segment templates show where in the
-// hierearchy the resource must be placed under the host. When the resource
+// for compatibility, and the prefix path segment templates show where in the
+// hierarchy the resource must be placed under the host. When the resource
 // is being registered by another resource, the host and prefix path segment
 // templates are checked for compatibility with the registering resource's host
 // and corresponding prefix path segments. If there are remaining path segments
-// that comes below the registering resource, they show where in the hierarchy
+// that come below the registering resource, they show where in the hierarchy
 // the resource must be placed under the registering resource.
 func NewDormantResource(urlTmplStr string) *Resource {
 	var r, err = CreateDormantResource(urlTmplStr)
@@ -302,23 +302,23 @@ func NewDormantResource(urlTmplStr string) *Resource {
 // NewDormantResourceUsingConfig returns a new dormant resource (without
 // request handlers) from the URL template.
 // Unlike CreateDormantResourceUsingConfig, NewDormantResourceUsingConfig
-// panics on error.
+// panics on an error.
 //
 // The resource is configured with the properties in the config as well as
-// the scheme and trailing slash property values of the URL template (config's
-// Secure and Tslash values are ignored and may not be set).
+// the scheme and trailing slash property values of the URL template (the
+// config's Secure and TrailingSlash values are ignored and may not be set).
 //
 // When the URL template contains a host and/or prefix path segment templates,
 // the resource keeps them. Templates are used when the resource is being
 // registered. When the resource is being registered by a router, the host and
 // path segment templates indicate where in the hierarchy it must be placed.
 // When the resource is being registered by a host, the host template is checked
-// for compatibility and the prefix path segment templates show where in the
-// hierearchy the resource must be placed under the host. When the resource
+// for compatibility, and the prefix path segment templates show where in the
+// hierarchy the resource must be placed under the host. When the resource
 // is being registered by another resource, the host and prefix path segment
 // templates are checked for compatibility with the registering resource's host
 // and corresponding prefix path segments. If there are remaining path segments
-// that comes below the registering resource, they show where in the hierarchy
+// that come below the registering resource, they show where in the hierarchy
 // the resource must be placed under the registering resource.
 func NewDormantResourceUsingConfig(urlTmplStr string, config Config) *Resource {
 	var r, err = CreateDormantResourceUsingConfig(urlTmplStr, config)
@@ -330,18 +330,18 @@ func NewDormantResourceUsingConfig(urlTmplStr string, config Config) *Resource {
 }
 
 // NewResource returns a newly created resource. Unlike CreateResource,
-// NewResource panics on error.
+// NewResource panics on an error.
 //
 // The first argument URL template's scheme and trailing slash property values
 // are used to configure the new ResourceBase instance.
 //
 // The second argument must be an instance of a type with methods to handle
 // the HTTP requests. Methods must have the signature of the http.HandlerFunc
-// and start with 'Handle' prefix. Remaining part of the methods' name is
-// considered as an HTTP method. For example, HandleGet, HandleCustom are
-// considered as the handlers of the GET and CUSTOM HTTP methods respectively.
-// If the second argument has HandleUnusedMethod then it's used as the handler
-// of the unused methods.
+// and must start with the "Handle" prefix. The remaining part of the method's
+// name is considered an HTTP method. For example, HandleGet and HandleCustom
+// are considered the handlers of the GET and CUSTOM HTTP methods,
+// respectively. If the value of the RequestHandler has a HandleUnusedMethod
+// method, then it's used as the handler of the unused methods.
 //
 // Example:
 // 	type ExampleResource struct{}
@@ -364,12 +364,12 @@ func NewDormantResourceUsingConfig(urlTmplStr string, config Config) *Resource {
 // resource is being registered. When the resource is being registered by
 // a router, the host and path segment templates indicate where in the
 // hierarchy it must be placed. When the resource is being registered by a
-// host, the host template is checked for compatibility and the prefix path
-// segment templates show where in the hierearchy the resource must be placed
+// host, the host template is checked for compatibility, and the prefix path
+// segment templates show where in the hierarchy the resource must be placed
 // under the host. When the resource is being registered by another resource,
 // the host and prefix path segment templates are checked for compatibility
 // with the registering resource's host and corresponding prefix path segments.
-// If there are remaining path segments that comes below the registering
+// If there are remaining path segments that come below the registering
 // resource, they show where in the hierarchy the resource must be placed under
 // the registering resource.
 func NewResource(urlTmplStr string, rh RequestHandler) *Resource {
@@ -382,19 +382,20 @@ func NewResource(urlTmplStr string, rh RequestHandler) *Resource {
 }
 
 // NewResourceUsingConfig returns a newly created resource. Unlike
-// CreateResourceUsingConfig, NewResourceUsingConfig panics on error.
+// CreateResourceUsingConfig, NewResourceUsingConfig panics on an error.
 //
 // The new ResourceBase instance is configured with the properties in the
 // config as well as the scheme and trailing slash property values of the URL
-// template (config's Secure and Tslash values are ignored and may not be set).
+// template (the config's Secure and TrailingSlash values are ignored and may
+// not be set).
 //
 // The second argument must be an instance of a type with methods to handle
 // the HTTP requests. Methods must have the signature of the http.HandlerFunc
-// and start with 'Handle' prefix. Remaining part of the methods' name is
-// considered as an HTTP method. For example, HandleGet, HandleCustom are
-// considered as the handlers of the GET and CUSTOM HTTP methods respectively.
-// If the second argument has HandleUnusedMethod then it's used as the handler
-// of the unused methods.
+// and must start with the "Handle" prefix. The remaining part of the method's
+// name is considered an HTTP method. For example, HandleGet and HandleCustom
+// are considered the handlers of the GET and CUSTOM HTTP methods,
+// respectively. If the value of the RequestHandler has a HandleUnusedMethod
+// method, then it's used as the handler of the unused methods.
 //
 // Example:
 // 	type ExampleResource struct{}
@@ -418,12 +419,12 @@ func NewResource(urlTmplStr string, rh RequestHandler) *Resource {
 // resource is being registered. When the resource is being registered by
 // a router, the host and path segment templates indicate where in the
 // hierarchy it must be placed. When the resource is being registered by a
-// host, the host template is checked for compatibility and the prefix path
-// segment templates show where in the hierearchy the resource must be placed
+// host, the host template is checked for compatibility, and the prefix path
+// segment templates show where in the hierarchy the resource must be placed
 // under the host. When the resource is being registered by another resource,
 // the host and prefix path segment templates are checked for compatibility
 // with the registering resource's host and corresponding prefix path segments.
-// If there are remaining path segments that comes below the registering
+// If there are remaining path segments that come below the registering
 // resource, they show where in the hierarchy the resource must be placed under
 // the registering resource.
 func NewResourceUsingConfig(
@@ -468,7 +469,7 @@ func (rb *Resource) urlTmpl() *URLTmpl {
 
 // -------------------------
 
-// Host returns the host of the resource, if the resource was registered in the
+// Host returns the host of the resource if the resource is registered in the
 // hierarchy under the host.
 func (rb *Resource) Host() *Host {
 	for p := rb.papa; p != nil; p = p.parent() {
@@ -515,7 +516,7 @@ func (rb *Resource) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var ps = rd.nextPathSegment() // First call returns '/'.
 	if rb.tmpl.IsStatic() && rb.tmpl.Content() == ps {
 		rd.r = rb.derived
-		rb.httpHandler.ServeHTTP(w, r)
+		rb.segmentHandler.ServeHTTP(w, r)
 		return
 	}
 
@@ -523,11 +524,11 @@ func (rb *Resource) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if len(ps) > 0 {
 		if rb.tmpl.IsStatic() && rb.tmpl.Content() == ps {
 			rd.r = rb.derived
-			rb.httpHandler.ServeHTTP(w, r)
+			rb.segmentHandler.ServeHTTP(w, r)
 			return
 		}
 
-		if rb.tmpl.IsWildCard() {
+		if rb.tmpl.IsWildcard() {
 			if rd.pathValues == nil {
 				rd.pathValues = make(PathValues)
 			}
@@ -535,7 +536,7 @@ func (rb *Resource) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			var _, value = rb.tmpl.Match(ps)
 			rd.pathValues[rb.Name()] = value
 			rd.r = rb.derived
-			rb.httpHandler.ServeHTTP(w, r)
+			rb.segmentHandler.ServeHTTP(w, r)
 			return
 		}
 
@@ -546,7 +547,7 @@ func (rb *Resource) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 			rd.pathValues[rb.Name()] = values
 			rd.r = rb.derived
-			rb.httpHandler.ServeHTTP(w, r)
+			rb.segmentHandler.ServeHTTP(w, r)
 			return
 		}
 	}
@@ -554,29 +555,29 @@ func (rb *Resource) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	notFoundResourceHandler.ServeHTTP(w, r)
 }
 
-// handleOrPassRequest is the HTTP request handler of the resource. It handles
+// handleOrPassRequest is the segment handler of the resource. It handles
 // the request if the resource's template matches the last path segment of the
 // request's URL.
 //
-// If the resoruce was configured to respond only when it's used under the
-// HTTPs, but instead, is used under the HTTP, it drops the request, unless it
+// If the resource was configured to respond only when it's used under the
+// HTTPs, but instead it is used under the HTTP, it drops the request, unless it
 // was configured to redirect insecure requests to the URL with the HTTPs.
 //
-// If the resource was configured to drop a request on unmatched presence or
-// absence of the tslash, function drops the request instead of redirecting it
-// to a URL with the matching tslash.
+// If the resource was configured to drop a request on the unmatched presence
+// or absence of the trailing slash, the method drops the request instead of
+// redirecting it to a URL with the matching trailing slash.
 //
 // When the request's URL contains path segments below the resource's path
-// segment, function tries to pass the request to a child resource that matches
-// the following path segment. When there is no matching child resource and the
-// resource was configured as a subtree, request is handled by the resource
-// itself, otherwise "404 Not Found" status code is returned.
+// segment, the method tries to pass the request to a child resource that
+// matches the following path segment. When there is no matching child resource
+// and the resource was configured as a subtree handler, the request is handled
+// by the resource itself, otherwise a "404 Not Found" status code is returned.
 func (rb *Resource) handleOrPassRequest(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
 	var rd = r.Context().Value(routingDataKey).(*_RoutingData)
-	if rb.IsSubtree() {
+	if rb.IsSubtreeHandler() {
 		// If there is no resource in the hierarchy below that matches the
 		// request's path, this resource handles the request.
 		// subtreeExists indicates this to the resources below in the hierarchy,
@@ -611,9 +612,9 @@ func (rb *Resource) handleOrPassRequest(
 			newURL.Path = rd.path
 		}
 
-		if !rb.IsLenientOnTslash() {
-			if rb.HasTslash() && !rd.pathHasTslash() {
-				if rb.DropsRequestOnUnmatchedTslash() {
+		if !rb.IsLenientOnTrailingSlash() {
+			if rb.HasTrailingSlash() && !rd.pathHasTrailingSlash() {
+				if rb.IsStrictOnTrailingSlash() {
 					notFoundResourceHandler.ServeHTTP(w, r)
 					rd.handled = true
 					return
@@ -624,8 +625,8 @@ func (rb *Resource) handleOrPassRequest(
 				}
 
 				newURL.Path += "/"
-			} else if !rb.HasTslash() && rd.pathHasTslash() {
-				if rb.DropsRequestOnUnmatchedTslash() {
+			} else if !rb.HasTrailingSlash() && rd.pathHasTrailingSlash() {
+				if rb.IsStrictOnTrailingSlash() {
 					notFoundResourceHandler.ServeHTTP(w, r)
 					rd.handled = true
 					return
@@ -654,7 +655,7 @@ func (rb *Resource) handleOrPassRequest(
 		return
 	}
 
-	if rb.IsSubtree() {
+	if rb.IsSubtreeHandler() {
 		rd.r = rb.derived
 		if !rb.canHandleRequest() {
 			notFoundResourceHandler.ServeHTTP(w, r)
@@ -688,7 +689,7 @@ func (rb *Resource) handleOrPassRequest(
 			return
 		}
 
-		// At this point request may have been modified by subresources.
+		// At this point, the request may have been modified by subresources.
 		rb.handleRequest(w, r)
 		rd.handled = true
 	}

@@ -23,14 +23,14 @@ func createDummyHost(tmpl *Template) (*Host, error) {
 		return nil, newError("%w", ErrNilArgument)
 	}
 
-	if tmpl.IsWildCard() {
-		return nil, newError("%w", ErrWildCardHostTemplate)
+	if tmpl.IsWildcard() {
+		return nil, newError("%w", ErrWildcardHostTemplate)
 	}
 
 	var h = &Host{}
 	h.derived = h
 	h.tmpl = tmpl
-	h.httpHandler = http.HandlerFunc(h.handleOrPassRequest)
+	h.segmentHandler = http.HandlerFunc(h.handleOrPassRequest)
 	return h, nil
 }
 
@@ -52,13 +52,13 @@ func createHost(
 		return nil, newError("%w", err)
 	}
 
-	if tmpl.IsWildCard() {
-		return nil, newError("%w", ErrWildCardHostTemplate)
+	if tmpl.IsWildcard() {
+		return nil, newError("%w", ErrWildcardHostTemplate)
 	}
 
 	var cfs *_ConfigFlags
 	if config != nil {
-		config.Secure, config.Tslash = secure, tslash
+		config.Secure, config.TrailingSlash = secure, tslash
 		if config.RedirectInsecureRequest && !secure {
 			return nil, newError("%w", ErrConflictingSecurity)
 		}
@@ -86,13 +86,13 @@ func createHost(
 
 	h.derived = h
 	h.tmpl = tmpl
-	h.httpHandler = http.HandlerFunc(h.handleOrPassRequest)
+	h.segmentHandler = http.HandlerFunc(h.handleOrPassRequest)
 	return h, nil
 }
 
 // CreateDormantHost returns a new dormant host (without request handlers) from
 // the URL template. The template's scheme and trailing slash property values
-// are used to configure the host. The host's template must not be a wild card
+// are used to configure the host. The host's template must not be a wildcard
 // template.
 func CreateDormantHost(urlTmplStr string) (*Host, error) {
 	var h, err = createHost(urlTmplStr, nil, nil)
@@ -106,8 +106,8 @@ func CreateDormantHost(urlTmplStr string) (*Host, error) {
 // CreateDormantHostUsingConfig returns a new dormant host (without request
 // handlers) from the URL template. The host is configured with the properties
 // in the config as well as the scheme and trailing slash property values of
-// the URL template (config's Secure and Tslash values are ignored and may not
-// be set). The host's template must not be a wild card template.
+// the URL template (the config's Secure and TrailingSlash values are ignored
+// and may not be set). The host's template must not be a wildcard template.
 func CreateDormantHostUsingConfig(
 	urlTmplStr string,
 	config Config,
@@ -123,16 +123,16 @@ func CreateDormantHostUsingConfig(
 // CreateHost returns a newly created host.
 //
 // The first argument URL template's scheme and trailing slash property values
-// are used to configure the new host. The template must not be a wild card
+// are used to configure the new host. The template must not be a wildcard
 // template.
 //
 // The second argument must be an instance of a type with methods to handle
 // the HTTP requests. Methods must have the signature of the http.HandlerFunc
-// and start with 'Handle' prefix. Remaining part of the methods' name is
-// considered as an HTTP method. For example, HandleGet, HandleCustom are
-// considered as the handlers of the GET and CUSTOM HTTP methods respectively.
-// If the second argument has HandleUnusedMethod then it's used as the handler
-// of the unused methods.
+// and must start with the "Handle" prefix. The remaining part of the method's
+// name is considered an HTTP method. For example, HandleGet and HandleCustom
+// are considered the handlers of the GET and CUSTOM HTTP methods,
+// respectively. If the value of the RequestHandler has a HandleUnusedMethod
+// method, then it's used as the handler of the unused methods.
 //
 // Example:
 // 	type ExampleHost struct{}
@@ -158,16 +158,16 @@ func CreateHost(urlTmplStr string, rh RequestHandler) (*Host, error) {
 
 // CreateHost returns a newly created host. The host is configured with the
 // properties in the config as well as the scheme and trailing slash property
-// values of the URL template (config's Secure and Tslash values are ignored
-// and may not be set). The template must not be a wild card template.
+// values of the URL template (the config's Secure and TrailingSlash values are
+// ignored and may not be set). The template must not be a wildcard template.
 //
 // The second argument must be an instance of a type with methods to handle
 // the HTTP requests. Methods must have the signature of the http.HandlerFunc
-// and start with 'Handle' prefix. Remaining part of the methods' name is
-// considered as an HTTP method. For example, HandleGet, HandleCustom are
-// considered as the handlers of the GET and CUSTOM HTTP methods respectively.
-// If the second argument has HandleUnusedMethod then it's used as the handler
-// of the unused methods.
+// and must start with the "Handle" prefix. The remaining part of the method's
+// name is considered an HTTP method. For example, HandleGet and HandleCustom
+// are considered the handlers of the GET and CUSTOM HTTP methods,
+// respectively. If the value of the RequestHandler has a HandleUnusedMethod
+// method, then it's used as the handler of the unused methods.
 //
 // Example:
 // 	type ExampleHost struct{}
@@ -202,10 +202,11 @@ func CreateHostUsingConfig(
 // -------------------------
 
 // NewDormantHost returns a new dormant host (without request handlers) from
-// the URL template. Unlike CreateDormantHost, NewDormantHost panics on error.
+// the URL template. Unlike CreateDormantHost, NewDormantHost panics on an
+// error.
 //
 // The template's scheme and trailing slash property values are used to
-// configure the host. The host's template must not be a wild card template.
+// configure the host. The host's template must not be a wildcard template.
 func NewDormantHost(urlTmplStr string) *Host {
 	var h, err = CreateDormantHost(urlTmplStr)
 	if err != nil {
@@ -217,12 +218,12 @@ func NewDormantHost(urlTmplStr string) *Host {
 
 // NewDormantHostUsingConfig returns a new dormant host (without request
 // hanlders) from the URL template. Unlike CreateDormantHostUsingConfig,
-// NewDormantHostUsingConfig panics on error.
+// NewDormantHostUsingConfig panics on an error.
 //
 // The host is configured with the properties in the config as well as the
-// scheme and trailing slash property values of the URL template (config's
-// Secure and Tslash values are ignored and may not be set). The host's
-// template must not be a wild card template.
+// scheme and trailing slash property values of the URL template (the config's
+// Secure and TrailingSlash values are ignored and may not be set). The host's
+// template must not be a wildcard template.
 func NewDormantHostUsingConfig(urlTmplStr string, config Config) *Host {
 	var h, err = CreateDormantHostUsingConfig(urlTmplStr, config)
 	if err != nil {
@@ -233,19 +234,19 @@ func NewDormantHostUsingConfig(urlTmplStr string, config Config) *Host {
 }
 
 // NewHost returns a newly created host. Unlike CreateHost, NewHost panics on
-// error.
+// an error.
 //
 // The first argument URL template's scheme and trailing slash property values
-// are used to configure the new host. The template must not be a wild card
+// are used to configure the new host. The template must not be a wildcard
 // template.
 //
 // The second argument must be an instance of a type with methods to handle
 // the HTTP requests. Methods must have the signature of the http.HandlerFunc
-// and start with 'Handle' prefix. Remaining part of the methods' name is
-// considered as an HTTP method. For example, HandleGet, HandleCustom are
-// considered as the handlers of the GET and CUSTOM HTTP methods respectively.
-// If the second argument has HandleUnusedMethod then it's used as the handler
-// of the unused methods.
+// and must start with the "Handle" prefix. The remaining part of the method's
+// name is considered an HTTP method. For example, HandleGet and HandleCustom
+// are considered the handlers of the GET and CUSTOM HTTP methods,
+// respectively. If the value of the RequestHandler has a HandleUnusedMethod
+// method, then it's used as the handler of the unused methods.
 //
 // Example:
 // 	type ExampleHost struct{}
@@ -266,20 +267,20 @@ func NewHost(urlTmplStr string, rh RequestHandler) *Host {
 }
 
 // NewHostUsingConfig returns a newly created host. Unlike
-// CreateHostUsingConfig, NewHostUsingConfig panics on error.
+// CreateHostUsingConfig, NewHostUsingConfig panics on an error.
 //
 // The new host is configured with the properties in the config as well as
-// the scheme and trailing slash property values of the URL template (config's
-// Secure and Tslash values are ignored and may not be set). The template must
-// not be a wild card template.
+// the scheme and trailing slash property values of the URL template (the
+// config's Secure and TrailingSlash values are ignored and may not be set).
+// The template must not be a wildcard template.
 //
 // The second argument must be an instance of a type with methods to handle
 // the HTTP requests. Methods must have the signature of the http.HandlerFunc
-// and start with 'Handle' prefix. Remaining part of the methods' name is
-// considered as an HTTP method. For example, HandleGet, HandleCustom are
-// considered as the handlers of the GET and CUSTOM HTTP methods respectively.
-// If the second argument has HandleUnusedMethod then it's used as the handler
-// of the unused methods.
+// and must start with the "Handle" prefix. The remaining part of the method's
+// name is considered an HTTP method. For example, HandleGet and HandleCustom
+// are considered the handlers of the GET and CUSTOM HTTP methods,
+// respectively. If the value of the RequestHandler has a HandleUnusedMethod
+// method, then it's used as the handler of the unused methods.
 //
 // Example:
 // 	type ExampleHost struct{}
@@ -327,7 +328,7 @@ func (hb *Host) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		var tmpl = hb.Template()
 		if tmpl.IsStatic() && tmpl.Content() == host {
-			hb.httpHandler.ServeHTTP(w, r)
+			hb.segmentHandler.ServeHTTP(w, r)
 			return
 		}
 
@@ -346,7 +347,7 @@ func (hb *Host) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			r = r.WithContext(newContext(r.Context(), rd))
 			rd.hostValues = values
 			rd.r = hb.derived
-			hb.httpHandler.ServeHTTP(w, r)
+			hb.segmentHandler.ServeHTTP(w, r)
 			return
 		}
 	}
@@ -354,24 +355,24 @@ func (hb *Host) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	notFoundResourceHandler.ServeHTTP(w, r)
 }
 
-// handleOrPassRequest is the HTTP request handler of the host. It handles the
-// request if the host's template matches the host of the request and the
-// request's URL doesn't have any path segments or has a root "/" (root is
-// considered as a tslash for a host).
+// handleOrPassRequest is the segment handler of the host. It handles the
+// request if the host's template matches the host segment of the request's URL
+// and the URL doesn't have any path segments or has a root "/" (root is
+// considered as a trailing slash for a host).
 //
 // If the host was configured to respond only when it's used under the HTTPs,
-// but instead, is used under the HTTP, it drops the request, unless it was
+// but instead is used under the HTTP, it drops the request, unless it was
 // configured to redirect insecure requests to the URL with the HTTPs.
 //
-// If the host was configured to drop a request on unmatched presence or
-// absence of the tslash, function drops the request instead of redirecting it
-// to a URL with the matching tslash.
+// If the host was configured to drop a request on the unmatched presence or
+// absence of the trailing slash, the function drops the request instead of
+// redirecting it to a URL with the matching trailing slash.
 //
-// When the request's URL contains path segments, function tries to pass the
-// request to a child resource that matches the first path segment. When there
-// is no matching child resource and the host was configured as a subtree,
-// request is handled by the host itself, otherwise "404 Not Found", status
-// code is returned.
+// When the request's URL contains path segments, the function tries to pass the
+// request to a child resource that matches the first path segment. If there
+// is no matching child resource and the host was configured as a subtree
+// handler, the request is handled by the host itself, otherwise a "404 Not
+// Found" status code is returned.
 func (hb *Host) handleOrPassRequest(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -402,7 +403,7 @@ func (hb *Host) handleOrPassRequest(
 	}
 
 	if len(path) > 1 {
-		if hb.IsSubtree() {
+		if hb.IsSubtreeHandler() {
 			rd.subtreeExists = true
 		}
 
@@ -411,7 +412,7 @@ func (hb *Host) handleOrPassRequest(
 			return
 		}
 
-		if hb.IsSubtree() {
+		if hb.IsSubtreeHandler() {
 			rd.r = hb.derived
 			if !hb.canHandleRequest() {
 				notFoundResourceHandler.ServeHTTP(w, r)
@@ -478,10 +479,10 @@ func (hb *Host) handleOrPassRequest(
 		}
 	}
 
-	if !hb.IsLenientOnTslash() {
+	if !hb.IsLenientOnTrailingSlash() {
 		// Here path can be either empty or root.
-		if hb.HasTslash() && path != "/" {
-			if hb.DropsRequestOnUnmatchedTslash() {
+		if hb.HasTrailingSlash() && path != "/" {
+			if hb.IsStrictOnTrailingSlash() {
 				notFoundResourceHandler.ServeHTTP(w, r)
 				return
 			}
@@ -491,8 +492,8 @@ func (hb *Host) handleOrPassRequest(
 			}
 
 			newURL.Path += "/"
-		} else if !hb.HasTslash() && path == "/" {
-			if hb.DropsRequestOnUnmatchedTslash() {
+		} else if !hb.HasTrailingSlash() && path == "/" {
+			if hb.IsStrictOnTrailingSlash() {
 				notFoundResourceHandler.ServeHTTP(w, r)
 				return
 			}

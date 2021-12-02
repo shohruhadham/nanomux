@@ -67,7 +67,7 @@ func requestHandlerHosts(t *testing.T) []*Host {
 		hosts,
 		NewDormantHostUsingConfig(
 			"{sub:[a-zA-Z]{3}}.example.com",
-			Config{Subtree: true},
+			Config{SubtreeHandler: true},
 		),
 	)
 
@@ -75,7 +75,7 @@ func requestHandlerHosts(t *testing.T) []*Host {
 
 	hosts = append(
 		hosts,
-		NewDormantHostUsingConfig("https://example.com/", Config{Subtree: true}),
+		NewDormantHostUsingConfig("https://example.com/", Config{SubtreeHandler: true}),
 	)
 
 	hosts = append(
@@ -91,9 +91,9 @@ func requestHandlerHosts(t *testing.T) []*Host {
 		NewDormantHostUsingConfig(
 			"https://example.com",
 			Config{
-				Subtree:                 true,
+				SubtreeHandler:          true,
 				RedirectInsecureRequest: true,
-				LeniencyOnTslash:        true,
+				LeniencyOnTrailingSlash: true,
 			},
 		),
 	)
@@ -102,7 +102,7 @@ func requestHandlerHosts(t *testing.T) []*Host {
 		hosts,
 		NewDormantHostUsingConfig(
 			"example.com",
-			Config{DropRequestOnUnmatchedTslash: true},
+			Config{StrictOnTrailingSlash: true},
 		),
 	)
 
@@ -111,8 +111,8 @@ func requestHandlerHosts(t *testing.T) []*Host {
 		NewDormantHostUsingConfig(
 			"example.com/",
 			Config{
-				Subtree:                      true,
-				DropRequestOnUnmatchedTslash: true,
+				SubtreeHandler:        true,
+				StrictOnTrailingSlash: true,
 			},
 		),
 	)
@@ -122,10 +122,10 @@ func requestHandlerHosts(t *testing.T) []*Host {
 		NewDormantHostUsingConfig(
 			"https://example.com/",
 			Config{
-				Subtree:                      true,
-				RedirectInsecureRequest:      true,
-				LeniencyOnTslash:             true,
-				DropRequestOnUnmatchedTslash: true,
+				SubtreeHandler:          true,
+				RedirectInsecureRequest: true,
+				LeniencyOnTrailingSlash: true,
+				StrictOnTrailingSlash:   true,
 			},
 		),
 	)
@@ -135,8 +135,8 @@ func requestHandlerHosts(t *testing.T) []*Host {
 		NewDormantHostUsingConfig(
 			"https://example.com",
 			Config{
-				RedirectInsecureRequest:      true,
-				DropRequestOnUnmatchedTslash: true,
+				RedirectInsecureRequest: true,
+				StrictOnTrailingSlash:   true,
 			},
 		),
 	)
@@ -758,7 +758,7 @@ func TestHostBase_ServeHTTP(t *testing.T) {
 		})
 	}
 
-	var customMethodMw = MiddlewareFunc(func(next http.Handler) http.Handler {
+	var customMethodMw = func(next http.Handler) http.Handler {
 		return http.HandlerFunc(
 			func(w http.ResponseWriter, r *http.Request) {
 				var strb strings.Builder
@@ -776,9 +776,9 @@ func TestHostBase_ServeHTTP(t *testing.T) {
 				w.Write([]byte(strb.String()))
 			},
 		)
-	})
+	}
 
-	var unusedMethodMw = MiddlewareFunc(func(next http.Handler) http.Handler {
+	var unusedMethodMw = func(next http.Handler) http.Handler {
 		return http.HandlerFunc(
 			func(w http.ResponseWriter, r *http.Request) {
 				var strb strings.Builder
@@ -796,7 +796,7 @@ func TestHostBase_ServeHTTP(t *testing.T) {
 				w.Write([]byte(strb.String()))
 			},
 		)
-	})
+	}
 
 	var ro = NewRouter()
 	for i := 0; i < 2; i++ {
@@ -811,7 +811,7 @@ func TestHostBase_ServeHTTP(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = ro.WrapAllHandlersOfUnusedMethods(unusedMethodMw)
+	err = ro.WrapAllHandlersOf("!", unusedMethodMw)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -821,7 +821,7 @@ func TestHostBase_ServeHTTP(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = hs[2].WrapHandlerOfUnusedMethods(unusedMethodMw)
+	err = hs[2].WrapHandlerOf("!", unusedMethodMw)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -831,7 +831,7 @@ func TestHostBase_ServeHTTP(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = hs[3].WrapHandlerOfUnusedMethods(unusedMethodMw)
+	err = hs[3].WrapHandlerOf("!", unusedMethodMw)
 	if err != nil {
 		t.Fatal(err)
 	}
