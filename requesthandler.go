@@ -19,18 +19,18 @@ var ErrNoMethod = fmt.Errorf("no method has been given")
 // of the HTTP method.
 var ErrNoHandlerExists = fmt.Errorf("no handler exists")
 
-// ErrConflictingStatusCode is returned on an attempt to set a different value
-// for a status code other than expected values.
-// (This is the case of customizable redirection status codes, where one of the
-// StatusMovedPermanently and StatusPermanentRedirect can be chosen.)
+// ErrConflictingStatusCode is returned on an attempt to set a different
+// value for a status code other than the expected value. This is the case
+// of customizable redirection status codes, where one of the
+// StatusMovedPermanently and StatusPermanentRedirect can be chosen.
 var ErrConflictingStatusCode = fmt.Errorf("conflicting status code")
 
 // --------------------------------------------------
 
-// RequestHandler is used to accept any type that has methods to handle the
+// RequestHandler is used to accept any type that has methods to handle
 // HTTP requests. Methods must have the signature of the http.HandlerFunc
-// and start with 'Handle' prefix. Remaining part of the methods' name is
-// considered as an HTTP method. For example, HandleGet, HandleCustom are
+// and start with the 'Handle' prefix. The remaining part of the methods'
+// name is considered an HTTP method. For example, HandleGet, HandleCustom are
 // considered as the handlers of the GET and CUSTOM HTTP methods respectively.
 // If the type has HandleUnusedMethod then it's used as the handler of
 // the unused methods.
@@ -40,11 +40,11 @@ type RequestHandler interface{}
 
 // _RequestHandlerBase is intended to be embedded into the _ResourceBase
 // struct. It keeps the HTTP method handlers of the host or resource and
-// provides with the functionality to manage them. It also handles the HTTP
-// request by calling the responsible handler of the request's HTTP method.
+// provides them with the functionality to manage them. It also handles the
+// HTTP request by calling the responsible handler of the request's HTTP method.
 type _RequestHandlerBase struct {
-	handlers             map[string]http.Handler
-	unusedMethodsHandler http.Handler
+	handlers                 map[string]http.Handler
+	notAllowedMethodsHandler http.Handler
 }
 
 // -------------------------
@@ -71,8 +71,8 @@ func detectHTTPMethodHandlersOf(rh RequestHandler) (
 	var handlers = make(map[string]http.Handler)
 	var unusedMethodsHandler http.HandlerFunc
 
-	// reflect.Value allows us to compare method signatures directly, instead of
-	// signatures of their function values.
+	// reflect.Value allows us to compare method signatures directly instead of
+	// the signatures of their function values.
 	var v reflect.Value = reflect.ValueOf(rh)
 	var handlerFuncType = reflect.TypeOf(
 		// Signature of the http.HandlerFunc.
@@ -133,9 +133,24 @@ func (rhb *_RequestHandlerBase) setHandlerFor(
 		return newError("%w", ErrNilArgument)
 	}
 
-	var ms = toUpperSplitBySpace(methods)
-	if len(ms) == 0 {
+	// If the h is a http.HandlerFunc it passes the above check.
+	if hf, ok := h.(http.HandlerFunc); ok && hf == nil {
+		return newError("%w", ErrNilArgument)
+	}
+
+	var ms = toUpperSplitByCommaSpace(methods)
+	var lms = len(ms)
+	if lms == 0 {
 		return newError("%w", ErrNoMethod)
+	}
+
+	if lms == 1 && ms[0] == "!" {
+		if len(rhb.handlers) == 0 {
+			return newError("%w", ErrNoHandlerExists)
+		}
+
+		rhb.notAllowedMethodsHandler = h
+		return nil
 	}
 
 	if rhb.handlers == nil {
@@ -157,103 +172,86 @@ func (rhb *_RequestHandlerBase) setHandlerFor(
 }
 
 func (rhb *_RequestHandlerBase) handlerOf(method string) http.Handler {
+	var ms = toUpperSplitByCommaSpace(method)
+	var lms = len(ms)
+	if lms == 0 {
+		return nil
+	}
+
+	if ms[0] == "!" {
+		if rhb.notAllowedMethodsHandler != nil {
+			return rhb.notAllowedMethodsHandler
+		}
+
+		return http.HandlerFunc(rhb.handleNotAllowedMethods)
+	}
+
 	if rhb.handlers != nil {
-		method = strings.ToUpper(method)
-		return rhb.handlers[method]
+		return rhb.handlers[ms[0]]
 	}
 
 	return nil
-}
-
-func (rhb *_RequestHandlerBase) setHandlerForUnusedMethods(
-	handler http.Handler,
-) error {
-	rhb.unusedMethodsHandler = handler
-	return nil
-}
-
-func (rhb *_RequestHandlerBase) handlerOfUnusedMethods() http.Handler {
-	if rhb.unusedMethodsHandler != nil {
-		return rhb.unusedMethodsHandler
-	}
-
-	return http.HandlerFunc(rhb.handleUnusedMethod)
 }
 
 func (rhb *_RequestHandlerBase) wrapHandlerOf(
 	methods string,
-	mws ...Middleware,
+	mwfs ...MiddlewareFunc,
 ) error {
-	if len(mws) == 0 {
+	if len(mwfs) == 0 {
 		return newError("%w", ErrNoMiddleware)
-	}
-
-	var ms = toUpperSplitBySpace(methods)
-	if len(ms) == 0 {
-		return newError("%w", ErrNoMethod)
 	}
 
 	if len(rhb.handlers) == 0 {
 		return newError("%w", ErrNoHandlerExists)
 	}
 
-	for _, m := range ms {
-		if h := rhb.handlers[m]; h != nil {
-			for i, mw := range mws {
-				if mw == nil {
+	var ms = toUpperSplitByCommaSpace(methods)
+	var lms = len(ms)
+	if lms == 0 {
+		return newError("%w", ErrNoMethod)
+	}
+
+	if lms == 1 {
+		if ms[0] == "!" {
+			rhb.notAllowedMethodsHandler = rhb.handlerOf("!")
+			for i, mwf := range mwfs {
+				if mwf == nil {
 					return newError("%w at index %d", ErrNoMiddleware, i)
 				}
 
-				h = mw.Middleware(h)
+				rhb.notAllowedMethodsHandler = mwf(rhb.notAllowedMethodsHandler)
+			}
+
+			return nil
+		} else if ms[0] == "*" {
+			for m, h := range rhb.handlers {
+				for i, mwf := range mwfs {
+					if mwf == nil {
+						return newError("%w at index %d", ErrNoMiddleware, i)
+					}
+
+					h = mwf(h)
+					rhb.handlers[m] = h
+				}
+			}
+
+			return nil
+		}
+	}
+
+	for _, m := range ms {
+		if h := rhb.handlers[m]; h != nil {
+			for i, mwf := range mwfs {
+				if mwf == nil {
+					return newError("%w at index %d", ErrNoMiddleware, i)
+				}
+
+				h = mwf(h)
 				rhb.handlers[m] = h
 			}
 		} else {
 			return newError("%w for the method %q", ErrNoHandlerExists, m)
 		}
-	}
-
-	return nil
-}
-
-func (rhb *_RequestHandlerBase) wrapHandlerOfMethodsInUse(
-	mws ...Middleware,
-) error {
-	if len(mws) == 0 {
-		return newError("%w", ErrNoMiddleware)
-	}
-
-	if len(rhb.handlers) == 0 {
-		return newError("%w", ErrNoHandlerExists)
-	}
-
-	for m, h := range rhb.handlers {
-		for i, mw := range mws {
-			if mw == nil {
-				return newError("%w at index %d", ErrNoMiddleware, i)
-			}
-
-			h = mw.Middleware(h)
-			rhb.handlers[m] = h
-		}
-	}
-
-	return nil
-}
-
-func (rhb *_RequestHandlerBase) wrapHandlerOfUnusedMethods(
-	mws ...Middleware,
-) error {
-	if len(mws) == 0 {
-		return newError("%w", ErrNoMiddleware)
-	}
-
-	rhb.unusedMethodsHandler = rhb.handlerOfUnusedMethods()
-	for i, mw := range mws {
-		if mw == nil {
-			return newError("%w at index %d", ErrNoMiddleware, i)
-		}
-
-		rhb.unusedMethodsHandler = mw.Middleware(rhb.unusedMethodsHandler)
 	}
 
 	return nil
@@ -270,17 +268,17 @@ func (rhb *_RequestHandlerBase) handleRequest(
 		return
 	}
 
-	if handler := rhb.handlers[strings.ToUpper(r.Method)]; handler != nil {
+	if handler := rhb.handlers[r.Method]; handler != nil {
 		handler.ServeHTTP(w, r)
 		return
 	}
 
-	if rhb.unusedMethodsHandler != nil {
-		rhb.unusedMethodsHandler.ServeHTTP(w, r)
+	if rhb.notAllowedMethodsHandler != nil {
+		rhb.notAllowedMethodsHandler.ServeHTTP(w, r)
 		return
 	}
 
-	rhb.handleUnusedMethod(w, r)
+	rhb.handleNotAllowedMethods(w, r)
 }
 
 func (rhb *_RequestHandlerBase) handleOptionsMethod(
@@ -294,7 +292,7 @@ func (rhb *_RequestHandlerBase) handleOptionsMethod(
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (rhb *_RequestHandlerBase) handleUnusedMethod(
+func (rhb *_RequestHandlerBase) handleNotAllowedMethods(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
@@ -377,13 +375,13 @@ func PermanentRedirectHandlerFunc() RedirectHandlerFunc {
 }
 
 func WrapPermanentRedirectHandlerFunc(
-	wrapper func(RedirectHandlerFunc) RedirectHandlerFunc,
+	mwf func(RedirectHandlerFunc) RedirectHandlerFunc,
 ) error {
-	if wrapper == nil {
+	if mwf == nil {
 		return newError("%w", ErrNilArgument)
 	}
 
-	permanentRedirect = wrapper(permanentRedirect)
+	permanentRedirect = mwf(permanentRedirect)
 	return nil
 }
 
@@ -408,11 +406,11 @@ func HandlerOfNotFoundResource() http.Handler {
 	return notFoundResourceHandler
 }
 
-func WrapHandlerOfNotFoundResource(mw Middleware) error {
-	if mw == nil {
+func WrapHandlerOfNotFoundResource(mwf MiddlewareFunc) error {
+	if mwf == nil {
 		return newError("%w", ErrNilArgument)
 	}
 
-	notFoundResourceHandler = mw.Middleware(notFoundResourceHandler)
+	notFoundResourceHandler = mwf(notFoundResourceHandler)
 	return nil
 }

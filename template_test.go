@@ -237,7 +237,7 @@ func TestTemplate_IsWildCard(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if got := c.tmpl.IsWildCard(); got != c.want {
+			if got := c.tmpl.IsWildcard(); got != c.want {
 				t.Fatalf("Template.IsWildCard() = %v, want %v", got, c.want)
 			}
 		})

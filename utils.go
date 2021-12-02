@@ -62,7 +62,7 @@ func (psi *_PathSegmentIterator) nextSegment() string {
 	var segment string
 	if psi.path[0] == '/' {
 		// This if statement runs only once.
-		// Iterator doesn't keep the leading slash.
+		// The iterator doesn't keep the leading slash.
 		psi.path = psi.path[1:]
 	}
 
@@ -87,7 +87,7 @@ func (psi *_PathSegmentIterator) remainingPath() string {
 	return psi.path
 }
 
-func (psi *_PathSegmentIterator) pathHasTslash() bool {
+func (psi *_PathSegmentIterator) pathHasTrailingSlash() bool {
 	return psi.tslash
 }
 
@@ -126,43 +126,42 @@ func cleanPath(p string) string {
 	return np
 }
 
-func toUpperSplitBySpace(str string) []string {
+func toUpperSplitByCommaSpace(str string) []string {
 	str = strings.TrimSpace(str)
-	var strs = strings.Split(str, " ")
-
-	var lstrs = len(strs)
-	if lstrs == 0 {
-		return nil
-	}
-
-	var tstrs []string
-	for i := 0; i < lstrs; i++ {
-		if len(strs[i]) > 0 {
-			strs[i] = strings.ToUpper(strs[i])
-			tstrs = append(tstrs, strs[i])
+	var strs []string
+	for idx, splitStr := 0, ""; len(str) > 0; {
+		idx = strings.IndexAny(str, ", ")
+		if idx == 0 {
+			str = str[1:]
+			continue
 		}
+
+		if idx > 0 {
+			splitStr = strings.ToUpper(str[:idx])
+			str = str[idx+1:]
+		} else {
+			splitStr = strings.ToUpper(str)
+			str = ""
+		}
+
+		strs = append(strs, splitStr)
 	}
 
-	if lstrs = len(tstrs); lstrs > 0 {
-		var strs = make([]string, lstrs)
-		copy(strs, tstrs)
-		return strs
-	}
-
-	return nil
+	return strs
 }
 
 // splitHostAndPath splits the URL template into the host and path templates.
 // It also returns the security and tslash property values.
 //
 // Only an absolute URL template can have a host template. When a URL template
-// doesn't start with a scheme, it is considered as a path template.
-// After a host template if a path template contains only a slash, tslash return
+// doesn't start with a scheme, it is considered a path template. After a host
+// template, if a path template contains only a slash, the trailing slash return
 // value will be true and the path template return value will be empty.
 //
-// URL template can start with a scheme to specify security even if there is no
-// host template. For example:
+// A URL template can start with a scheme to specify security even if there is
+// no host template.
 //
+// For example,
 // https:///resource1/resource2 - specifies that resource2 is secure.
 // http:///resource1/ - specifies that resource1 is insecure and has a tslash.
 func splitHostAndPath(urlTmplStr string) (
@@ -320,7 +319,7 @@ func splitPathSegments(path string) (
 		return
 	}
 
-	return pss, false, psi.pathHasTslash(), nil
+	return pss, false, psi.pathHasTrailingSlash(), nil
 }
 
 // resourceURL returns the resource's URL with host and path values applied.
@@ -339,7 +338,7 @@ loop:
 		switch p := p.(type) {
 		case *Resource:
 			if p.IsRoot() {
-				// We'll add root's "/" later when we join segments.
+				// Root "/" is added later when the segments are joined.
 				continue
 			}
 
@@ -389,11 +388,11 @@ loop:
 
 	switch rr := r.(type) {
 	case *Resource:
-		if rr.IsSubtree() && !rr.IsRoot() {
+		if rr.IsSubtreeHandler() && !rr.IsRoot() {
 			strb.WriteByte('/')
 		}
 	case *Host:
-		if rr.IsSubtree() {
+		if rr.IsSubtreeHandler() {
 			strb.WriteByte('/')
 		}
 	}
@@ -425,15 +424,15 @@ func (sv SegmentValues) V(key string) string {
 type PathValues map[string]SegmentValues
 
 // V returns the value of the key in the path segment. Unlike its counterparts
-// in the HostValues and SegmentValues, V method of the PathValues can be used
-// only when the path segment and its single key have the same name.
+// in the HostValues and SegmentValues, the V method of the PathValues can be
+// used only when the path segment and its single key have the same name.
 func (pv PathValues) V(key string) string {
 	return pv[key][key]
 }
 
 // --------------------------------------------------
 
-// _RoutingData is created for a request when the host template contains a
+// _RoutingData is created for each request when the host template contains a
 // pattern or when the request's URL contains path segments. It's kept in the
 // request's context.
 type _RoutingData struct {
@@ -453,14 +452,14 @@ type _RoutingData struct {
 // newRoutingData creates a new _RoutingData for the HTTP request.
 func newRoutingData(r *http.Request) (*_RoutingData, error) {
 	var (
-		// As documentation of URL.EscapedPath() states it may return different
-		// path from URL.RawPath. Sometimes it's not suitable for our intention.
-		// It's preferable to use URL.RawPath if not empty.
+		// As documentation of the URL.EscapedPath() states it may return a
+		// different path from URL.RawPath. Sometimes it's not suitable for our
+		// intentions. It's preferable to use URL.RawPath if it's not empty.
 		path        = r.URL.RawPath
 		uncleanPath bool
 	)
 
-	// URL.RawPath maybe empty if there is no neet to escape the path.
+	// URL.RawPath may be empty if there is no need to escape the path.
 	if path == "" {
 		path = r.URL.Path
 	}
@@ -491,7 +490,7 @@ func (rd *_RoutingData) remainingPath() string {
 		return ""
 	}
 
-	if rd.r.HasTslash() {
+	if rd.r.HasTrailingSlash() {
 		if rd.currentPathSegmentIdx == 0 {
 			return rd.path[rd.currentPathSegmentIdx+1:]
 		}
@@ -531,8 +530,8 @@ func (rd *_RoutingData) reachedTheLastPathSegment() bool {
 	return rd.currentPathSegmentIdx == len(rd.path)
 }
 
-// pathHasTslash returns true if the request's URL has a trailing slash.
-func (rd *_RoutingData) pathHasTslash() bool {
+// pathHasTrailingSlash returns true if the request's URL has a trailing slash.
+func (rd *_RoutingData) pathHasTrailingSlash() bool {
 	return rd.path != "" && rd.path != "/" && rd.path[len(rd.path)-1] == '/'
 }
 
@@ -559,8 +558,8 @@ var (
 	PathValuesKey interface{} = pathValuesKey
 
 	// RemainingPathKey can be used to get the remaining path of the request's
-	// URL below the host or resource. Remaining path is available when the
-	// host or resource is configured as a subtree and below them there is no
+	// URL below the host or resource. The remaining path is available when the
+	// host or resource is configured as a subtree and below it there is no
 	// resource that can match the next path segment.
 	RemainingPathKey interface{} = remainingPathKey
 

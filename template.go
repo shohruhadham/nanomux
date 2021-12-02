@@ -11,7 +11,7 @@ import (
 
 // --------------------------------------------------
 
-// Similarity is a degree of difference between templates :)
+// Similarity is a degree of difference between templates. :)
 type Similarity uint8
 
 const (
@@ -19,10 +19,11 @@ const (
 	Different Similarity = iota
 
 	// DifferentValueNames means templates have the same static and/or pattern
-	// parts, but have different value names for their patterns.
+	// parts but have different value names for their patterns.
 	DifferentValueNames
 
-	// DifferentNames means templates are the same except their names.
+	// DifferentNames means that the templates are identical except for their
+	// names.
 	DifferentNames
 
 	// TheSame templates have no differences.
@@ -55,7 +56,7 @@ func (s Similarity) Err() error {
 var ErrInvalidTemplate = fmt.Errorf("invalid template")
 
 // ErrInvalidValue is returned from the Template's Apply method when one of the
-// values didn't match the pattern.
+// values doesn't match the pattern.
 var ErrInvalidValue = fmt.Errorf("invalid value")
 
 // ErrMissingValue is returned from the Template's Apply method when one of the
@@ -66,13 +67,13 @@ var ErrMissingValue = fmt.Errorf("missing value")
 // repeated value name.
 var ErrDifferentPattern = fmt.Errorf("different pattern")
 
-// ErrRepeatedWildCardName is returned when the wild card name comes again in
+// ErrRepeatedWildcardName is returned when the wildcard name comes again in
 // the template.
-var ErrRepeatedWildCardName = fmt.Errorf("repeated wild card name")
+var ErrRepeatedWildcardName = fmt.Errorf("repeated wild card name")
 
-// ErrAnotherWildCardName is returned when there is more than one wild card name
+// ErrAnotherWildcardName is returned when there is more than one wildcard name
 // in the template.
-var ErrAnotherWildCardName = fmt.Errorf("another wild card name")
+var ErrAnotherWildcardName = fmt.Errorf("another wild card name")
 
 type _ValuePattern struct {
 	name string
@@ -88,37 +89,37 @@ type _TemplateSlice struct {
 
 // Template represents the parsed template of the hosts and resources.
 //
-// Value-pattern and wild card parts are the dynamic slices of the template.
+// The value-pattern and wildcard parts are the dynamic slices of the template.
 // If there is a single dynamic slice in the template and the template doesn't
-// have a name, dynamic slice's name is used as the name of the template.
+// have a name, the dynamic slice's name is used as the name of the template.
 //
-// There can be only one wild card dynamic slice in the template.
+// There can be only one wildcard dynamic slice in the template.
 //
-// If the value-pattern part is repeated in the template its pattern may be
-// omitted. When the template is matching a string its repeated value-pattern
-// must get the same value, otherwise matching fails.
+// If the value-pattern part is repeated in the template, its pattern may be
+// omitted. When the template matches a string, its repeated value-pattern
+// must get the same value, otherwise the match fails.
 //
-// Colon ':' in the template name and the value name, as well as the curly
-// braces '{', '}' in the static part can be escaped with the backslash '\'.
-// Escaped colon ':' is included in the name and the escaped curly braces '{',
-// '}' are included in the static part. If the static part at the beginning of
-// the template starts with the '$' sign, it must be escaped too.
+// The Colon ":" in the template name and the value name, as well as the curly
+// braces "{" and "}" in the static part, can be escaped with the backslash "\".
+// The escaped colon ":" is included in the name, and the escaped curly braces
+// "{" and "}" are included in the static part. If the static part at the
+// beginning of the template starts with the "$" sign, it must be escaped too.
 //
 // Some examples of the template forms:
 //
 // 	$templateName:staticPart{valueName:pattern},
 // 	$templateName:{valueName:pattern}staticpart,
-// 	$templateName:{wildCardName}{valueName1:pattern1}{valueName2:pattern2},
+// 	$templateName:{wildcardName}{valueName1:pattern1}{valueName2:pattern2},
 // 	staticTemplate,
 // 	{valueName:pattern},
-// 	{wildCardName},
-// 	{valueName:pattern}staticPart{wildCardName}{valueName},
+// 	{wildcardName},
+// 	{valueName:pattern}staticPart{wildcardName}{valueName},
 // 	$templateName:staticPart1{wildCardName}staticPart2{valueName:pattern}
 // 	$templateName:staticPart,
 // 	$templateName:{valueName:pattern},
 // 	$templateName\:1:{wildCard{Name}}staticPart{value{Name}:pattern},
 // 	{valueName\:1:pattern}static\{Part\},
-// 	\$staticPart:1{wildCardName}staticPart:2
+// 	\$staticPart:1{wildcardName}staticPart:2
 type Template struct {
 	name        string
 	slices      []_TemplateSlice
@@ -127,7 +128,7 @@ type Template struct {
 
 // -----
 
-// SetName sets the name of the template. Name becomes the name of the host
+// SetName sets the name of the template. The name becomes the name of the host
 // or resource.
 func (t *Template) SetName(name string) {
 	t.name = name
@@ -139,7 +140,7 @@ func (t *Template) Name() string {
 }
 
 // Content returns the content of the template without a name.
-// Pattern is omitted from a repeated value-pattern starting from the second
+// A pattern is omitted from a repeated value-pattern starting from the second
 // repitition.
 func (t *Template) Content() string {
 	var (
@@ -194,15 +195,15 @@ func (t *Template) Content() string {
 	return strb.String()
 }
 
-// IsStatic returns true if the template doesn't have any pattern or a wild card
+// IsStatic returns true if the template doesn't have any patterns or a wildcard
 // part.
 func (t *Template) IsStatic() bool {
 	return len(t.slices) == 1 && t.slices[0].staticStr != ""
 }
 
-// IsWildCard returns true if the template doesn't have any static or pattern
+// IsWildcard returns true if the template doesn't have any static or pattern
 // parts.
-func (t *Template) IsWildCard() bool {
+func (t *Template) IsWildcard() bool {
 	if len(t.slices) == 1 {
 		var vp = t.slices[0].valuePattern
 		if vp != nil && vp.re == nil {
@@ -213,7 +214,7 @@ func (t *Template) IsWildCard() bool {
 	return false
 }
 
-// HasPattern returns true if the template has any value-pattern part.
+// HasPattern returns true if the template has any value-pattern parts.
 func (t *Template) HasPattern() bool {
 	var lslices = len(t.slices)
 	for i := 0; i < lslices; i++ {
@@ -246,8 +247,8 @@ func (t *Template) SimilarityWith(anotherT *Template) Similarity {
 		return Different
 	}
 
-	if t.IsWildCard() {
-		if anotherT.IsWildCard() {
+	if t.IsWildcard() {
+		if anotherT.IsWildcard() {
 			if t.slices[0].valuePattern.name ==
 				anotherT.slices[0].valuePattern.name {
 				if t.name != anotherT.name {
@@ -263,7 +264,7 @@ func (t *Template) SimilarityWith(anotherT *Template) Similarity {
 		return Different
 	}
 
-	if anotherT.IsStatic() || anotherT.IsWildCard() {
+	if anotherT.IsStatic() || anotherT.IsWildcard() {
 		return Different
 	}
 
@@ -312,8 +313,8 @@ func (t *Template) SimilarityWith(anotherT *Template) Similarity {
 }
 
 // Match returns true if the string matches the template. If the template has
-// value-pattern parts, Match also returns the values that matched patterns.
-// Names of the patterns in the template are used as keys for the values.
+// value-pattern parts, Match also returns the values of those matched patterns.
+// The names of the patterns in the template are used as keys for the values.
 func (t *Template) Match(str string) (matched bool, values map[string]string) {
 	if t.IsStatic() {
 		return t.slices[0].staticStr == str, nil
@@ -321,7 +322,7 @@ func (t *Template) Match(str string) (matched bool, values map[string]string) {
 
 	values = make(map[string]string)
 
-	if t.IsWildCard() {
+	if t.IsWildcard() {
 		values[t.slices[0].valuePattern.name] = str
 		return true, values
 	}
@@ -399,7 +400,7 @@ func (t *Template) Match(str string) (matched bool, values map[string]string) {
 
 // Apply puts the values in the place of patterns if they match.
 // When ignoreMissing is true, Apply ignores the missing values for the
-// patterns instead of returning error.
+// patterns instead of returning an error.
 func (t *Template) Apply(values map[string]string, ignoreMissing bool) (
 	string,
 	error,
@@ -441,9 +442,8 @@ func (t *Template) Apply(values map[string]string, ignoreMissing bool) (
 	return strb.String(), nil
 }
 
-// String returns the template's string.
-// Pattern is omitted from a repeated value-pattern starting from the second
-// repitition.
+// String returns the template's string. A pattern is omitted from a repeated
+// value-pattern starting from the second repitition.
 func (t *Template) String() string {
 	var strb = strings.Builder{}
 	if t.name != "" {
@@ -470,7 +470,7 @@ func (t *Template) String() string {
 
 // --------------------------------------------------
 
-// templateNameAndContent splits the template string into the name and content.
+// templateNameAndContent divides a template string into its name and content.
 func templateNameAndContent(tmplStr string) (
 	name string,
 	content string,
@@ -517,7 +517,7 @@ func templateNameAndContent(tmplStr string) (
 }
 
 // staticSlice returns the static slice at the beginning of the template.
-// If the template doesn't start with a static slice it's returned as is.
+// If the template doesn't start with a static slice, it's returned as is.
 func staticSlice(tmplStrSlc string) (
 	staticStr string,
 	leftTmplStrSlc string,
@@ -567,7 +567,7 @@ func staticSlice(tmplStrSlc string) (
 
 // dynamicSlice returns the dynamic slice's value name and pattern at the
 // beginning of the template. If the template doesn't start with a dynamic
-// slice it's returned as is.
+// slice, it's returned as is.
 func dynamicSlice(tmplStrSlc string) (
 	valueName, pattern, leftTmplStrSlc string,
 	err error,
@@ -597,8 +597,8 @@ func dynamicSlice(tmplStrSlc string) (
 		if sliceType == 0 {
 			if ch == ':' {
 				if i > 1 {
-					// If the previous character is a backslash '\', current
-					// character colon ':' is escaped. So, it's included in the
+					// If the previous character is a backslash "\", the current
+					// character colon ":" is escaped. So, it's included in the
 					// value name.
 					if tmplStrSlc[i-1] == '\\' {
 						strb.WriteString(tmplStrSlc[idx : i-1])
@@ -630,7 +630,7 @@ func dynamicSlice(tmplStrSlc string) (
 			if ch == '}' {
 				depth--
 				if depth > 0 {
-					// Current curly brace '}' is not the end of the value name.
+					// Current curly brace "}" is not the end of the value name.
 					continue
 				}
 
@@ -710,10 +710,10 @@ func dynamicSlice(tmplStrSlc string) (
 // appendDynamicSliceTo appends the value name and pattern to the list of
 // dynamic slices. Map valuePatterns contains the previously created
 // _ValuePattern instances with value names as a key. If the value name is
-// repeated appendDynamicSliceTo reuses the _ValuePattern instance instead
+// repeated, appendDynamicSliceTo reuses the _ValuePattern instance instead
 // of creating a new one.
 //
-// If the passed argument wildCardIdx is the index of the previousy detected
+// If the passed argument wildCardIdx is the index of the previously detected
 // wild card, then it's returned as is. Otherwise, if the current dynamic slice
 // is a wild card, its index in the list is returned.
 func appendDynamicSliceTo(
@@ -739,7 +739,8 @@ func appendDynamicSliceTo(
 			}
 		}
 
-		// If value-pattern pair exists we don't have to create a new one.
+		// If a value-pattern pair already exists, we don't have to create a
+		// new one.
 		tss = append(tss, _TemplateSlice{valuePattern: vp})
 		return tss, wildCardIdx, nil
 	}
@@ -750,12 +751,12 @@ func appendDynamicSliceTo(
 			if vName == wc.valuePattern.name {
 				return nil, -1, newError(
 					"%w %q",
-					ErrRepeatedWildCardName,
+					ErrRepeatedWildcardName,
 					vName,
 				)
 			}
 
-			return nil, -1, newError("%w %q", ErrAnotherWildCardName, vName)
+			return nil, -1, newError("%w %q", ErrAnotherWildcardName, vName)
 		}
 
 		wildCardIdx = len(tss)
@@ -763,9 +764,9 @@ func appendDynamicSliceTo(
 			valuePattern: &_ValuePattern{name: vName},
 		})
 
-		// As the wild card slice has been appended, existing value-patterns
-		// must be modified, so when they are reused template can match the
-		// string from the end to the wild card slice.
+		// As the wildcard slice has been appended, existing value-patterns
+		// must be modified so when they are reused, the template can match the
+		// string from the end to the wildcard slice.
 		for _, vp := range valuePatterns {
 			var p = vp.re.String()
 			p = p[1:] + "$"
@@ -801,10 +802,10 @@ func appendDynamicSliceTo(
 
 // $name:static{key1:pattern}static{key2:pattern}{key1}{key3}
 // parse parses the template string and returns the template slices and the
-// index of the wild card slice.
+// index of the wildcard slice.
 func parse(tmplStr string) (
 	tmplSlcs []_TemplateSlice,
-	wildCardIdx int,
+	wildcardIdx int,
 	err error,
 ) {
 	if tmplStr == "" {
@@ -818,7 +819,7 @@ func parse(tmplStr string) (
 		valuePatterns = make(map[string]*_ValuePattern)
 	)
 
-	wildCardIdx = -1
+	wildcardIdx = -1
 
 	for len(tmplStrSlc) > 0 {
 		var staticStr string
@@ -841,11 +842,11 @@ func parse(tmplStr string) (
 			return nil, -1, err
 		}
 
-		tss, wildCardIdx, err = appendDynamicSliceTo(
+		tss, wildcardIdx, err = appendDynamicSliceTo(
 			tss,
 			vName, pattern,
 			valuePatterns,
-			wildCardIdx,
+			wildcardIdx,
 		)
 
 		if err != nil {
@@ -858,8 +859,9 @@ func parse(tmplStr string) (
 
 	if len(tmplSlcs) == 1 {
 		if vp := tmplSlcs[0].valuePattern; vp != nil && vp.re != nil {
-			// There is no other slices other than single value-pattern slice.
-			// So, its pattern must be modified to match the whole string.
+			// There are no other slices other than the single value-pattern
+			// slice. So, its pattern must be modified to match the whole
+			// string.
 			var reStr = vp.re.String() + "$"
 			vp.re, err = regexp.Compile(reStr)
 			if err != nil {
@@ -868,10 +870,10 @@ func parse(tmplStr string) (
 		}
 	}
 
-	return tmplSlcs, wildCardIdx, nil
+	return tmplSlcs, wildcardIdx, nil
 }
 
-// TryToParse tries to parse the passed template string, and if succeeds
+// TryToParse tries to parse the passed template string, and if successful,
 // returns the Template instance.
 func TryToParse(tmplStr string) (*Template, error) {
 	if tmplStr == "" {
@@ -892,7 +894,7 @@ func TryToParse(tmplStr string) (*Template, error) {
 	}
 
 	if !tmpl.IsStatic() && tmpl.name == "" {
-		if tmpl.IsWildCard() {
+		if tmpl.IsWildcard() {
 			tmpl.name = tmpl.slices[0].valuePattern.name
 		} else {
 			var idx = -1
@@ -900,7 +902,7 @@ func TryToParse(tmplStr string) (*Template, error) {
 				if slc.valuePattern != nil {
 					if idx > -1 {
 						// If there is a single dynamic slice in the template
-						// and the template doesn't have a name, dynamic
+						// and the template doesn't have a name, the dynamic
 						// slice's name is used as the name of the template.
 						return tmpl, nil
 					}
@@ -919,7 +921,7 @@ func TryToParse(tmplStr string) (*Template, error) {
 }
 
 // Parse parses the template string and returns the Template instance if
-// succeeds. Unlike TryToParse, Parse panics on error.
+// it succeeds. Unlike TryToParse, Parse panics on an error.
 func Parse(tmplStr string) *Template {
 	var tmpl, err = TryToParse(tmplStr)
 	if err != nil {

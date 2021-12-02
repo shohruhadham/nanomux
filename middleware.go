@@ -4,6 +4,7 @@
 package nanomux
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 )
@@ -15,15 +16,7 @@ var ErrConflictingMethod = fmt.Errorf("conflicting method")
 
 // --------------------------------------------------
 
-type Middleware interface {
-	Middleware(next http.Handler) http.Handler
-}
-
 type MiddlewareFunc func(next http.Handler) http.Handler
-
-func (mwf MiddlewareFunc) Middleware(next http.Handler) http.Handler {
-	return mwf(next)
-}
 
 // --------------------------------------------------
 
@@ -31,16 +24,15 @@ func (mwf MiddlewareFunc) Middleware(next http.Handler) http.Handler {
 // and their child resources recursively. Handlers are wrapped with middlewares
 // in their passed order.
 //
-// When methods argument contains any method, unusedMethods argument must be
-// false and vice versa.
+// When the methods argument contains any method, the unusedMethods argument
+// must be false and vice versa.
 //
-// When both, methods and unusedMethods arguments are nil and false
+// When both the methods and unusedMethods arguments are nil and false,
 // respectively, the function wraps all the handlers of the HTTP methods in use.
 func wrapRequestHandlersOfAll(
 	rs []_Resource,
 	methods []string,
-	unusedMethods bool,
-	mws ...Middleware,
+	mwfs ...MiddlewareFunc,
 ) error {
 	var lrs = len(rs)
 	if lrs == 0 {
@@ -52,36 +44,23 @@ func wrapRequestHandlersOfAll(
 		var err error
 
 		if r.canHandleRequest() {
-			if len(methods) > 0 {
-				if unusedMethods {
-					return newError("%w", ErrConflictingMethod)
-				}
-
-				for _, m := range methods {
-					if err = r.WrapHandlerOf(m, mws...); err != nil {
-						return newError("<- %w", err)
-					}
-				}
-			} else {
-				if unusedMethods {
-					err = r.WrapHandlerOfUnusedMethods(mws...)
-				} else {
-					err = r.WrapHandlerOfMethodsInUse(mws...)
-				}
-
+			var rhb = r.requestHandlerBase()
+			for _, m := range methods {
+				err = rhb.wrapHandlerOf(m, mwfs...)
 				if err != nil {
+					// If the _Resource can handle a request, then
+					// ErrNoHandlerExists is returned only when there is no
+					// handler for a specific HTTP method, which can be ignored.
+					if errors.Is(err, ErrNoHandlerExists) {
+						continue
+					}
+
 					return newError("<- %w", err)
 				}
 			}
 		}
 
-		err = wrapRequestHandlersOfAll(
-			r._Resources(),
-			methods,
-			unusedMethods,
-			mws...,
-		)
-
+		err = wrapRequestHandlersOfAll(r._Resources(), methods, mwfs...)
 		if err != nil {
 			return newError("<- %w", err)
 		}
