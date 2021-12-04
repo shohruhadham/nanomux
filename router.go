@@ -1494,48 +1494,60 @@ func (ro *Router) passRequest(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if h := ro.staticHosts[host]; h != nil {
-			h.serveHTTP(w, r)
+			var err error
+			r, _, err = requestWithRoutingData(r, h.derived)
+			if err != nil {
+				http.Error(
+					w,
+					http.StatusText(http.StatusInternalServerError),
+					http.StatusInternalServerError,
+				)
+
+				return
+			}
+
+			h.segmentHandler.ServeHTTP(w, r)
 			return
 		}
 
 		for _, ph := range ro.patternHosts {
 			if matches, values := ph.Template().Match(host); matches {
-				var rd, err = newRoutingData(r)
+				var rd *_RoutingData
+				var err error
+				r, rd, err = requestWithRoutingData(r, ph.derived)
 				if err != nil {
 					http.Error(
 						w,
-						http.StatusText(http.StatusBadRequest),
-						http.StatusBadRequest,
+						http.StatusText(http.StatusInternalServerError),
+						http.StatusInternalServerError,
 					)
 
 					return
 				}
 
-				r = r.WithContext(newContext(r.Context(), rd))
 				rd.hostValues = values
-				rd.r = ph
-				ph.serveHTTP(w, r)
+				ph.segmentHandler.ServeHTTP(w, r)
 				return
 			}
 		}
 	}
 
-	if ro.r != nil && r.URL.EscapedPath() != "" {
-		var rd, err = newRoutingData(r)
+	if ro.r != nil && r.URL.Path != "" {
+		var rd *_RoutingData
+		var err error
+		r, rd, err = requestWithRoutingData(r, ro.r.derived)
 		if err != nil {
 			http.Error(
 				w,
-				http.StatusText(http.StatusBadRequest),
-				http.StatusBadRequest,
+				http.StatusText(http.StatusInternalServerError),
+				http.StatusInternalServerError,
 			)
 
 			return
 		}
 
-		r = r.WithContext(newContext(r.Context(), rd))
 		rd.nextPathSegment() // Returns '/'.
-		rd.r = ro.r
-		ro.r.serveHTTP(w, r)
+		ro.r.segmentHandler.ServeHTTP(w, r)
 		return
 	}
 

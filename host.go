@@ -318,6 +318,19 @@ func (hb *Host) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		host = r.Host
 	}
 
+	var rd *_RoutingData
+	var err error
+	r, rd, err = requestWithRoutingData(r, hb.derived)
+	if err != nil {
+		http.Error(
+			w,
+			http.StatusText(http.StatusInternalServerError),
+			http.StatusInternalServerError,
+		)
+
+		return
+	}
+
 	if host != "" {
 		if strings.LastIndexByte(host, ':') >= 0 {
 			var h, _, err = net.SplitHostPort(host)
@@ -333,20 +346,7 @@ func (hb *Host) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if matches, values := tmpl.Match(host); matches {
-			var rd, err = newRoutingData(r)
-			if err != nil {
-				http.Error(
-					w,
-					http.StatusText(http.StatusBadRequest),
-					http.StatusBadRequest,
-				)
-
-				return
-			}
-
-			r = r.WithContext(newContext(r.Context(), rd))
 			rd.hostValues = values
-			rd.r = hb.derived
 			hb.segmentHandler.ServeHTTP(w, r)
 			return
 		}
@@ -377,32 +377,8 @@ func (hb *Host) handleOrPassRequest(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
-	var path = r.URL.EscapedPath()
-	var rd *_RoutingData
-	if len(path) > 1 {
-		var ok bool
-		rd, ok = r.Context().Value(routingDataKey).(*_RoutingData)
-		if !ok {
-			var err error
-			rd, err = newRoutingData(r)
-			if err != nil {
-				http.Error(
-					w,
-					http.StatusText(http.StatusBadRequest),
-					http.StatusBadRequest,
-				)
-
-				return
-			}
-
-			r = r.WithContext(newContext(r.Context(), rd))
-			rd.r = hb.derived
-		}
-
-		path = rd.path
-	}
-
-	if len(path) > 1 {
+	var rd = r.Context().Value(routingDataKey).(*_RoutingData)
+	if len(rd.path) > 1 {
 		if hb.IsSubtreeHandler() {
 			rd.subtreeExists = true
 		}
@@ -412,44 +388,13 @@ func (hb *Host) handleOrPassRequest(
 			return
 		}
 
-		if hb.IsSubtreeHandler() {
-			rd.r = hb.derived
-			if !hb.canHandleRequest() {
-				notFoundResourceHandler.ServeHTTP(w, r)
-				return
-			}
+		// Here the host must be set again because it may have been changed.
+		rd._r = hb.derived
 
-			var newURL *url.URL
-			if r.TLS == nil && hb.IsSecure() {
-				if !hb.RedirectsInsecureRequest() {
-					notFoundResourceHandler.ServeHTTP(w, r)
-					return
-				}
-
-				newURL = cloneRequestURL(r)
-				newURL.Scheme = "https"
-			}
-
-			if rd.uncleanPath && !hb.IsLenientOnUncleanPath() {
-				if newURL == nil {
-					newURL = cloneRequestURL(r)
-				}
-
-				newURL.Path = rd.path
-			}
-
-			if newURL != nil {
-				permanentRedirect(w, r, newURL.String(), permanentRedirectCode)
-				return
-			}
-
-			// At this point request may have been modified by child resources.
-			hb.handleRequest(w, r)
+		if !hb.IsSubtreeHandler() {
+			notFoundResourceHandler.ServeHTTP(w, r)
 			return
 		}
-
-		notFoundResourceHandler.ServeHTTP(w, r)
-		return
 	}
 
 	if !hb.canHandleRequest() {
@@ -468,20 +413,18 @@ func (hb *Host) handleOrPassRequest(
 		newURL.Scheme = "https"
 	}
 
-	if rd != nil {
-		// Following checks unclean paths, like '////'.
-		if rd.uncleanPath && !hb.IsLenientOnUncleanPath() {
-			if newURL == nil {
-				newURL = cloneRequestURL(r)
-			}
-
-			newURL.Path = rd.path
+	// Following checks unclean paths, like '////'.
+	if rd.uncleanPath && !hb.IsLenientOnUncleanPath() {
+		if newURL == nil {
+			newURL = cloneRequestURL(r)
 		}
+
+		newURL.Path = rd.path
 	}
 
-	if !hb.IsLenientOnTrailingSlash() {
-		// Here path can be either empty or root.
-		if hb.HasTrailingSlash() && path != "/" {
+	if len(rd.path) < 2 && !hb.IsLenientOnTrailingSlash() {
+		// Here, the path can be either empty or root.
+		if hb.HasTrailingSlash() && rd.path != "/" {
 			if hb.IsStrictOnTrailingSlash() {
 				notFoundResourceHandler.ServeHTTP(w, r)
 				return
@@ -492,7 +435,7 @@ func (hb *Host) handleOrPassRequest(
 			}
 
 			newURL.Path += "/"
-		} else if !hb.HasTrailingSlash() && path == "/" {
+		} else if !hb.HasTrailingSlash() && rd.path == "/" {
 			if hb.IsStrictOnTrailingSlash() {
 				notFoundResourceHandler.ServeHTTP(w, r)
 				return

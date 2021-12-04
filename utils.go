@@ -444,20 +444,27 @@ type _RoutingData struct {
 
 	hostValues HostValues
 	pathValues PathValues
-	r          _Resource
+	_r         _Resource
 }
 
 // -------------------------
 
-// newRoutingData creates a new _RoutingData for the HTTP request.
-func newRoutingData(r *http.Request) (*_RoutingData, error) {
-	var (
-		// As documentation of the URL.EscapedPath() states it may return a
-		// different path from URL.RawPath. Sometimes it's not suitable for our
-		// intentions. It's preferable to use URL.RawPath if it's not empty.
-		path        = r.URL.RawPath
-		uncleanPath bool
-	)
+// requestWithRoutingData creates a new _RoutingData for the HTTP request and
+// inserts it into the request's context. It also keeps the _Resource in the
+// newly created _RoutingData.
+func requestWithRoutingData(
+	r *http.Request,
+	_r _Resource,
+) (*http.Request, *_RoutingData, error) {
+	if r == nil || _r == nil {
+		return nil, nil, newError("%w", ErrNilArgument)
+	}
+
+	// As the documentation of the URL.EscapedPath() states, it may return a
+	// different path from the URL.RawPath. Sometimes it's not suitable for
+	// our intentions. It's preferable to use URL.RawPath if it's not empty.
+	var path = r.URL.RawPath
+	var uncleanPath bool
 
 	// URL.RawPath may be empty if there is no need to escape the path.
 	if path == "" {
@@ -471,10 +478,11 @@ func newRoutingData(r *http.Request) (*_RoutingData, error) {
 		}
 	}
 
-	return &_RoutingData{
-		path:        path,
-		uncleanPath: uncleanPath,
-	}, nil
+	var rd = &_RoutingData{path: path, uncleanPath: uncleanPath}
+	rd._r = _r
+	r = r.WithContext(newContext(r.Context(), rd))
+
+	return r, rd, nil
 }
 
 // -------------------------
@@ -490,8 +498,10 @@ func (rd *_RoutingData) remainingPath() string {
 		return ""
 	}
 
-	if rd.r.HasTrailingSlash() {
+	if rd._r.HasTrailingSlash() || rd.path == "/" {
 		if rd.currentPathSegmentIdx == 0 {
+			// If the _r is a host or root resource, the remaining path
+			// should not start with a trailing slash.
 			return rd.path[rd.currentPathSegmentIdx+1:]
 		}
 	} else if rd.currentPathSegmentIdx > 0 {
@@ -544,32 +554,39 @@ const (
 	hostValuesKey
 	pathValuesKey
 	remainingPathKey
-	resourcesSharedDataKey
+	sharedDataKey
 	resourceKey
+	requestHandlerKey
 )
 
 var (
-	// HostValuesKey can be used to get the host values from the request's
+	// HostValuesKey can be used to retrieve the host values from the request's
 	// context.
 	HostValuesKey interface{} = hostValuesKey
 
-	// PathValuesKey can be used to get the path values from the request's
+	// PathValuesKey can be used to retrieve the path values from the request's
 	// context.
 	PathValuesKey interface{} = pathValuesKey
 
-	// RemainingPathKey can be used to get the remaining path of the request's
-	// URL below the host or resource. The remaining path is available when the
-	// host or resource is configured as a subtree and below it there is no
-	// resource that can match the next path segment.
+	// RemainingPathKey can be used to get the remaining path of the
+	// request's URL below the host or resource. The remaining path is
+	// available when the host or resource is configured as a subtree and
+	// below it there is no resource that can match the next path segment.
 	RemainingPathKey interface{} = remainingPathKey
 
-	// ResourcesSharedDataKey can be used to get the shared data of the resource
+	// SharedDataKey can be used to retrieve the shared data of the resource
 	// that is handling the request.
-	ResourcesSharedDataKey interface{} = resourcesSharedDataKey
+	SharedDataKey interface{} = sharedDataKey
 
-	// ResourceKey can be used to get a reference to the host or resource that
-	// is handling the request.
+	// ResourceKey can be used to retrieve a reference to the host or resource
+	// that is handling the request.
 	ResourceKey interface{} = resourceKey
+
+	// RequestHandlerKey can be used to retrieve the RequestHandler of the
+	// host or resource. If the host or resource wasn't created with the
+	// RequestHandler or the RequestHandler wasn't set, the returned value
+	// will be nil.
+	RequestHandlerKey interface{} = requestHandlerKey
 )
 
 // -------------------------
@@ -607,10 +624,12 @@ func (c *_Context) Value(key interface{}) interface{} {
 			return c.rd.pathValues
 		case remainingPathKey:
 			return c.rd.remainingPath()
-		case resourcesSharedDataKey:
-			return c.rd.r.SharedData()
+		case sharedDataKey:
+			return c.rd._r.SharedData()
 		case resourceKey:
-			return c.rd.r
+			return c.rd._r
+		case requestHandlerKey:
+			return c.rd._r.RequestHandler()
 		default:
 			return nil
 		}

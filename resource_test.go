@@ -5027,30 +5027,28 @@ func addRequestHandlerSubresources(t *testing.T, r _Resource, i, limit int) {
 	if err = r.SetHandlerFor("get post custom", http.HandlerFunc(
 		func(w http.ResponseWriter, r *http.Request) {
 			var pValues, ok = r.Context().Value(PathValuesKey).(PathValues)
-			if ok {
-				if pValues != nil {
-					var gotValue bool
-					for sn, psvs := range pValues {
-						if len(psvs) > 1 {
-							if psvs["id"] == "1" {
-								gotValue = true
-								break
-							}
-						} else if psvs[sn] == "1" {
+			if ok && pValues != nil {
+				var gotValue bool
+				for sn, psvs := range pValues {
+					if len(psvs) > 1 {
+						if psvs["id"] == "1" {
 							gotValue = true
 							break
 						}
+					} else if psvs[sn] == "1" {
+						gotValue = true
+						break
 					}
+				}
 
-					if !gotValue {
-						http.Error(
-							w,
-							http.StatusText(http.StatusInternalServerError),
-							http.StatusInternalServerError,
-						)
+				if !gotValue {
+					http.Error(
+						w,
+						http.StatusText(http.StatusInternalServerError),
+						http.StatusInternalServerError,
+					)
 
-						return
-					}
+					return
 				}
 			}
 
@@ -5207,7 +5205,7 @@ func addRequestHandlerSubresources(t *testing.T, r _Resource, i, limit int) {
 
 type _RequestRoutingCase struct {
 	name           string // sr00, pr00, wr0
-	resource       _Resource
+	_resource      _Resource
 	reqMethod      string
 	reqURLStr      string
 	expectRedirect bool
@@ -8040,10 +8038,10 @@ func TestResourceBase_ServeHTTP(t *testing.T) {
 			fmt.Println(c.name)
 			var w = httptest.NewRecorder()
 			var r = httptest.NewRequest(c.reqMethod, c.reqURLStr, nil)
-			c.resource.ServeHTTP(w, r)
+			c._resource.ServeHTTP(w, r)
 
 			var result = w.Result()
-			checkRequestRouting(t, &c, result, c.resource)
+			checkRequestRouting(t, &c, result, c._resource)
 		})
 	}
 
@@ -8073,9 +8071,9 @@ func TestResourceBase_ServeHTTP(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		c.resource.ServeHTTP(w, r)
+		c._resource.ServeHTTP(w, r)
 
 		var result = w.Result()
-		checkRequestRouting(t, &c, result, c.resource)
+		checkRequestRouting(t, &c, result, c._resource)
 	})
 }

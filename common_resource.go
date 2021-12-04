@@ -366,7 +366,6 @@ type _Resource interface {
 	setRequestHandlerBase(rhb *_RequestHandlerBase)
 	requestHandlerBase() *_RequestHandlerBase
 
-	serveHTTP(w http.ResponseWriter, r *http.Request)
 	http.Handler
 }
 
@@ -2114,14 +2113,6 @@ func (rb *_ResourceBase) requestHandlerBase() *_RequestHandlerBase {
 
 // -------------------------
 
-// serveHTTP calls the resource's HTTP request handler.
-func (rb *_ResourceBase) serveHTTP(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
-	rb.segmentHandler.ServeHTTP(w, r)
-}
-
 // passRequestToChildResource passes the request that was made to a resource
 // below in the hierarchy.
 func (rb *_ResourceBase) passRequestToChildResource(
@@ -2148,8 +2139,8 @@ func (rb *_ResourceBase) passRequestToChildResource(
 		}
 
 		if sr, found := rb.staticResources[ps]; found {
-			rd.r = rb.derived
-			sr.serveHTTP(w, r)
+			rd._r = sr.derived
+			sr.segmentHandler.ServeHTTP(w, r)
 			return rd.handled
 		}
 
@@ -2160,8 +2151,8 @@ func (rb *_ResourceBase) passRequestToChildResource(
 				}
 
 				rd.pathValues[pr.Name()] = values
-				rd.r = rb.derived
-				pr.serveHTTP(w, r)
+				rd._r = pr.derived
+				pr.segmentHandler.ServeHTTP(w, r)
 				return rd.handled
 			}
 		}
@@ -2174,8 +2165,8 @@ func (rb *_ResourceBase) passRequestToChildResource(
 
 			var _, value = rb.wildcardResource.Template().Match(ps)
 			rd.pathValues[n] = value
-			rd.r = rb.derived
-			rb.wildcardResource.serveHTTP(w, r)
+			rd._r = rb.wildcardResource.derived
+			rb.wildcardResource.segmentHandler.ServeHTTP(w, r)
 			return rd.handled
 		}
 	}
