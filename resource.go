@@ -500,22 +500,21 @@ func (rb *Resource) IsRoot() bool {
 // HTTP request handler when the resource's template matches the request's first
 // path segment.
 func (rb *Resource) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	var rd, err = newRoutingData(r)
+	var rd *_RoutingData
+	var err error
+	r, rd, err = requestWithRoutingData(r, rb.derived)
 	if err != nil {
 		http.Error(
 			w,
-			http.StatusText(http.StatusBadRequest),
-			http.StatusBadRequest,
+			http.StatusText(http.StatusInternalServerError),
+			http.StatusInternalServerError,
 		)
 
 		return
 	}
 
-	r = r.WithContext(newContext(r.Context(), rd))
-
 	var ps = rd.nextPathSegment() // First call returns '/'.
 	if rb.tmpl.IsStatic() && rb.tmpl.Content() == ps {
-		rd.r = rb.derived
 		rb.segmentHandler.ServeHTTP(w, r)
 		return
 	}
@@ -523,7 +522,6 @@ func (rb *Resource) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ps = rd.nextPathSegment()
 	if len(ps) > 0 {
 		if rb.tmpl.IsStatic() && rb.tmpl.Content() == ps {
-			rd.r = rb.derived
 			rb.segmentHandler.ServeHTTP(w, r)
 			return
 		}
@@ -535,7 +533,6 @@ func (rb *Resource) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 			var _, value = rb.tmpl.Match(ps)
 			rd.pathValues[rb.Name()] = value
-			rd.r = rb.derived
 			rb.segmentHandler.ServeHTTP(w, r)
 			return
 		}
@@ -546,7 +543,6 @@ func (rb *Resource) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 
 			rd.pathValues[rb.Name()] = values
-			rd.r = rb.derived
 			rb.segmentHandler.ServeHTTP(w, r)
 			return
 		}
@@ -585,112 +581,85 @@ func (rb *Resource) handleOrPassRequest(
 		rd.subtreeExists = true
 	}
 
-	if rd.reachedTheLastPathSegment() {
-		if !rb.canHandleRequest() {
+	var lastSegment = true
+	if !rd.reachedTheLastPathSegment() {
+		lastSegment = false
+
+		if rb.passRequestToChildResource(w, r, rd) {
+			return
+		}
+
+		if !rb.IsSubtreeHandler() {
+			return
+		}
+
+		rd._r = rb.derived
+	}
+
+	if !rb.canHandleRequest() {
+		// If rb is a subtree handler that cannot handle a request, this
+		// prevents other subtree handlers above the hierarchy from handling
+		// the request.
+		notFoundResourceHandler.ServeHTTP(w, r)
+		rd.handled = true
+		return
+	}
+
+	var newURL *url.URL
+	if r.TLS == nil && rb.IsSecure() {
+		if !rb.RedirectsInsecureRequest() {
 			notFoundResourceHandler.ServeHTTP(w, r)
 			rd.handled = true
 			return
 		}
 
-		var newURL *url.URL
-		if r.TLS == nil && rb.IsSecure() {
-			if !rb.RedirectsInsecureRequest() {
+		newURL = cloneRequestURL(r)
+		newURL.Scheme = "https"
+	}
+
+	if rd.uncleanPath && !rb.IsLenientOnUncleanPath() {
+		if newURL == nil {
+			newURL = cloneRequestURL(r)
+		}
+
+		newURL.Path = rd.path
+	}
+
+	if lastSegment && !rb.IsLenientOnTrailingSlash() {
+		if rb.HasTrailingSlash() && !rd.pathHasTrailingSlash() {
+			if rb.IsStrictOnTrailingSlash() {
 				notFoundResourceHandler.ServeHTTP(w, r)
 				rd.handled = true
 				return
 			}
 
-			newURL = cloneRequestURL(r)
-			newURL.Scheme = "https"
-		}
-
-		if rd.uncleanPath && !rb.IsLenientOnUncleanPath() {
 			if newURL == nil {
 				newURL = cloneRequestURL(r)
 			}
 
-			newURL.Path = rd.path
-		}
-
-		if !rb.IsLenientOnTrailingSlash() {
-			if rb.HasTrailingSlash() && !rd.pathHasTrailingSlash() {
-				if rb.IsStrictOnTrailingSlash() {
-					notFoundResourceHandler.ServeHTTP(w, r)
-					rd.handled = true
-					return
-				}
-
-				if newURL == nil {
-					newURL = cloneRequestURL(r)
-				}
-
-				newURL.Path += "/"
-			} else if !rb.HasTrailingSlash() && rd.pathHasTrailingSlash() {
-				if rb.IsStrictOnTrailingSlash() {
-					notFoundResourceHandler.ServeHTTP(w, r)
-					rd.handled = true
-					return
-				}
-
-				if newURL == nil {
-					newURL = cloneRequestURL(r)
-				}
-
-				newURL.Path = newURL.Path[:len(newURL.Path)-1]
-			}
-		}
-
-		if newURL != nil {
-			permanentRedirect(w, r, newURL.String(), permanentRedirectCode)
-			rd.handled = true
-			return
-		}
-
-		rb.handleRequest(w, r)
-		rd.handled = true
-		return
-	}
-
-	if rb.passRequestToChildResource(w, r, rd) {
-		return
-	}
-
-	if rb.IsSubtreeHandler() {
-		rd.r = rb.derived
-		if !rb.canHandleRequest() {
-			notFoundResourceHandler.ServeHTTP(w, r)
-			rd.handled = true
-			return
-		}
-
-		var newURL *url.URL
-		if r.TLS == nil && rb.IsSecure() {
-			if !rb.RedirectsInsecureRequest() {
+			newURL.Path += "/"
+		} else if !rb.HasTrailingSlash() && rd.pathHasTrailingSlash() {
+			if rb.IsStrictOnTrailingSlash() {
 				notFoundResourceHandler.ServeHTTP(w, r)
 				rd.handled = true
 				return
 			}
 
-			newURL = cloneRequestURL(r)
-			newURL.Scheme = "https"
-		}
-
-		if rd.uncleanPath && !rb.IsLenientOnUncleanPath() {
 			if newURL == nil {
 				newURL = cloneRequestURL(r)
 			}
 
-			newURL.Path = rd.path
+			newURL.Path = newURL.Path[:len(newURL.Path)-1]
 		}
-
-		if newURL != nil {
-			permanentRedirect(w, r, newURL.String(), permanentRedirectCode)
-			rd.handled = true
-			return
-		}
-
-		// At this point, the request may have been modified by subresources.
-		rb.handleRequest(w, r)
-		rd.handled = true
 	}
+
+	if newURL != nil {
+		permanentRedirect(w, r, newURL.String(), permanentRedirectCode)
+		rd.handled = true
+		return
+	}
+
+	// At this point, the request may have been modified by subresources.
+	rb.handleRequest(w, r)
+	rd.handled = true
 }
