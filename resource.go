@@ -29,11 +29,11 @@ func createDummyResource(tmpl *Template) (*Resource, error) {
 	return rb, nil
 }
 
-// createResource creates an instance of the Resource. RequestHandler and
+// createResource creates an instance of the Resource. The impl and
 // config parameters can be nil.
 func createResource(
 	tmplStr string,
-	rh RequestHandler,
+	impl Impl,
 	config *Config,
 ) (*Resource, error) {
 	var hTmplStr, pTmplStr, rTmplStr, secure, tslash, err = splitURL(tmplStr)
@@ -74,15 +74,15 @@ func createResource(
 		return nil, newError("%w", err)
 	}
 
-	if rh != nil {
+	if impl != nil {
 		var rhb *_RequestHandlerBase
-		rhb, err = detectHTTPMethodHandlersOf(rh)
+		rhb, err = detectHTTPMethodHandlersOf(impl)
 		if err != nil {
 			return nil, newError("%w", err)
 		}
 
-		r.requestHandler = rh
-		r._RequestHandlerBase = rhb
+		r.impl = impl
+		r.setRequestHandlerBase(rhb)
 	}
 
 	if hTmplStr != "" || pTmplStr != "" {
@@ -154,15 +154,16 @@ func CreateDormantResourceUsingConfig(
 // CreateResource returns a newly created resource.
 //
 // The first argument URL template's scheme and trailing slash property values
-// are used to configure the new ResourceBase instance.
+// are used to configure the new instance of the Resource.
 //
-// The second argument must be an instance of a type with methods to handle
-// the HTTP requests. Methods must have the signature of the http.HandlerFunc
-// and must start with the "Handle" prefix. The remaining part of the method's
-// name is considered an HTTP method. For example, HandleGet and HandleCustom
-// are considered the handlers of the GET and CUSTOM HTTP methods,
-// respectively. If the value of the RequestHandler has a HandleUnusedMethod
-// method, then it's used as the handler of the unused methods.
+// The Impl is, in a sense, the implementation of the resource. It is an
+// instance of a type with methods to handle HTTP requests. Methods must have
+// the signature of the http.HandlerFunc and must start with the "Handle"
+// prefix. The remaining part of any such method's name is considered an HTTP
+// method. For example, HandleGet and HandleCustom are considered the handlers
+// of the GET and CUSTOM HTTP methods, respectively. If the value of the impl
+// has the HandleNotAllowedMethod method, then it's used as the handler of the
+// not allowed methods.
 //
 // Example:
 // 	type ExampleResource struct{}
@@ -181,27 +182,23 @@ func CreateDormantResourceUsingConfig(
 // 	)
 //
 // When the URL template contains a host and/or prefix path segment templates,
-// the instance of the ResourceBase keeps them. Templates are used when the
-// resource is being registered. When the resource is being registered by
-// a router, the host and path segment templates indicate where in the
-// hierarchy it must be placed. When the resource is being registered by a
-// host, the host template is checked for compatibility, and the prefix path
-// segment templates show where in the hierarchy the resource must be placed
-// under the host. When the resource is being registered by another resource,
-// the host and prefix path segment templates are checked for compatibility
-// with the registering resource's host and corresponding prefix path segments.
-// If there are remaining path segments that come below the registering
-// resource, they show where in the hierarchy the resource must be placed under
-// the registering resource.
-func CreateResource(
-	urlTmplStr string,
-	rh RequestHandler,
-) (*Resource, error) {
-	if rh == nil {
+// the resource keeps them. Templates are used when the resource is being
+// registered. When the resource is being registered by a router, the host and
+// path segment templates indicate where in the hierarchy it must be placed.
+// When the resource is being registered by a host, the host template is checked
+// for compatibility, and the prefix path segment templates show where in the
+// hierarchy the resource must be placed under the host. When the resource
+// is being registered by another resource, the host and prefix path segment
+// templates are checked for compatibility with the registering resource's host
+// and corresponding prefix path segments. If there are remaining path segments
+// that come below the registering resource, they show where in the hierarchy
+// the resource must be placed under the registering resource.
+func CreateResource(urlTmplStr string, impl Impl) (*Resource, error) {
+	if impl == nil {
 		return nil, newError("%w", ErrNilArgument)
 	}
 
-	var r, err = createResource(urlTmplStr, rh, nil)
+	var r, err = createResource(urlTmplStr, impl, nil)
 	if err != nil {
 		return nil, newError("<- %w", err)
 	}
@@ -214,13 +211,14 @@ func CreateResource(
 // trailing slash property values of the URL template (the config's Secure
 // and TrailingSlash values are ignored and may not be set).
 //
-// The second argument must be an instance of a type with methods to handle
-// the HTTP requests. Methods must have the signature of the http.HandlerFunc
-// and must start with the "Handle" prefix. The remaining part of the method's
-// name is considered an HTTP method. For example, HandleGet and HandleCustom
-// are considered the handlers of the GET and CUSTOM HTTP methods,
-// respectively. If the value of the RequestHandler has a HandleUnusedMethod
-// method, then it's used as the handler of the unused methods.
+// The Impl is, in a sense, the implementation of the resource. It is an
+// instance of a type with methods to handle HTTP requests. Methods must have
+// the signature of the http.HandlerFunc and must start with the "Handle"
+// prefix. The remaining part of any such method's name is considered an HTTP
+// method. For example, HandleGet and HandleCustom are considered the handlers
+// of the GET and CUSTOM HTTP methods, respectively. If the value of the impl
+// has the HandleNotAllowedMethod method, then it's used as the handler of the
+// not allowed methods.
 //
 // Example:
 // 	type ExampleResource struct{}
@@ -240,28 +238,27 @@ func CreateResource(
 // 	)
 //
 // When the URL template contains a host and/or prefix path segment templates,
-// the instance of the ResourceBase keeps them. Templates are used when the
-// resource is being registered. When the resource is being registered by
-// a router, the host and path segment templates indicate where in the
-// hierarchy it must be placed. When the resource is being registered by a
-// host, the host template is checked for compatibility, and the prefix path
-// segment templates show where in the hierarchy the resource must be placed
-// under the host. When the resource is being registered by another resource,
-// the host and prefix path segment templates are checked for compatibility
-// with the registering resource's host and corresponding prefix path segments.
-// If there are remaining path segments that come below the registering
-// resource, they show where in the hierarchy the resource must be placed under
-// the registering resource.
+// the resource keeps them. Templates are used when the resource is being
+// registered. When the resource is being registered by a router, the host and
+// path segment templates indicate where in the hierarchy it must be placed.
+// When the resource is being registered by a host, the host template is checked
+// for compatibility, and the prefix path segment templates show where in the
+// hierarchy the resource must be placed under the host. When the resource
+// is being registered by another resource, the host and prefix path segment
+// templates are checked for compatibility with the registering resource's host
+// and corresponding prefix path segments. If there are remaining path segments
+// that come below the registering resource, they show where in the hierarchy
+// the resource must be placed under the registering resource.
 func CreateResourceUsingConfig(
 	urlTmplStr string,
-	rh RequestHandler,
+	impl Impl,
 	config Config,
 ) (*Resource, error) {
-	if rh == nil {
+	if impl == nil {
 		return nil, newError("%w", ErrNilArgument)
 	}
 
-	var r, err = createResource(urlTmplStr, rh, &config)
+	var r, err = createResource(urlTmplStr, impl, &config)
 	if err != nil {
 		return nil, newError("<- %w", err)
 	}
@@ -333,15 +330,16 @@ func NewDormantResourceUsingConfig(urlTmplStr string, config Config) *Resource {
 // NewResource panics on an error.
 //
 // The first argument URL template's scheme and trailing slash property values
-// are used to configure the new ResourceBase instance.
+// are used to configure the new Resource instance.
 //
-// The second argument must be an instance of a type with methods to handle
-// the HTTP requests. Methods must have the signature of the http.HandlerFunc
-// and must start with the "Handle" prefix. The remaining part of the method's
-// name is considered an HTTP method. For example, HandleGet and HandleCustom
-// are considered the handlers of the GET and CUSTOM HTTP methods,
-// respectively. If the value of the RequestHandler has a HandleUnusedMethod
-// method, then it's used as the handler of the unused methods.
+// The Impl is, in a sense, the implementation of the resource. It is an
+// instance of a type with methods to handle HTTP requests. Methods must have
+// the signature of the http.HandlerFunc and must start with the "Handle"
+// prefix. The remaining part of any such method's name is considered an HTTP
+// method. For example, HandleGet and HandleCustom are considered the handlers
+// of the GET and CUSTOM HTTP methods, respectively. If the value of the impl
+// has the HandleNotAllowedMethod method, then it's used as the handler of the
+// not allowed methods.
 //
 // Example:
 // 	type ExampleResource struct{}
@@ -360,20 +358,19 @@ func NewDormantResourceUsingConfig(urlTmplStr string, config Config) *Resource {
 // 	)
 //
 // When the URL template contains a host and/or prefix path segment templates,
-// the instance of the ResourceBase keeps them. Templates are used when the
-// resource is being registered. When the resource is being registered by
-// a router, the host and path segment templates indicate where in the
-// hierarchy it must be placed. When the resource is being registered by a
-// host, the host template is checked for compatibility, and the prefix path
-// segment templates show where in the hierarchy the resource must be placed
-// under the host. When the resource is being registered by another resource,
-// the host and prefix path segment templates are checked for compatibility
-// with the registering resource's host and corresponding prefix path segments.
-// If there are remaining path segments that come below the registering
-// resource, they show where in the hierarchy the resource must be placed under
-// the registering resource.
-func NewResource(urlTmplStr string, rh RequestHandler) *Resource {
-	var rb, err = CreateResource(urlTmplStr, rh)
+// the resource keeps them. Templates are used when the resource is being
+// registered. When the resource is being registered by a router, the host and
+// path segment templates indicate where in the hierarchy it must be placed.
+// When the resource is being registered by a host, the host template is checked
+// for compatibility, and the prefix path segment templates show where in the
+// hierarchy the resource must be placed under the host. When the resource
+// is being registered by another resource, the host and prefix path segment
+// templates are checked for compatibility with the registering resource's host
+// and corresponding prefix path segments. If there are remaining path segments
+// that come below the registering resource, they show where in the hierarchy
+// the resource must be placed under the registering resource.
+func NewResource(urlTmplStr string, impl Impl) *Resource {
+	var rb, err = CreateResource(urlTmplStr, impl)
 	if err != nil {
 		panic(newError("<- %w", err))
 	}
@@ -384,18 +381,19 @@ func NewResource(urlTmplStr string, rh RequestHandler) *Resource {
 // NewResourceUsingConfig returns a newly created resource. Unlike
 // CreateResourceUsingConfig, NewResourceUsingConfig panics on an error.
 //
-// The new ResourceBase instance is configured with the properties in the
+// The new Resource instance is configured with the properties in the
 // config as well as the scheme and trailing slash property values of the URL
 // template (the config's Secure and TrailingSlash values are ignored and may
 // not be set).
 //
-// The second argument must be an instance of a type with methods to handle
-// the HTTP requests. Methods must have the signature of the http.HandlerFunc
-// and must start with the "Handle" prefix. The remaining part of the method's
-// name is considered an HTTP method. For example, HandleGet and HandleCustom
-// are considered the handlers of the GET and CUSTOM HTTP methods,
-// respectively. If the value of the RequestHandler has a HandleUnusedMethod
-// method, then it's used as the handler of the unused methods.
+// The Impl is, in a sense, the implementation of the resource. It is an
+// instance of a type with methods to handle HTTP requests. Methods must have
+// the signature of the http.HandlerFunc and must start with the "Handle"
+// prefix. The remaining part of any such method's name is considered an HTTP
+// method. For example, HandleGet and HandleCustom are considered the handlers
+// of the GET and CUSTOM HTTP methods, respectively. If the value of the impl
+// has the HandleNotAllowedMethod method, then it's used as the handler of the
+// not allowed methods.
 //
 // Example:
 // 	type ExampleResource struct{}
@@ -415,24 +413,23 @@ func NewResource(urlTmplStr string, rh RequestHandler) *Resource {
 // 	)
 //
 // When the URL template contains a host and/or prefix path segment templates,
-// the instance of the ResourceBase keeps them. Templates are used when the
-// resource is being registered. When the resource is being registered by
-// a router, the host and path segment templates indicate where in the
-// hierarchy it must be placed. When the resource is being registered by a
-// host, the host template is checked for compatibility, and the prefix path
-// segment templates show where in the hierarchy the resource must be placed
-// under the host. When the resource is being registered by another resource,
-// the host and prefix path segment templates are checked for compatibility
-// with the registering resource's host and corresponding prefix path segments.
-// If there are remaining path segments that come below the registering
-// resource, they show where in the hierarchy the resource must be placed under
-// the registering resource.
+// the resource keeps them. Templates are used when the resource is being
+// registered. When the resource is being registered by a router, the host and
+// path segment templates indicate where in the hierarchy it must be placed.
+// When the resource is being registered by a host, the host template is checked
+// for compatibility, and the prefix path segment templates show where in the
+// hierarchy the resource must be placed under the host. When the resource
+// is being registered by another resource, the host and prefix path segment
+// templates are checked for compatibility with the registering resource's host
+// and corresponding prefix path segments. If there are remaining path segments
+// that come below the registering resource, they show where in the hierarchy
+// the resource must be placed under the registering resource.
 func NewResourceUsingConfig(
 	urlTmplStr string,
-	rh RequestHandler,
+	impl Impl,
 	config Config,
 ) *Resource {
-	var rb, err = CreateResourceUsingConfig(urlTmplStr, rh, config)
+	var rb, err = CreateResourceUsingConfig(urlTmplStr, impl, config)
 	if err != nil {
 		panic(newError("<- %w", err))
 	}
@@ -660,6 +657,6 @@ func (rb *Resource) handleOrPassRequest(
 	}
 
 	// At this point, the request may have been modified by subresources.
-	rb.handleRequest(w, r)
+	rb.requestHandler.ServeHTTP(w, r)
 	rd.handled = true
 }

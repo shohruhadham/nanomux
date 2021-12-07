@@ -556,7 +556,7 @@ const (
 	remainingPathKey
 	sharedDataKey
 	resourceKey
-	requestHandlerKey
+	implKey
 )
 
 var (
@@ -582,11 +582,10 @@ var (
 	// that is handling the request.
 	ResourceKey interface{} = resourceKey
 
-	// RequestHandlerKey can be used to retrieve the RequestHandler of the
-	// host or resource. If the host or resource wasn't created with the
-	// RequestHandler or the RequestHandler wasn't set, the returned value
-	// will be nil.
-	RequestHandlerKey interface{} = requestHandlerKey
+	// ImplKey can be used to retrieve the implementation of the host or
+	// resource. If the host or resource wasn't created with the Impl or the
+	// Impl wasn't set, the returned value will be nil.
+	ImplKey interface{} = implKey
 )
 
 // -------------------------
@@ -628,8 +627,8 @@ func (c *_Context) Value(key interface{}) interface{} {
 			return c.rd._r.SharedData()
 		case resourceKey:
 			return c.rd._r
-		case requestHandlerKey:
-			return c.rd._r.RequestHandler()
+		case implKey:
+			return c.rd._r.Implementation()
 		default:
 			return nil
 		}

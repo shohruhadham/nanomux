@@ -399,20 +399,25 @@ func TestRouter_URLConfig(t *testing.T) {
 	}
 }
 
-// rhType is usef in other test files too.
-type rhType struct{}
+// implType is usef in other test files too.
+type implType struct{}
 
-func (rht *rhType) HandleGet(w http.ResponseWriter, r *http.Request)          {}
-func (rht *rhType) HandlePost(w http.ResponseWriter, r *http.Request)         {}
-func (rht *rhType) HandleCustom(w http.ResponseWriter, r *http.Request)       {}
-func (rht *rhType) HandleUnusedMethod(w http.ResponseWriter, r *http.Request) {}
-func (rht *rhType) SomeMethod(w http.ResponseWriter, r *http.Request)         {}
+func (rht *implType) HandleGet(w http.ResponseWriter, r *http.Request)    {}
+func (rht *implType) HandlePost(w http.ResponseWriter, r *http.Request)   {}
+func (rht *implType) HandleCustom(w http.ResponseWriter, r *http.Request) {}
+func (rht *implType) HandleNotAllowedMethod(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+}
+
+func (rht *implType) SomeMethod(w http.ResponseWriter, r *http.Request) {}
 
 const rhTypeHTTPMethods = "get post custom"
 
-func TestRouter_SetURLRequestHandlerFor(t *testing.T) {
+func TestRouter_SetImplementationAt(t *testing.T) {
 	var ro = NewRouter()
-	var rh = &rhType{}
+	var rh = &implType{}
 
 	// Number of handlers with default options handler.
 	var nHandlers = len(toUpperSplitByCommaSpace(rhTypeHTTPMethods)) + 1
@@ -470,11 +475,11 @@ func TestRouter_SetURLRequestHandlerFor(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			var err = ro.SetURLRequestHandler(c.urlTmpl, rh)
+			var err = ro.SetImplementationAt(c.urlTmpl, rh)
 
 			if (err != nil) != c.wantErr {
 				t.Fatalf(
-					"Router.SetRequestHandlerFor() err = %v, wantErr %t",
+					"Router.SetImplementationAt() err = %v, wantErr %t",
 					err,
 					c.wantErr,
 				)
@@ -490,15 +495,15 @@ func TestRouter_SetURLRequestHandlerFor(t *testing.T) {
 				var rhb = _r.requestHandlerBase()
 				if n := len(rhb.handlers); n != nHandlers {
 					t.Fatalf(
-						"Router.SetRequestHandlerFor(): len(handlers) = %d, want %d",
+						"Router.SetImplementationAt(): len(handlers) = %d, want %d",
 						n,
 						nHandlers,
 					)
 				}
 
-				if rhb.notAllowedMethodsHandler == nil {
+				if rhb.notAllowedHTTPMethodsHandler == nil {
 					t.Fatalf(
-						"Router.SetRequestHandlerFor(): failed to set unused methods' handler",
+						"Router.SetImplementationAt(): failed to set the not allowed methods' handler",
 					)
 				}
 			}
@@ -506,31 +511,31 @@ func TestRouter_SetURLRequestHandlerFor(t *testing.T) {
 	}
 }
 
-func TestRouter_URLRequestHandlerOf(t *testing.T) {
+func TestRouter_ImplementationAt(t *testing.T) {
 	var ro = NewRouter()
-	var rh = &rhType{}
+	var rh = &implType{}
 
-	var err = ro.SetURLRequestHandler("http://example.com", rh)
+	var err = ro.SetImplementationAt("http://example.com", rh)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = ro.SetURLRequestHandler("https://example.com/r10/", rh)
+	err = ro.SetImplementationAt("https://example.com/r10/", rh)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = ro.SetURLRequestHandler("http://example.com/r10/{r20:1}", rh)
+	err = ro.SetImplementationAt("http://example.com/r10/{r20:1}", rh)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = ro.SetURLRequestHandler("/r00", rh)
+	err = ro.SetImplementationAt("/r00", rh)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = ro.SetURLRequestHandler("{r01}/r11", rh)
+	err = ro.SetImplementationAt("{r01}/r11", rh)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -556,10 +561,10 @@ func TestRouter_URLRequestHandlerOf(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			var _rh, err = ro.URLRequestHandler(c.urlTmpl)
+			var _rh, err = ro.ImplementationAt(c.urlTmpl)
 			if (err != nil) != c.wantErr {
 				t.Fatalf(
-					"Router.RequestHandlerOf() err = %v, want %t",
+					"Router.ImplementationAt() err = %v, want %t",
 					err,
 					c.wantErr,
 				)
@@ -567,7 +572,7 @@ func TestRouter_URLRequestHandlerOf(t *testing.T) {
 
 			if !c.wantErr && _rh != rh {
 				t.Fatalf(
-					"Router.RequestHandlerOf(): couldn't return request handler",
+					"Router.ImplementationAt(): couldn't return impl",
 				)
 			}
 		})
@@ -679,9 +684,9 @@ func TestRouter_SetURLHandlerFor(t *testing.T) {
 						)
 					}
 
-					if _r.notAllowedMethodsHandler == nil {
+					if _r.notAllowedHTTPMethodsHandler == nil {
 						t.Fatalf(
-							"Router.SetURLHandlerFor(): unusedMethodsHandler == nil",
+							"Router.SetURLHandlerFor(): notAllowedMethodsHandler == nil",
 						)
 					}
 				case *Resource:
@@ -692,9 +697,9 @@ func TestRouter_SetURLHandlerFor(t *testing.T) {
 						)
 					}
 
-					if _r.notAllowedMethodsHandler == nil {
+					if _r.notAllowedHTTPMethodsHandler == nil {
 						t.Fatalf(
-							"Router.SetURLHandlerFor(): unusedMethodsHandler == nil",
+							"Router.SetURLHandlerFor(): notAllowedMethodsHandler == nil",
 						)
 					}
 				}
@@ -806,9 +811,9 @@ func TestRouter_SetURLHandlerFuncFor(t *testing.T) {
 						)
 					}
 
-					if _r.notAllowedMethodsHandler == nil {
+					if _r.notAllowedHTTPMethodsHandler == nil {
 						t.Fatalf(
-							"Router.SetURLHandlerFuncFor(): unusedMethodsHandler == nil",
+							"Router.SetURLHandlerFuncFor(): notAllowedMethodsHandler == nil",
 						)
 					}
 				case *Resource:
@@ -819,9 +824,9 @@ func TestRouter_SetURLHandlerFuncFor(t *testing.T) {
 						)
 					}
 
-					if _r.notAllowedMethodsHandler == nil {
+					if _r.notAllowedHTTPMethodsHandler == nil {
 						t.Fatalf(
-							"Router.SetHandlerFor(): unusedMethodsHandler == nil",
+							"Router.SetHandlerFor(): notAllowedMethodsHandler == nil",
 						)
 					}
 				}
@@ -935,248 +940,6 @@ func TestRouter_URLHandlerOf(t *testing.T) {
 	}
 }
 
-// func TestRouter_SetHandlerForUnusedMethods(t *testing.T) {
-// 	var ro = NewRouter()
-// 	var handler = http.HandlerFunc(
-// 		func(w http.ResponseWriter, r *http.Request) {},
-// 	)
-
-// 	var cases = []struct {
-// 		name, urlTmpl, urlToCheck string
-// 		wantErr                   bool
-// 	}{
-// 		{"h0", "http://example.com", "http://example.com", false},
-// 		{"r10", "http://example.com/r10", "http://example.com/r10", false},
-// 		{
-// 			"r20",
-// 			"http://example.com/r10/{r20:123}",
-// 			"http://example.com/r10/{r20:123}",
-// 			false,
-// 		},
-// 		{"r00", "/r00", "/r00", false},
-// 		{"r00", "r00", "r00", false},
-// 		{"r11", "/{r01}/r11", "/{r01}/r11", false},
-// 		{"r11", "{r01}/r11", "{r01}/r11", false},
-// 		{"h0 error #2", "https://example.com", "http://example.com", true},
-// 		{"h0 error #3", "http://example.com/", "http://example.com", true},
-// 		{
-// 			"r10 error #1",
-// 			"https://example.com/r10",
-// 			"http://example.com/r10",
-// 			true,
-// 		},
-// 		{
-// 			"r10 error #2",
-// 			"http://example.com/r10/",
-// 			"http://example.com/r10",
-// 			true,
-// 		},
-// 		{"r11 error #1", "{r01}/r11/", "{r01}/r11", true},
-// 		{"empty url", "", "", true},
-// 	}
-
-// 	for _, c := range cases {
-// 		t.Run(c.name, func(t *testing.T) {
-// 			if c.urlToCheck != "" {
-// 				var err = ro.SetURLHandlerFor("get", c.urlToCheck, handler)
-// 				if err != nil {
-// 					t.Fatal(err)
-// 				}
-// 			}
-
-// 			var err = ro.SetURLHandlerFor("!", c.urlTmpl, handler)
-// 			if (err != nil) != c.wantErr {
-// 				t.Fatalf(
-// 					"Router.SetHandlerForUnusedMethods() err = %v, wantErr %t",
-// 					err,
-// 					c.wantErr,
-// 				)
-// 			}
-
-// 			if c.urlToCheck != "" {
-// 				var _r _Resource
-// 				_r, _, err = ro.registered_Resource(c.urlToCheck)
-// 				if err != nil {
-// 					return
-// 				}
-
-// 				var hb, ok = _r.(*Host)
-// 				if ok {
-// 					if hb.unusedMethodsHandler == nil {
-// 						t.Fatalf("Router.SetHandlerForUnusedMethods() failed")
-// 					}
-// 				} else {
-// 					var rb, ok = _r.(*Resource)
-// 					if ok {
-// 						if rb.unusedMethodsHandler == nil {
-// 							t.Fatalf(
-// 								"Router.SetHandlerForUnusedMethods() failed",
-// 							)
-// 						}
-// 					}
-// 				}
-// 			}
-// 		})
-// 	}
-// }
-
-// func TestRouter_SetHandlerFuncForUnusedMethods(t *testing.T) {
-// 	var ro = NewRouter()
-// 	var handler = func(w http.ResponseWriter, r *http.Request) {}
-
-// 	var cases = []struct {
-// 		name, urlTmpl, urlToCheck string
-// 		wantErr                   bool
-// 	}{
-// 		{"h0", "http://example.com", "http://example.com", false},
-// 		{"r10", "http://example.com/r10", "http://example.com/r10", false},
-// 		{
-// 			"r20",
-// 			"http://example.com/r10/{r20:123}",
-// 			"http://example.com/r10/{r20:123}",
-// 			false,
-// 		},
-// 		{"r00 #1", "/r00", "/r00", false},
-// 		{"r00 #2", "r00", "r00", false},
-// 		{"r11 #1", "/{r01}/r11", "/{r01}/r11", false},
-// 		{"r11 #2", "{r01}/r11", "{r01}/r11", false},
-// 		{"h0 error #1", "https://example.com", "http://example.com", true},
-// 		{"h0 error #2", "http://example.com/", "http://example.com", true},
-// 		{
-// 			"r10 error #1",
-// 			"https://example.com/r10",
-// 			"http://example.com/r10",
-// 			true,
-// 		},
-// 		{
-// 			"r10 error #2",
-// 			"http://example.com/r10/",
-// 			"http://example.com/r10",
-// 			true,
-// 		},
-// 		{"r11 error #1", "{r01}/r11/", "{r01}/r11", true},
-// 		{"empty url", "", "", true},
-// 	}
-
-// 	for _, c := range cases {
-// 		t.Run(c.name, func(t *testing.T) {
-// 			if c.urlToCheck != "" {
-// 				var err = ro.SetURLHandlerFuncFor("get", c.urlToCheck, handler)
-// 				if err != nil {
-// 					t.Fatal(err)
-// 				}
-// 			}
-
-// 			var err = ro.SetURLHandlerFuncFor("!", c.urlTmpl, handler)
-// 			if (err != nil) != c.wantErr {
-// 				t.Fatalf(
-// 					"Router.SetHandlerForUnusedMethods() err = %v, wantErr %t",
-// 					err,
-// 					c.wantErr,
-// 				)
-// 			}
-
-// 			if c.urlToCheck != "" {
-// 				var _r _Resource
-// 				_r, _, err = ro.registered_Resource(c.urlToCheck)
-// 				if err != nil {
-// 					return
-// 				}
-
-// 				var hb, ok = _r.(*Host)
-// 				if ok {
-// 					if hb.unusedMethodsHandler == nil {
-// 						t.Fatalf("Router.SetHandlerForUnusedMethods() failed")
-// 					}
-// 				} else {
-// 					var rb, ok = _r.(*Resource)
-// 					if ok {
-// 						if rb.unusedMethodsHandler == nil {
-// 							t.Fatalf(
-// 								"Router.SetHandlerForUnusedMethods() failed",
-// 							)
-// 						}
-// 					}
-// 				}
-// 			}
-// 		})
-// 	}
-// }
-
-// func TestRouter_HandlerOfUnusedMethods(t *testing.T) {
-// 	var ro = NewRouter()
-// 	var handler = http.HandlerFunc(
-// 		func(w http.ResponseWriter, r *http.Request) {},
-// 	)
-
-// 	var cases = []struct {
-// 		name, urlTmpl, urlToCheck string
-// 		wantErr                   bool
-// 	}{
-// 		{"h0 #1", "http://example.com", "http://example.com", false},
-// 		{"h0 error #1", "https://example.com", "http://example.com", true},
-// 		{"h0 error #2", "http://example.com/", "http://example.com", true},
-// 		{"r10 #1", "http://example.com/r10", "http://example.com/r10", false},
-// 		{
-// 			"r10 error #1",
-// 			"https://example.com/r10",
-// 			"http://example.com/r10",
-// 			true,
-// 		},
-// 		{
-// 			"r10 error #2",
-// 			"http://example.com/r10/",
-// 			"http://example.com/r10",
-// 			true,
-// 		},
-// 		{
-// 			"r20",
-// 			"http://example.com/r10/{r20:123}",
-// 			"http://example.com/r10/{r20:123}",
-// 			false,
-// 		},
-// 		{"r00 #1", "/r00", "/r00", false},
-// 		{"r00 #2", "r00", "r00", false},
-// 		{"r11 #1", "/{r01}/r11", "/{r01}/r11", false},
-// 		{"r11 #2", "{r01}/r11", "{r01}/r11", false},
-// 		{"r11 error #1", "{r01}/r11/", "{r01}/r11", true},
-// 		{"empty url", "", "", true},
-// 	}
-
-// 	for _, c := range cases {
-// 		t.Run(c.name, func(t *testing.T) {
-// 			if c.urlToCheck != "" {
-// 				var err = ro.SetURLHandlerFor("get", c.urlToCheck, handler)
-// 				if err != nil {
-// 					t.Fatal(err)
-// 				}
-
-// 				err = ro.SetURLHandlerFor("!", c.urlToCheck, handler)
-// 				if err != nil {
-// 					t.Fatal(err)
-// 				}
-// 			}
-
-// 			var h, err = ro.URLHandlerOf("!", c.urlTmpl)
-// 			if (err != nil) != c.wantErr {
-// 				t.Fatalf(
-// 					"Router.HandlerOfUnusedMethods() err = %v, wantErr %t",
-// 					err,
-// 					c.wantErr,
-// 				)
-// 			}
-
-// 			if !c.wantErr {
-// 				if h == nil {
-// 					t.Fatalf(
-// 						"Router.HandlerOfUnusedMethods() failed to return handler",
-// 					)
-// 				}
-// 			}
-// 		})
-// 	}
-// }
-
 func TestRouter_WrapURLSegmentHandler(t *testing.T) {
 	var ro = NewRouter()
 
@@ -1214,7 +977,8 @@ func TestRouter_WrapURLSegmentHandler(t *testing.T) {
 		{
 			"example1.com r10",
 			"https://example1.com/r00/{r10:abc}/",
-			"https://example1.com/r00/abc/",
+			// Security has no effect on a segment handler.
+			"http://example1.com/r00/abc/",
 			"abab",
 			false,
 		},
@@ -1284,6 +1048,126 @@ func TestRouter_WrapURLSegmentHandler(t *testing.T) {
 						"Router.WrapURLSegmentHandler() gotStr = %s, want = %s",
 						str,
 						c.wantStr,
+					)
+				}
+			}
+		})
+	}
+}
+
+func TestRouter_WrapURLRequestHandler(t *testing.T) {
+	var ro = NewRouter()
+	var impl = &implType{}
+
+	var strb strings.Builder
+	var mwfs = []MiddlewareFunc{
+		func(handler http.Handler) http.Handler {
+			return http.HandlerFunc(
+				func(w http.ResponseWriter, r *http.Request) {
+					strb.WriteByte('b')
+					handler.ServeHTTP(w, r)
+				},
+			)
+		},
+		func(handler http.Handler) http.Handler {
+			return http.HandlerFunc(
+				func(w http.ResponseWriter, r *http.Request) {
+					strb.WriteByte('a')
+					handler.ServeHTTP(w, r)
+				},
+			)
+		},
+	}
+
+	var cases = []struct {
+		name, url, requestURL string
+		wantErr               bool
+	}{
+		{
+			"example1.com",
+			"http://example1.com",
+			"http://example1.com",
+			false,
+		},
+		{
+			"example1.com r10",
+			"https://example1.com/r00/{r10:abc}/",
+			"https://example1.com/r00/abc/",
+			false,
+		},
+		{
+			"example1.com r11",
+			"http://example1.com/r00/{r11}",
+			"http://example1.com/r00/r11",
+			false,
+		},
+		{
+			"example2.com r20",
+			"https://example2.com/r00/{r10:123}/r20",
+			"https://example2.com/r00/123/r20",
+			false,
+		},
+		{
+			"example3.com r10",
+			"http://example3.com/{r00:123}/r10",
+			"http://example3.com/123/r10",
+			false,
+		},
+		{"r00", "https:///r00", "https:///r00", false},
+		{"r01", "{r01}", "/r01", false},
+		{"r10", "/{r01}/{r10:abc}/", "/r01/abc/", false},
+		{"r11", "{r01}/{r11}", "/r01/r11", false},
+		{"r20", "https:///{r01}/r12/{r20:123}", "https:///r01/r12/123", false},
+		{"r02 r10", "{r02:abc}/r10/", "/abc/r10/", false},
+		{"dummy host", "example3.com", "", true},
+		{
+			"example3.com dummy resource",
+			"http://example3.com{r00:123}/",
+			"",
+			true,
+		},
+		{"dummy resource", "/{r02:abc}", "", true},
+		{
+			"example1.com r10",
+			"http://example1.com/r00/{r10:abc}/",
+			"",
+			true,
+		},
+		{"r12 error #1", "{r01}/r12/{r20:123}", "", true},
+		{"r12 error #2", "https:///{r01}/r12/{r20:123}/", "", true},
+		{"empty URL", "", "", true},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			var err error
+			if !c.wantErr {
+				err = ro.SetImplementationAt(c.url, impl)
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			err = ro.WrapURLRequestHandler(c.url, mwfs...)
+			if (err != nil) != c.wantErr {
+				t.Fatalf(
+					"Router.WrapURLRequestHandler() err = %v, wantErr = %t",
+					err,
+					c.wantErr,
+				)
+			}
+
+			if !c.wantErr {
+				strb.Reset()
+				var w = httptest.NewRecorder()
+				var r = httptest.NewRequest("GET", c.requestURL, nil)
+				ro.ServeHTTP(w, r)
+
+				var str = strb.String()
+				if str != "ab" {
+					t.Fatalf(
+						"Router.WrapURLRequestHandler() gotStr = %s, want = ab",
+						str,
 					)
 				}
 			}
@@ -1544,396 +1428,6 @@ func TestRouter_WrapURLHandlerOf(t *testing.T) {
 		})
 	}
 }
-
-// func TestRouter_WrapHandlerOfMethodsInUse(t *testing.T) {
-// 	var (
-// 		ro      = NewRouter()
-// 		strb    strings.Builder
-// 		handler = http.HandlerFunc(
-// 			func(w http.ResponseWriter, r *http.Request) {
-// 				strb.WriteByte('1')
-// 			},
-// 		)
-
-// 		mwfs = []MiddlewareFunc{
-// 			func(h http.Handler) http.Handler {
-// 				return http.HandlerFunc(
-// 					func(w http.ResponseWriter, r *http.Request) {
-// 						strb.WriteByte('2')
-// 						h.ServeHTTP(w, r)
-// 					},
-// 				)
-// 			},
-// 			func(h http.Handler) http.Handler {
-// 				return http.HandlerFunc(
-// 					func(w http.ResponseWriter, r *http.Request) {
-// 						strb.WriteByte('3')
-// 						h.ServeHTTP(w, r)
-// 					},
-// 				)
-// 			},
-// 		}
-// 	)
-
-// 	var err = ro.SetURLHandlerFor("get put", "http://example0.com", handler)
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-
-// 	err = ro.SetURLHandlerFor("post put", "http://example0.com/r10", handler)
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-
-// 	err = ro.SetURLHandlerFor(
-// 		"custom",
-// 		"http://example0.com/r10/{r20:1}",
-// 		handler,
-// 	)
-
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-
-// 	err = ro.SetURLHandlerFor("get post", "http://example1.com", handler)
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-
-// 	err = ro.SetURLHandlerFor("get post", "http://example1.com/r10", handler)
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-
-// 	err = ro.SetURLHandlerFor("get post", "/r00", handler)
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-
-// 	err = ro.SetURLHandlerFor("get post custom put", "{r01}/r11", handler)
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-
-// 	err = ro.SetURLHandlerFor("get post", "{r01}/r12", handler)
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-
-// 	var cases = []struct {
-// 		name, urlTmpl, urlToCheck string
-// 		methodsToCheck            []string
-// 		wantErr                   bool
-// 	}{
-// 		{
-// 			"example0.com",
-// 			"http://example0.com",
-// 			"http://example0.com",
-// 			[]string{"get"},
-// 			false,
-// 		},
-// 		{
-// 			"r10",
-// 			"http://example0.com/r10",
-// 			"http://example0.com/r10",
-// 			[]string{"post"},
-// 			false,
-// 		},
-// 		{
-// 			"r20",
-// 			"http://example0.com/r10/{r20:1}",
-// 			"http://example0.com/r10/{r20:1}",
-// 			[]string{"custom"},
-// 			false,
-// 		},
-// 		{
-// 			"r00",
-// 			"/r00",
-// 			"/r00",
-// 			[]string{"get", "post"},
-// 			false,
-// 		},
-// 		{
-// 			"r11",
-// 			"/{r01}/r11",
-// 			"/{r01}/r11",
-// 			[]string{"get", "post", "custom"},
-// 			false,
-// 		},
-// 		{
-// 			"example1.com error #1",
-// 			"https://example1.com",
-// 			"http://example1.com",
-// 			[]string{"get", "post"},
-// 			true,
-// 		},
-// 		{
-// 			"example1.com error #2",
-// 			"http://example1.com/",
-// 			"http://example1.com",
-// 			[]string{"get", "post"},
-// 			true,
-// 		},
-// 		{
-// 			"r10 error #1",
-// 			"https://example1.com/r10",
-// 			"http://example1.com/r10",
-// 			[]string{"get", "post"},
-// 			true,
-// 		},
-// 		{
-// 			"r10 error #2",
-// 			"http://example1.com/r10/",
-// 			"http://example1.com/r10",
-// 			[]string{"get", "post"},
-// 			true,
-// 		},
-// 		{
-// 			"r12",
-// 			"/{r01}/r12/",
-// 			"/{r01}/r12",
-// 			[]string{"get", "post"},
-// 			true,
-// 		},
-// 		{"empty url", "", "", nil, true},
-// 	}
-
-// 	for _, c := range cases {
-// 		t.Run(c.name, func(t *testing.T) {
-// 			var err = ro.WrapURLHandlerOf("*", c.urlTmpl, mwfs...)
-// 			if (err != nil) != c.wantErr {
-// 				t.Fatalf(
-// 					"Router.WrapHandlerOfMethodsInUse() err = %v, want %t",
-// 					err,
-// 					c.wantErr,
-// 				)
-// 			}
-
-// 			if c.urlToCheck != "" && c.methodsToCheck != nil {
-// 				for _, m := range c.methodsToCheck {
-// 					var h, err = ro.URLHandlerOf(m, c.urlToCheck)
-// 					if err != nil {
-// 						t.Fatal(err)
-// 					}
-
-// 					strb.Reset()
-// 					h.ServeHTTP(nil, nil)
-// 					var checkStr = "321"
-// 					if c.wantErr {
-// 						checkStr = "1"
-// 					}
-
-// 					if strb.String() != checkStr {
-// 						t.Fatalf("Router.WrapHandlerOfMethodsInUse() failed")
-// 					}
-// 				}
-// 			}
-// 		})
-// 	}
-// }
-
-// func TestRouter_WrapHandlerOfUnusedMethods(t *testing.T) {
-// 	var (
-// 		ro          = NewRouter()
-// 		strb        strings.Builder
-// 		handlerFunc = func(w http.ResponseWriter, r *http.Request) {
-// 			strb.WriteByte('1')
-// 		}
-
-// 		mwfs = []MiddlewareFunc{
-// 			func(h http.Handler) http.Handler {
-// 				return http.HandlerFunc(
-// 					func(w http.ResponseWriter, r *http.Request) {
-// 						strb.WriteByte('2')
-// 						h.ServeHTTP(w, r)
-// 					},
-// 				)
-// 			},
-// 			func(h http.Handler) http.Handler {
-// 				return http.HandlerFunc(
-// 					func(w http.ResponseWriter, r *http.Request) {
-// 						strb.WriteByte('3')
-// 						h.ServeHTTP(w, r)
-// 					},
-// 				)
-// 			},
-// 		}
-// 	)
-
-// 	var err = ro.SetURLHandlerFuncFor("get", "http://example0.com", handlerFunc)
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-
-// 	err = ro.SetURLHandlerFuncFor("!", "http://example0.com", handlerFunc)
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-
-// 	err = ro.SetURLHandlerFuncFor("get", "http://example0.com/r10", handlerFunc)
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-
-// 	err = ro.SetURLHandlerFuncFor("!", "http://example0.com/r10", handlerFunc)
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-
-// 	err = ro.SetURLHandlerFuncFor(
-// 		"get",
-// 		"http://example0.com/r10/{r20:1}",
-// 		handlerFunc,
-// 	)
-
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-
-// 	err = ro.SetURLHandlerFuncFor(
-// 		"!",
-// 		"http://example0.com/r10/{r20:1}",
-// 		handlerFunc,
-// 	)
-
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-
-// 	err = ro.SetURLHandlerFuncFor("get", "/r00", handlerFunc)
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-
-// 	err = ro.SetURLHandlerFuncFor("!", "/r00", handlerFunc)
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-
-// 	err = ro.SetURLHandlerFuncFor("get", "{r01}/r11", handlerFunc)
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-
-// 	err = ro.SetURLHandlerFuncFor("!", "{r01}/r11", handlerFunc)
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-
-// 	err = ro.SetURLHandlerFuncFor("get", "http://example1.com", handlerFunc)
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-
-// 	err = ro.SetURLHandlerFuncFor("!", "http://example1.com", handlerFunc)
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-
-// 	err = ro.SetURLHandlerFuncFor("get", "http://example1.com/r10", handlerFunc)
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-
-// 	err = ro.SetURLHandlerFuncFor(
-// 		"!",
-// 		"http://example1.com/r10",
-// 		handlerFunc,
-// 	)
-
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-
-// 	err = ro.SetURLHandlerFuncFor("get", "{r01}/r12", handlerFunc)
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-
-// 	err = ro.SetURLHandlerFuncFor("!", "{r01}/r12", handlerFunc)
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-
-// 	var cases = []struct {
-// 		name, urlTmpl, urlToCheck string
-// 		wantErr                   bool
-// 	}{
-// 		{"example0.com", "http://example0.com", "http://example0.com", false},
-// 		{
-// 			"r10",
-// 			"http://example0.com/r10",
-// 			"http://example0.com/r10",
-// 			false,
-// 		},
-// 		{
-// 			"r20",
-// 			"http://example0.com/r10/{r20:1}",
-// 			"http://example0.com/r10/{r20:1}",
-// 			false,
-// 		},
-// 		{"r00", "/r00", "/r00", false},
-// 		{"r11", "/{r01}/r11", "/{r01}/r11", false},
-// 		{
-// 			"example1.com error #1",
-// 			"https://example1.com",
-// 			"http://example1.com",
-// 			true,
-// 		},
-// 		{
-// 			"example1.com error #2",
-// 			"http://example1.com/",
-// 			"http://example1.com",
-// 			true,
-// 		},
-// 		{
-// 			"r10 error #1",
-// 			"https://example1.com/r10",
-// 			"http://example1.com/r10",
-// 			true,
-// 		},
-// 		{
-// 			"r10 error #2",
-// 			"http://example1.com/r10/",
-// 			"http://example1.com/r10",
-// 			true,
-// 		},
-// 		{"r12", "/{r01}/r12/", "/{r01}/r12", true},
-// 		{"empty url", "", "", true},
-// 	}
-
-// 	for _, c := range cases {
-// 		t.Run(c.name, func(t *testing.T) {
-// 			var err = ro.WrapURLHandlerOf("!", c.urlTmpl, mwfs...)
-// 			if (err != nil) != c.wantErr {
-// 				t.Fatalf(
-// 					"Router.WrapHandlerOfUnusedMethods() err = %v, want %t",
-// 					err,
-// 					c.wantErr,
-// 				)
-// 			}
-
-// 			if c.urlToCheck != "" {
-// 				var h http.Handler
-// 				h, err = ro.URLHandlerOf("!", c.urlToCheck)
-// 				if err != nil {
-// 					t.Fatal(err)
-// 				}
-
-// 				strb.Reset()
-// 				h.ServeHTTP(nil, nil)
-// 				var checkStr = "321"
-// 				if c.wantErr {
-// 					checkStr = "1"
-// 				}
-
-// 				if strb.String() != checkStr {
-// 					t.Fatalf("Router.WrapHandlerOfUnusedMethods() failed")
-// 				}
-// 			}
-// 		})
-// 	}
-// }
 
 func TestRouter_hostWithTemplate(t *testing.T) {
 	var (
@@ -3885,7 +3379,7 @@ func TestRouter_WrapAllSegmentHandlers(t *testing.T) {
 			ro.ServeHTTP(rr, r)
 			if result := strb.String(); result != c.result {
 				t.Fatalf(
-					"Router.WrapAllHandlersOf() %q result = %s, want %s.",
+					"Router.WrapAllSegmentHandlers() %q result = %s, want %s.",
 					c.name,
 					result,
 					c.result,
@@ -3895,10 +3389,157 @@ func TestRouter_WrapAllSegmentHandlers(t *testing.T) {
 	}
 }
 
+func TestRouter_WrapAllRequestHandlers(t *testing.T) {
+	var ro = NewRouter()
+	var cases = []struct {
+		name, urlTmpl, requestURL string
+		wantErr                   bool
+	}{
+		{
+			"host1",
+			"https://example1.com",
+			"https://example1.com",
+			false,
+		},
+		{
+			"host1 r00",
+			"https://example1.com/r00",
+			"https://example1.com/r00",
+			false,
+		},
+		{
+			"host1 r01",
+			"https://example1.com/r01",
+			"https://example1.com/r01",
+			false,
+		},
+		{
+			"host1 r10",
+			"https://example1.com/r01/{r10}",
+			"https://example1.com/r01/r10",
+			false,
+		},
+
+		{
+			"host2 r10",
+			"http://example2.com/r00/{r10:abc}/",
+			"http://example2.com/r00/abc/",
+			false,
+		},
+		{
+			"host2 r11",
+			"http://example2.com/r00/{r11:123}",
+			"http://example2.com/r00/123",
+			false,
+		},
+		{
+			"host2 r12",
+			"https://example2.com/{r01:123}/r12/",
+			"https://example2.com/123/r12/",
+			false,
+		},
+		{
+			"host2 error",
+			"",
+			"https://example2.com/",
+			true,
+		},
+		{
+			"host2 r00 error",
+			"",
+			"http://example2.com/r00",
+			true,
+		},
+
+		{
+			"r00",
+			"{r00}/",
+			"http://non-existent.com/r00/",
+			false,
+		},
+		{
+			"r10",
+			"r01/{r10:abc}",
+			"http://non-existent.com/r01/abc",
+			false,
+		},
+		{
+			"r11",
+			"r01/{r11:123}/",
+			"http://non-existent.com/r01/123/",
+			false,
+		},
+		{
+			"r12 static",
+			"https:///r01/r12",
+			"https://non-existent.com/r01/r12",
+			false,
+		},
+		{"r01 error", "", "http://non-existent.com/r01", true},
+	}
+
+	var err error
+	for _, c := range cases {
+		if !c.wantErr {
+			err = ro.SetURLHandlerFuncFor(
+				"get",
+				c.urlTmpl,
+				func(w http.ResponseWriter, r *http.Request) {},
+			)
+
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+
+	var strb = strings.Builder{}
+	var mwfs = []MiddlewareFunc{
+		func(handler http.Handler) http.Handler {
+			return http.HandlerFunc(
+				func(w http.ResponseWriter, r *http.Request) {
+					strb.WriteByte('B')
+					handler.ServeHTTP(w, r)
+				},
+			)
+		},
+		func(handler http.Handler) http.Handler {
+			return http.HandlerFunc(
+				func(w http.ResponseWriter, r *http.Request) {
+					strb.WriteByte('A')
+					handler.ServeHTTP(w, r)
+				},
+			)
+		},
+	}
+
+	err = ro.WrapAllRequestHandlers(mwfs...)
+	if err != nil {
+		t.Fatalf("Router.WrapAllRequestHandlers() err = %v, want nil", err)
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			var rr = httptest.NewRecorder()
+			var r = httptest.NewRequest("get", c.requestURL, nil)
+
+			strb.Reset()
+			ro.ServeHTTP(rr, r)
+			if result := strb.String(); (result != "AB") != c.wantErr {
+				t.Fatalf(
+					"Router.WrapAllRequestHandlers() %q result = %s, want AB.",
+					c.name,
+					result,
+				)
+			}
+		})
+	}
+}
+
 func TestRouter_WrapAllHandlersOf(t *testing.T) {
 	var ro = NewRouter()
 	var h = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
-	var rh = &rhType{}
+	var rh = &implType{}
 	var cases = []struct{ name, urlTmpl, requestURL string }{
 		{
 			"host",
@@ -3954,7 +3595,7 @@ func TestRouter_WrapAllHandlersOf(t *testing.T) {
 
 	var err error
 	for _, c := range cases {
-		err = ro.SetURLRequestHandler(c.urlTmpl, rh)
+		err = ro.SetImplementationAt(c.urlTmpl, rh)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -4029,7 +3670,7 @@ func TestRouter_WrapAllHandlersOf(t *testing.T) {
 			ro.ServeHTTP(rr, r)
 			if strb.String() != "AB" {
 				t.Fatalf(
-					"Router.WrapAllHandlersOf() has failed to wrap unused methods' handler",
+					"Router.WrapAllHandlersOf() has failed to wrap the not allowed methods' handler",
 				)
 			}
 
@@ -4045,216 +3686,6 @@ func TestRouter_WrapAllHandlersOf(t *testing.T) {
 		})
 	}
 }
-
-// func TestRouter_WrapAllHandlersOfMethodsInUse(t *testing.T) {
-// 	var ro = NewRouter()
-// 	var rh = &rhType{}
-// 	var urlTmpls = []string{
-// 		"https://example.com",
-// 		"https://example.com/r00",
-// 		"https://example.com/r01",
-// 		"https://example.com/r01/{r10}",
-// 		"http://example1.com/r00/{r10:abc}/",
-// 		"http://example1.com/r00/{r11:123}",
-// 		"{r00}/",
-// 		"r01/{r10:abc}",
-// 		"r01/{r11:123}/",
-// 		"https:///r01/r11",
-// 	}
-
-// 	var err error
-// 	for _, urlTmpl := range urlTmpls {
-// 		err = ro.SetURLRequestHandler(urlTmpl, rh)
-// 		if err != nil {
-// 			t.Fatal(err)
-// 		}
-// 	}
-
-// 	// Changing urls to match patterns.
-// 	urlTmpls[3] = "https://example.com/r01/r10"
-// 	urlTmpls[4] = "http://example1.com/r00/abc/"
-// 	urlTmpls[5] = "http://example1.com/r00/123"
-
-// 	// httptest.NewRequest requires host.
-// 	urlTmpls[6] = "http://non-existent.com/r00/"
-// 	urlTmpls[7] = "http://non-existent.com/r01/abc"
-// 	urlTmpls[8] = "http://non_existent.com/r01/123/"
-
-// 	var strb = strings.Builder{}
-// 	var mwfs = []MiddlewareFunc{
-// 		func(handler http.Handler) http.Handler {
-// 			return http.HandlerFunc(
-// 				func(w http.ResponseWriter, r *http.Request) {
-// 					strb.WriteByte('B')
-// 					handler.ServeHTTP(w, r)
-// 				},
-// 			)
-// 		},
-// 		func(handler http.Handler) http.Handler {
-// 			return http.HandlerFunc(
-// 				func(w http.ResponseWriter, r *http.Request) {
-// 					strb.WriteByte('A')
-// 					handler.ServeHTTP(w, r)
-// 				},
-// 			)
-// 		},
-// 	}
-
-// 	err = ro.WrapAllHandlersOf("*", mwfs...)
-// 	if err != nil {
-// 		t.Fatalf(
-// 			"Router.WrapAllHandlersOfMethodsInUse() err = %v, want nil",
-// 			err,
-// 		)
-// 	}
-
-// 	for _, urlTmpl := range urlTmpls {
-// 		var rr = httptest.NewRecorder()
-// 		var r = httptest.NewRequest("get", urlTmpl, nil)
-
-// 		strb.Reset()
-// 		ro.ServeHTTP(rr, r)
-// 		if strb.String() != "AB" {
-// 			t.Fatalf(
-// 				"Router.WrapAllHandlersOfMethodsInUse() has failed to wrap GET method's handler",
-// 			)
-// 		}
-
-// 		r = httptest.NewRequest("post", urlTmpl, nil)
-
-// 		strb.Reset()
-// 		ro.ServeHTTP(rr, r)
-// 		if strb.String() != "AB" {
-// 			t.Fatalf(
-// 				"Router.WrapAllHandlersOfMethodsInUse() has failed to wrap POST method's handler",
-// 			)
-// 		}
-
-// 		r = httptest.NewRequest("custom", urlTmpl, nil)
-
-// 		strb.Reset()
-// 		ro.ServeHTTP(rr, r)
-// 		if strb.String() != "AB" {
-// 			t.Fatalf(
-// 				"Router.WrapAllHandlersOfMethodsInUse() has failed to wrap CUSTOM method's handler",
-// 			)
-// 		}
-
-// 		r = httptest.NewRequest("unused", urlTmpl, nil)
-
-// 		strb.Reset()
-// 		ro.ServeHTTP(rr, r)
-// 		if strb.Len() != 0 {
-// 			t.Fatalf(
-// 				"Router.WrapAllHandlersOfMethodsInUse() has wrapped unused methods' handler",
-// 			)
-// 		}
-// 	}
-// }
-
-// func TestRouter_WrapAllHandlersOfUnusedMethods(t *testing.T) {
-// 	var ro = NewRouter()
-// 	var rh = &rhType{}
-// 	var urlTmpls = []string{
-// 		"https://example.com",
-// 		"https://example.com/r00",
-// 		"https://example.com/r01",
-// 		"https://example.com/r01/{r10}",
-// 		"http://example1.com/r00/{r10:abc}/",
-// 		"http://example1.com/r00/{r11:123}",
-// 		"{r00}/",
-// 		"r01/{r10:abc}",
-// 		"r01/{r11:123}/",
-// 		"https:///r01/r11",
-// 	}
-
-// 	var err error
-// 	for _, urlTmpl := range urlTmpls {
-// 		err = ro.SetURLRequestHandler(urlTmpl, rh)
-// 		if err != nil {
-// 			t.Fatal(err)
-// 		}
-// 	}
-
-// 	// Changing urls to match patterns.
-// 	urlTmpls[3] = "https://example.com/r01/r10"
-// 	urlTmpls[4] = "http://example1.com/r00/abc/"
-// 	urlTmpls[5] = "http://example1.com/r00/123"
-
-// 	// httptest.NewRequest requires host.
-// 	urlTmpls[6] = "http://non-existent.com/r00/"
-// 	urlTmpls[7] = "http://non-existent.com/r01/abc"
-// 	urlTmpls[8] = "http://non_existent.com/r01/123/"
-
-// 	var strb = strings.Builder{}
-// 	var mwfs = []MiddlewareFunc{
-// 		func(handler http.Handler) http.Handler {
-// 			return http.HandlerFunc(
-// 				func(w http.ResponseWriter, r *http.Request) {
-// 					strb.WriteByte('B')
-// 					handler.ServeHTTP(w, r)
-// 				},
-// 			)
-// 		},
-// 		func(handler http.Handler) http.Handler {
-// 			return http.HandlerFunc(
-// 				func(w http.ResponseWriter, r *http.Request) {
-// 					strb.WriteByte('A')
-// 					handler.ServeHTTP(w, r)
-// 				},
-// 			)
-// 		},
-// 	}
-
-// 	err = ro.WrapAllHandlersOf("!", mwfs...)
-// 	if err != nil {
-// 		t.Fatalf(
-// 			"Router.WrapAllHandlersOfUnusedMethods() err = %v, want nil",
-// 			err,
-// 		)
-// 	}
-
-// 	for _, urlTmpl := range urlTmpls {
-// 		var rr = httptest.NewRecorder()
-// 		var r = httptest.NewRequest("get", urlTmpl, nil)
-
-// 		strb.Reset()
-// 		ro.ServeHTTP(rr, r)
-
-// 		if strb.Len() != 0 {
-// 			t.Fatalf(
-// 				"Router.WrapAllHandlersOfUnusedMethods() has wrapped GET method's handler",
-// 			)
-// 		}
-
-// 		r = httptest.NewRequest("post", urlTmpl, nil)
-
-// 		ro.ServeHTTP(rr, r)
-// 		if strb.Len() != 0 {
-// 			t.Fatalf(
-// 				"Router.WrapAllHandlersOfUnusedMethods() has wrappped POST method's handler",
-// 			)
-// 		}
-
-// 		r = httptest.NewRequest("custom", urlTmpl, nil)
-
-// 		ro.ServeHTTP(rr, r)
-// 		if strb.Len() != 0 {
-// 			t.Fatalf(
-// 				"Router.WrapAllHandlersOfUnusedMethods() has wrappped CUSTOM method's handler",
-// 			)
-// 		}
-
-// 		r = httptest.NewRequest("unused", urlTmpl, nil)
-
-// 		ro.ServeHTTP(rr, r)
-// 		if strb.String() != "AB" {
-// 			t.Fatalf(
-// 				"Router.WrapAllHandlersOfUnusedMethods() has failed to wrap unused methods' handler",
-// 			)
-// 		}
-// 	}
-// }
 
 func TestRouter__Resources(t *testing.T) {
 	var (

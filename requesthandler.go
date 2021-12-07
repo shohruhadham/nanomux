@@ -27,14 +27,14 @@ var ErrConflictingStatusCode = fmt.Errorf("conflicting status code")
 
 // --------------------------------------------------
 
-// RequestHandler is used to accept any type that has methods to handle
-// HTTP requests. Methods must have the signature of the http.HandlerFunc
-// and start with the 'Handle' prefix. The remaining part of the methods'
-// name is considered an HTTP method. For example, HandleGet, HandleCustom are
-// considered as the handlers of the GET and CUSTOM HTTP methods respectively.
-// If the type has HandleUnusedMethod then it's used as the handler of
-// the unused methods.
-type RequestHandler interface{}
+// Impl is used to accept any type that has methods to handle HTTP requests.
+// Methods must have the signature of the http.HandlerFunc and start with the
+// 'Handle' prefix. The remaining part of any such method's name is considered
+// an HTTP method. For example, HandleGet and HandleCustom are considered the
+// handlers of the GET and CUSTOM HTTP methods, respectively. If the type has
+// the HandleNotAllowedMethod then it's used as the handler of the not allowed
+// methods.
+type Impl interface{}
 
 // --------------------------------------------------
 
@@ -43,15 +43,15 @@ type RequestHandler interface{}
 // provides them with the functionality to manage them. It also handles the
 // HTTP request by calling the responsible handler of the request's HTTP method.
 type _RequestHandlerBase struct {
-	handlers                 map[string]http.Handler
-	notAllowedMethodsHandler http.Handler
+	handlers                     map[string]http.Handler
+	notAllowedHTTPMethodsHandler http.Handler
 }
 
 // -------------------------
 
 // detectHTTPMethodHandlersOf detects the HTTP method handlers of the
 // RequestHandler's underlying value.
-func detectHTTPMethodHandlersOf(rh RequestHandler) (
+func detectHTTPMethodHandlersOf(rh Impl) (
 	*_RequestHandlerBase,
 	error,
 ) {
@@ -69,7 +69,7 @@ func detectHTTPMethodHandlersOf(rh RequestHandler) (
 	}
 
 	var handlers = make(map[string]http.Handler)
-	var unusedMethodsHandler http.HandlerFunc
+	var notAllowedMethodsHandler http.HandlerFunc
 
 	// reflect.Value allows us to compare method signatures directly instead of
 	// the signatures of their function values.
@@ -95,24 +95,24 @@ func detectHTTPMethodHandlersOf(rh RequestHandler) (
 			return nil, fmt.Errorf("error")
 		}
 
-		if hm == "UNUSEDMETHOD" {
-			unusedMethodsHandler = http.HandlerFunc(hf)
+		if hm == "NOTALLOWEDMETHOD" {
+			notAllowedMethodsHandler = http.HandlerFunc(hf)
 		} else {
 			handlers[hm] = http.HandlerFunc(hf)
 		}
 	}
 
 	var lhandlers = len(handlers)
-	if lhandlers == 0 && unusedMethodsHandler == nil {
+	if lhandlers == 0 && notAllowedMethodsHandler == nil {
 		return nil, nil
 	}
 
-	var rhb = &_RequestHandlerBase{handlers, unusedMethodsHandler}
+	var rhb = &_RequestHandlerBase{handlers, notAllowedMethodsHandler}
 	if lhandlers > 0 {
 		var hf = rhb.handlers[http.MethodOptions]
 		if hf == nil {
 			rhb.handlers[http.MethodOptions] = http.HandlerFunc(
-				rhb.handleOptionsMethod,
+				rhb.handleOptionsHTTPMethod,
 			)
 		}
 	} else {
@@ -149,7 +149,7 @@ func (rhb *_RequestHandlerBase) setHandlerFor(
 			return newError("%w", ErrNoHandlerExists)
 		}
 
-		rhb.notAllowedMethodsHandler = h
+		rhb.notAllowedHTTPMethodsHandler = h
 		return nil
 	}
 
@@ -164,7 +164,7 @@ func (rhb *_RequestHandlerBase) setHandlerFor(
 	h = rhb.handlers[http.MethodOptions]
 	if h == nil {
 		rhb.handlers[http.MethodOptions] = http.HandlerFunc(
-			rhb.handleOptionsMethod,
+			rhb.handleOptionsHTTPMethod,
 		)
 	}
 
@@ -179,11 +179,11 @@ func (rhb *_RequestHandlerBase) handlerOf(method string) http.Handler {
 	}
 
 	if ms[0] == "!" {
-		if rhb.notAllowedMethodsHandler != nil {
-			return rhb.notAllowedMethodsHandler
+		if rhb.notAllowedHTTPMethodsHandler != nil {
+			return rhb.notAllowedHTTPMethodsHandler
 		}
 
-		return http.HandlerFunc(rhb.handleNotAllowedMethods)
+		return http.HandlerFunc(rhb.handleNotAllowedHTTPMethods)
 	}
 
 	if rhb.handlers != nil {
@@ -213,13 +213,13 @@ func (rhb *_RequestHandlerBase) wrapHandlerOf(
 
 	if lms == 1 {
 		if ms[0] == "!" {
-			rhb.notAllowedMethodsHandler = rhb.handlerOf("!")
+			rhb.notAllowedHTTPMethodsHandler = rhb.handlerOf("!")
 			for i, mwf := range mwfs {
 				if mwf == nil {
 					return newError("%w at index %d", ErrNoMiddleware, i)
 				}
 
-				rhb.notAllowedMethodsHandler = mwf(rhb.notAllowedMethodsHandler)
+				rhb.notAllowedHTTPMethodsHandler = mwf(rhb.notAllowedHTTPMethodsHandler)
 			}
 
 			return nil
@@ -273,15 +273,15 @@ func (rhb *_RequestHandlerBase) handleRequest(
 		return
 	}
 
-	if rhb.notAllowedMethodsHandler != nil {
-		rhb.notAllowedMethodsHandler.ServeHTTP(w, r)
+	if rhb.notAllowedHTTPMethodsHandler != nil {
+		rhb.notAllowedHTTPMethodsHandler.ServeHTTP(w, r)
 		return
 	}
 
-	rhb.handleNotAllowedMethods(w, r)
+	rhb.handleNotAllowedHTTPMethods(w, r)
 }
 
-func (rhb *_RequestHandlerBase) handleOptionsMethod(
+func (rhb *_RequestHandlerBase) handleOptionsHTTPMethod(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
@@ -292,7 +292,7 @@ func (rhb *_RequestHandlerBase) handleOptionsMethod(
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (rhb *_RequestHandlerBase) handleNotAllowedMethods(
+func (rhb *_RequestHandlerBase) handleNotAllowedHTTPMethods(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
@@ -309,8 +309,8 @@ func (rhb *_RequestHandlerBase) handleNotAllowedMethods(
 
 // -------------------------
 
-// AllowedMethods returns the HTTP methods in use.
-func (rhb *_RequestHandlerBase) AllowedMethods() []string {
+// AllowedHTTPMethods returns the HTTP methods in use.
+func (rhb *_RequestHandlerBase) AllowedHTTPMethods() []string {
 	if rhb == nil || len(rhb.handlers) == 0 {
 		return nil
 	}

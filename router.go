@@ -4,6 +4,7 @@
 package nanomux
 
 import (
+	"errors"
 	"net"
 	"net/http"
 	"strings"
@@ -265,26 +266,22 @@ func (ro *Router) URLConfig(urlTmplStr string) (Config, error) {
 	return _r.Config(), nil
 }
 
-// SetRequestHandler sets the request handlers for a host or resource from
-// the passed RequestHandler. If the host or resource doesn't exist, the
-// method creates it. The host or resource keeps the RequestHandler for
-// future retrieval. Old handlers of the existing host or resource are
-// discarded.
+// SetImplementationAt sets the request handlers for a host or resource from
+// the passed impl. If the host or resource doesn't exist, the method creates
+// it. The host or resource keeps the impl for future retrieval. Old handlers
+// of the existing host or resource are discarded.
 //
 // The scheme and trailing slash property values in the URL template must be
 // compatible with the existing host or resource's properties, otherwise the
 // method returns an error. A newly created host or resource is configured
 // with the values in the URL template.
-func (ro *Router) SetURLRequestHandler(
-	urlTmplStr string,
-	rh RequestHandler,
-) error {
+func (ro *Router) SetImplementationAt(urlTmplStr string, impl Impl) error {
 	var _r, err = ro._Resource(urlTmplStr)
 	if err != nil {
 		return newError("<- %w", err)
 	}
 
-	err = _r.SetRequestHandler(rh)
+	err = _r.SetImplementation(impl)
 	if err != nil {
 		return newError("<- %w", err)
 	}
@@ -292,21 +289,21 @@ func (ro *Router) SetURLRequestHandler(
 	return nil
 }
 
-// RequestHandler returns the RequestHandler of the host or resource.
-// If the host or resource doesn't exist or they were not created from a
-// RequestHandler or they have no RequestHandler set, nil is returned.
+// ImplementationAt returns the implementation of the host or resource.
+// If the host or resource doesn't exist or they were not created from an
+// Impl or they have no Impl set, nil is returned.
 //
 // The scheme and trailing slash property values in the URL template must be
 // compatible with the host or resource's properties, otherwise the method
 // returns an error.
-func (ro *Router) URLRequestHandler(urlTmplStr string) (RequestHandler, error) {
+func (ro *Router) ImplementationAt(urlTmplStr string) (Impl, error) {
 	var _r, _, err = ro.registered_Resource(urlTmplStr)
 	if err != nil {
 		return nil, newError("<- %w", err)
 	}
 
 	if _r != nil {
-		return _r.RequestHandler(), nil
+		return _r.Implementation(), nil
 	}
 
 	return nil, nil
@@ -398,6 +395,13 @@ func (ro *Router) URLHandlerOf(method string, urlTmplStr string) (
 // The handler is wrapped in the middlewares' passed order. If the host or
 // resource doesn't exist, an error is returned.
 //
+// The segment handler is called when the request passes through the host or
+// resource. It calls the request handler of its own host or resource if the
+// host or resource is the last segment in the request's URL. Or, it finds the
+// next resource that matches the next path segment and passes the request to
+// it. If there is no matching resource for the next path segment, the handler
+// for a not-found resource is called.
+//
 // The scheme and trailing slash property values in the URL template must be
 // compatible with the host or resource's properties, otherwise the method
 // returns an error.
@@ -412,6 +416,44 @@ func (ro *Router) WrapURLSegmentHandler(
 
 	if r != nil {
 		if err = r.WrapSegmentHandler(middlewares...); err != nil {
+			return newError("<- %w", err)
+		}
+
+		return nil
+	}
+
+	if rIsHost {
+		err = ErrNonExistentHost
+	} else {
+		err = ErrNonExistentResource
+	}
+
+	return newError("%w %q", err, urlTmplStr)
+}
+
+// WrapURLRequestHandler wraps the request handler of the host or resource.
+// The handler is wrapped in the middlewares' passed order. If the host or
+// resource doesn't exist, an error is returned.
+//
+// The request handler calls the HTTP method handler of the host or resource
+// depending on the request's method. Unlike the segment handler, the request
+// handler is called only when the host or resource is going to handle the
+// request.
+//
+// The scheme and trailing slash property values in the URL template must be
+// compatible with the host or resource's properties, otherwise the method
+// returns an error.
+func (ro *Router) WrapURLRequestHandler(
+	urlTmplStr string,
+	mwfs ...MiddlewareFunc,
+) error {
+	var r, rIsHost, err = ro.registered_Resource(urlTmplStr)
+	if err != nil {
+		return newError("<- %w", err)
+	}
+
+	if r != nil {
+		if err = r.WrapRequestHandler(mwfs...); err != nil {
 			return newError("<- %w", err)
 		}
 
@@ -1409,11 +1451,49 @@ func (ro *Router) ConfigureAll(config Config) {
 
 // WrapAllSegmentHandlers wraps all the segment handlers of all the hosts and
 // resources. Handlers are wrapped in the middlewares' passed order.
+//
+// The segment handler is called when the request passes through the host or
+// resource. It calls the request handler of its own host or resource if the
+// host or resource is the last segment in the request's URL. Or, it finds the
+// next resource that matches the next path segment and passes the request to
+// it. If there is no matching resource for the next path segment, the handler
+// for a not-found resource is called.
 func (ro *Router) WrapAllSegmentHandlers(mwfs ...MiddlewareFunc) error {
 	var err = traverseAndCall(
 		ro._Resources(),
 		func(_r _Resource) error {
 			return _r.WrapSegmentHandler(mwfs...)
+		},
+	)
+
+	if err != nil {
+		return newError("<- %w", err)
+	}
+
+	return nil
+}
+
+// WrapAllRequestHandlers wraps all the request handlers of all the hosts and
+// resources. Handlers are wrapped in the middlewares' passed order.
+//
+// The request handler calls the HTTP method handler of the host or resource
+// depending on the request's method. Unlike the segment handler, the request
+// handler is called only when the host or resource is going to handle the
+// request.
+func (ro *Router) WrapAllRequestHandlers(mwfs ...MiddlewareFunc) error {
+	var err = traverseAndCall(
+		ro._Resources(),
+		func(_r _Resource) error {
+			var err = _r.WrapRequestHandler(mwfs...)
+			if errors.Is(err, ErrDummyHost) {
+				return nil
+			}
+
+			if errors.Is(err, ErrDummyResource) {
+				return nil
+			}
+
+			return err
 		},
 	)
 

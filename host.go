@@ -34,11 +34,11 @@ func createDummyHost(tmpl *Template) (*Host, error) {
 	return h, nil
 }
 
-// createHost creates an instance of the Host. RequestHandler and
+// createHost creates an instance of the Host. The Impl and
 // config parameters can be nil.
 func createHost(
 	tmplStr string,
-	rh RequestHandler,
+	impl Impl,
 	config *Config,
 ) (*Host, error) {
 	var hTmplStr, secure, tslash, err = getHost(tmplStr)
@@ -73,15 +73,15 @@ func createHost(
 		return nil, newError("%w", err)
 	}
 
-	if rh != nil {
+	if impl != nil {
 		var rhb *_RequestHandlerBase
-		rhb, err = detectHTTPMethodHandlersOf(rh)
+		rhb, err = detectHTTPMethodHandlersOf(impl)
 		if err != nil {
 			return nil, newError("%w", err)
 		}
 
-		h.requestHandler = rh
-		h._RequestHandlerBase = rhb
+		h.impl = impl
+		h.setRequestHandlerBase(rhb)
 	}
 
 	h.derived = h
@@ -126,13 +126,14 @@ func CreateDormantHostUsingConfig(
 // are used to configure the new host. The template must not be a wildcard
 // template.
 //
-// The second argument must be an instance of a type with methods to handle
-// the HTTP requests. Methods must have the signature of the http.HandlerFunc
-// and must start with the "Handle" prefix. The remaining part of the method's
-// name is considered an HTTP method. For example, HandleGet and HandleCustom
-// are considered the handlers of the GET and CUSTOM HTTP methods,
-// respectively. If the value of the RequestHandler has a HandleUnusedMethod
-// method, then it's used as the handler of the unused methods.
+// The Impl is, in a sense, the implementation of the host. It is an instance
+// of a type with methods to handle HTTP requests. Methods must have the
+// signature of the http.HandlerFunc and must start with the "Handle" prefix.
+// The remaining part of any such method's name is considered an HTTP method.
+// For example, HandleGet and HandleCustom are considered the handlers of the
+// GET and CUSTOM HTTP methods, respectively. If the value of the impl has the
+// HandleNotAllowedMethod method, then it's used as the handler of the not
+// allowed methods.
 //
 // Example:
 // 	type ExampleHost struct{}
@@ -143,12 +144,12 @@ func CreateDormantHostUsingConfig(
 //
 // 	// ...
 // 	var exampleHost, err = CreateHost("https://example.com", &ExampleHost{})
-func CreateHost(urlTmplStr string, rh RequestHandler) (*Host, error) {
-	if rh == nil {
+func CreateHost(urlTmplStr string, impl Impl) (*Host, error) {
+	if impl == nil {
 		return nil, newError("%w", ErrNilArgument)
 	}
 
-	var h, err = createHost(urlTmplStr, rh, nil)
+	var h, err = createHost(urlTmplStr, impl, nil)
 	if err != nil {
 		return nil, newError("<- %w", err)
 	}
@@ -161,13 +162,14 @@ func CreateHost(urlTmplStr string, rh RequestHandler) (*Host, error) {
 // values of the URL template (the config's Secure and TrailingSlash values are
 // ignored and may not be set). The template must not be a wildcard template.
 //
-// The second argument must be an instance of a type with methods to handle
-// the HTTP requests. Methods must have the signature of the http.HandlerFunc
-// and must start with the "Handle" prefix. The remaining part of the method's
-// name is considered an HTTP method. For example, HandleGet and HandleCustom
-// are considered the handlers of the GET and CUSTOM HTTP methods,
-// respectively. If the value of the RequestHandler has a HandleUnusedMethod
-// method, then it's used as the handler of the unused methods.
+// The Impl is, in a sense, the implementation of the host. It is an instance
+// of a type with methods to handle HTTP requests. Methods must have the
+// signature of the http.HandlerFunc and must start with the "Handle" prefix.
+// The remaining part of any such method's name is considered an HTTP method.
+// For example, HandleGet and HandleCustom are considered the handlers of the
+// GET and CUSTOM HTTP methods, respectively. If the value of the impl has the
+// HandleNotAllowedMethod method, then it's used as the handler of the not
+// allowed methods.
 //
 // Example:
 // 	type ExampleHost struct{}
@@ -184,14 +186,14 @@ func CreateHost(urlTmplStr string, rh RequestHandler) (*Host, error) {
 // 	)
 func CreateHostUsingConfig(
 	urlTmplStr string,
-	rh RequestHandler,
+	impl Impl,
 	config Config,
 ) (*Host, error) {
-	if rh == nil {
+	if impl == nil {
 		return nil, newError("%w", ErrNilArgument)
 	}
 
-	var h, err = createHost(urlTmplStr, rh, &config)
+	var h, err = createHost(urlTmplStr, impl, &config)
 	if err != nil {
 		return nil, newError("<- %w", err)
 	}
@@ -240,13 +242,14 @@ func NewDormantHostUsingConfig(urlTmplStr string, config Config) *Host {
 // are used to configure the new host. The template must not be a wildcard
 // template.
 //
-// The second argument must be an instance of a type with methods to handle
-// the HTTP requests. Methods must have the signature of the http.HandlerFunc
-// and must start with the "Handle" prefix. The remaining part of the method's
-// name is considered an HTTP method. For example, HandleGet and HandleCustom
-// are considered the handlers of the GET and CUSTOM HTTP methods,
-// respectively. If the value of the RequestHandler has a HandleUnusedMethod
-// method, then it's used as the handler of the unused methods.
+// The Impl is, in a sense, the implementation of the host. It is an instance
+// of a type with methods to handle HTTP requests. Methods must have the
+// signature of the http.HandlerFunc and must start with the "Handle" prefix.
+// The remaining part of any such method's name is considered an HTTP method.
+// For example, HandleGet and HandleCustom are considered the handlers of the
+// GET and CUSTOM HTTP methods, respectively. If the value of the impl has the
+// HandleNotAllowedMethod method, then it's used as the handler of the not
+// allowed methods.
 //
 // Example:
 // 	type ExampleHost struct{}
@@ -257,8 +260,8 @@ func NewDormantHostUsingConfig(urlTmplStr string, config Config) *Host {
 //
 // 	// ...
 // 	var exampleHost = NewHost("https://example.com", &ExampleHost{})
-func NewHost(urlTmplStr string, rh RequestHandler) *Host {
-	var h, err = CreateHost(urlTmplStr, rh)
+func NewHost(urlTmplStr string, impl Impl) *Host {
+	var h, err = CreateHost(urlTmplStr, impl)
 	if err != nil {
 		panic(newError("<- %w", err))
 	}
@@ -274,13 +277,14 @@ func NewHost(urlTmplStr string, rh RequestHandler) *Host {
 // config's Secure and TrailingSlash values are ignored and may not be set).
 // The template must not be a wildcard template.
 //
-// The second argument must be an instance of a type with methods to handle
-// the HTTP requests. Methods must have the signature of the http.HandlerFunc
-// and must start with the "Handle" prefix. The remaining part of the method's
-// name is considered an HTTP method. For example, HandleGet and HandleCustom
-// are considered the handlers of the GET and CUSTOM HTTP methods,
-// respectively. If the value of the RequestHandler has a HandleUnusedMethod
-// method, then it's used as the handler of the unused methods.
+// The Impl is, in a sense, the implementation of the host. It is an instance
+// of a type with methods to handle HTTP requests. Methods must have the
+// signature of the http.HandlerFunc and must start with the "Handle" prefix.
+// The remaining part of any such method's name is considered an HTTP method.
+// For example, HandleGet and HandleCustom are considered the handlers of the
+// GET and CUSTOM HTTP methods, respectively. If the value of the impl has the
+// HandleNotAllowedMethod method, then it's used as the handler of the not
+// allowed methods.
 //
 // Example:
 // 	type ExampleHost struct{}
@@ -297,10 +301,10 @@ func NewHost(urlTmplStr string, rh RequestHandler) *Host {
 // 	)
 func NewHostUsingConfig(
 	urlTmplStr string,
-	rh RequestHandler,
+	impl Impl,
 	config Config,
 ) *Host {
-	var h, err = CreateHostUsingConfig(urlTmplStr, rh, config)
+	var h, err = CreateHostUsingConfig(urlTmplStr, impl, config)
 	if err != nil {
 		panic(newError("<- %w", err))
 	}
@@ -454,5 +458,5 @@ func (hb *Host) handleOrPassRequest(
 		return
 	}
 
-	hb.handleRequest(w, r)
+	hb.requestHandler.ServeHTTP(w, r)
 }

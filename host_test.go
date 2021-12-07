@@ -776,11 +776,11 @@ func TestHostBase_ServeHTTP(t *testing.T) {
 		)
 	}
 
-	var unusedMethodMw = func(next http.Handler) http.Handler {
+	var notAlloweddMethodsMw = func(next http.Handler) http.Handler {
 		return http.HandlerFunc(
 			func(w http.ResponseWriter, r *http.Request) {
 				var strb strings.Builder
-				strb.WriteString("middleware of unused ")
+				strb.WriteString("middleware of the not allowed ")
 				strb.WriteString(r.Method)
 				strb.WriteByte(' ')
 				strb.WriteString(r.URL.String())
@@ -809,7 +809,7 @@ func TestHostBase_ServeHTTP(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = ro.WrapAllHandlersOf("!", unusedMethodMw)
+	err = ro.WrapAllHandlersOf("!", notAlloweddMethodsMw)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -819,7 +819,7 @@ func TestHostBase_ServeHTTP(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = hs[2].WrapHandlerOf("!", unusedMethodMw)
+	err = hs[2].WrapHandlerOf("!", notAlloweddMethodsMw)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -829,7 +829,7 @@ func TestHostBase_ServeHTTP(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = hs[3].WrapHandlerOf("!", unusedMethodMw)
+	err = hs[3].WrapHandlerOf("!", notAlloweddMethodsMw)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -882,12 +882,12 @@ func TestHostBase_ServeHTTP(t *testing.T) {
 	}
 
 	var c = _RequestRoutingCase{
-		"unused",
+		"notAllowed",
 		hs[0],
 		"CONNECT",
 		"http://example.com",
 		false, false,
-		"middleware of unused CONNECT http://example.com",
+		"middleware of the not allowed CONNECT http://example.com",
 	}
 
 	t.Run(c.name, func(t *testing.T) {
