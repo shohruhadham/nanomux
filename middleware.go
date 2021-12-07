@@ -23,12 +23,6 @@ type MiddlewareFunc func(next http.Handler) http.Handler
 // wrapRequestHandlersOfAll wraps the request handlers of the host and resources
 // and their child resources recursively. Handlers are wrapped with middlewares
 // in their passed order.
-//
-// When the methods argument contains any method, the unusedMethods argument
-// must be false and vice versa.
-//
-// When both the methods and unusedMethods arguments are nil and false,
-// respectively, the function wraps all the handlers of the HTTP methods in use.
 func wrapRequestHandlersOfAll(
 	rs []_Resource,
 	methods []string,

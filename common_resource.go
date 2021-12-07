@@ -89,13 +89,13 @@ var ErrDuplicateNameInThePath = fmt.Errorf("duplicate name in the path")
 var ErrDuplicateNameAmongSiblings = fmt.Errorf("duplicate name among siblings")
 
 // ErrDummyHost is returned when a host doesn't have a request handler for any
-// HTTP method and an attempt to set a handler for unused methods or to wrap one
-// of the HTTP method handlers occurs.
+// HTTP method and an attempt to set a handler for the not allowed methods or
+// to wrap one of the HTTP method handlers occurs.
 var ErrDummyHost = fmt.Errorf("dummy host")
 
 // ErrDummyResource is returned when a resource doesn't have a request handler
-// for any HTTP method and an attempt to set a handler for unused methods or to
-// wrap one of the HTTP method handlers occurs.
+// for any HTTP method and an attempt to set a handler for the not allowed
+// methods or to wrap one of the HTTP method handlers occurs.
 var ErrDummyResource = fmt.Errorf("dummy resource")
 
 // ErrRegisteredHost is returned on an attempt to register an already
@@ -328,14 +328,15 @@ type _Resource interface {
 
 	// -------------------------
 
-	SetRequestHandler(rh RequestHandler) error
-	RequestHandler() RequestHandler
+	SetImplementation(impl Impl) error
+	Implementation() Impl
 
 	SetHandlerFor(methods string, handler http.Handler) error
 	SetHandlerFuncFor(methods string, handlerFunc http.HandlerFunc) error
 	HandlerOf(method string) http.Handler
 
 	WrapSegmentHandler(mwfs ...MiddlewareFunc) error
+	WrapRequestHandler(mwfs ...MiddlewareFunc) error
 	WrapHandlerOf(methods string, mwfs ...MiddlewareFunc) error
 
 	// -------------------------
@@ -343,14 +344,15 @@ type _Resource interface {
 	ConfigurePath(path string, config Config) error
 	PathConfig(path string) (Config, error)
 
-	SetPathRequestHandler(path string, rh RequestHandler) error
-	PathRequestHandler(path string) (RequestHandler, error)
+	SetImplementationAt(path string, impl Impl) error
+	ImplementationAt(path string) (Impl, error)
 
 	SetPathHandlerFor(methods, path string, handler http.Handler) error
 	SetPathHandlerFuncFor(methods, path string, handler http.HandlerFunc) error
 	PathHandlerOf(method, path string) (http.Handler, error)
 
 	WrapPathSegmentHandler(path string, mwfs ...MiddlewareFunc) error
+	WrapPathRequestHandler(path string, mwfs ...MiddlewareFunc) error
 	WrapPathHandlerOf(methods, path string, mwfs ...MiddlewareFunc) error
 
 	// -------------------------
@@ -358,6 +360,7 @@ type _Resource interface {
 	ConfigureSubtree(config Config)
 
 	WrapSubtreeSegmentHandlers(mwfs ...MiddlewareFunc) error
+	WrapSubtreeRequestHandlers(mwfs ...MiddlewareFunc) error
 	WrapSubtreeHandlersOf(methods string, mwfs ...MiddlewareFunc) error
 
 	// -------------------------
@@ -374,10 +377,10 @@ type _Resource interface {
 // _ResourceBase implements the _Resource interface and provides the HostBase
 // and ResourceBase types with common functionality.
 type _ResourceBase struct {
-	derived        _Resource // Keeps the reference to the embedding struct.
-	requestHandler RequestHandler
-	tmpl           *Template
-	papa           _Parent
+	derived _Resource // Keeps the reference to the embedding struct.
+	impl    Impl
+	tmpl    *Template
+	papa    _Parent
 
 	staticResources  map[string]*Resource
 	patternResources []*Resource
@@ -385,6 +388,7 @@ type _ResourceBase struct {
 
 	*_RequestHandlerBase
 	segmentHandler http.Handler
+	requestHandler http.Handler
 
 	cfs        _ConfigFlags
 	sharedData interface{}
@@ -1650,33 +1654,33 @@ func (rb *_ResourceBase) HasAnyChildResources() bool {
 
 // -------------------------
 
-// SetRequestHandler sets the request handlers from the passed argument.
-// The passed argument is also kept for future retrieval. All existing handlers
+// SetImplementation sets the request handlers from the passed impl.
+// The impl is also kept for future retrieval. All existing handlers
 // are discarded.
-func (rb *_ResourceBase) SetRequestHandler(rh RequestHandler) error {
-	if rh == nil {
+func (rb *_ResourceBase) SetImplementation(impl Impl) error {
+	if impl == nil {
 		return newError("%w", ErrNilArgument)
 	}
 
-	var rhb, err = detectHTTPMethodHandlersOf(rh)
+	var rhb, err = detectHTTPMethodHandlersOf(impl)
 	if err != nil {
 		return newError("<- %w", err)
 	}
 
-	rb.requestHandler = rh
+	rb.impl = impl
 
 	if rhb != nil {
-		rb._RequestHandlerBase = rhb
+		rb.setRequestHandlerBase(rhb)
 	}
 
 	return nil
 }
 
-// RequestHandler returns the RequestHandler of the host or resource.
-// If the host or resource wasn't created from a RequestHandler or if they
-// have no RequestHandler set, nil is returned.
-func (rb *_ResourceBase) RequestHandler() RequestHandler {
-	return rb.requestHandler
+// Implementation returns the implementation of the host or resource.
+// If the host or resource wasn't created from an Impl or if they have no
+// Impl set, nil is returned.
+func (rb *_ResourceBase) Implementation() Impl {
+	return rb.impl
 }
 
 // -------------------------
@@ -1707,7 +1711,7 @@ func (rb *_ResourceBase) SetHandlerFor(
 			return newError("<- %w", err)
 		}
 
-		rb._RequestHandlerBase = rhb
+		rb.setRequestHandlerBase(rhb)
 	} else {
 		var err = rb.setHandlerFor(methods, handler)
 		if err != nil {
@@ -1755,17 +1759,55 @@ func (rb *_ResourceBase) HandlerOf(method string) http.Handler {
 
 // WrapSegmentHandler wraps the resource's segment handler with the middlewares
 // in their passed order.
+//
+// The segment handler is called when the request passes through the resource.
+// It calls the request handler of its own resource if the resource is the last
+// resource in the request's URL. Or, it finds the next resource that matches
+// the next path segment and passes the request to it. If there is no matching
+// resource for the next path segment, the handler for a not-found resource is
+// called. The host's segment handler calls the request handler if the request
+// was made to the host.
 func (rb *_ResourceBase) WrapSegmentHandler(mwfs ...MiddlewareFunc) error {
 	if len(mwfs) == 0 {
 		return newError("%w", ErrNoMiddleware)
 	}
 
-	for _, mw := range mwfs {
+	for i, mw := range mwfs {
 		if mw == nil {
-			return newError("%w", ErrNilArgument)
+			return newError("%w at index %d", ErrNilArgument, i)
 		}
 
 		rb.segmentHandler = mw(rb.segmentHandler)
+	}
+
+	return nil
+}
+
+// WrapRequestHandler wraps the resource's request handler with the middlewares
+// in their passed order.
+//
+// The request handler calls the HTTP method handler of the resource depending
+// on the request's method. Unlike the segment handler, the request handler is
+// called only when the resource is going to handle the request.
+func (rb *_ResourceBase) WrapRequestHandler(mwfs ...MiddlewareFunc) error {
+	if len(mwfs) == 0 {
+		return newError("%w", ErrNoMiddleware)
+	}
+
+	if !rb.canHandleRequest() {
+		if _, ok := rb.derived.(*Host); ok {
+			return newError("%w", ErrDummyHost)
+		}
+
+		return newError("%w", ErrDummyResource)
+	}
+
+	for i, mw := range mwfs {
+		if mw == nil {
+			return newError("%w at index %d", ErrNilArgument, i)
+		}
+
+		rb.requestHandler = mw(rb.requestHandler)
 	}
 
 	return nil
@@ -1836,25 +1878,25 @@ func (rb *_ResourceBase) PathConfig(path string) (Config, error) {
 
 // -------------------------
 
-// SetPathRequestHandler sets the request handlers for a resource at the path
-// from the passed RequestHandler. If the resource doesn't exist, the method
-// creates it. The resource keeps the RequestHandler for future retrieval.
-// Existing handlers of the resource are discarded.
+// SetImplementationAt sets the request handlers for a resource at the path
+// from the passed Impl. If the resource doesn't exist, the method creates it.
+// The resource keeps the impl for future retrieval. Existing handlers of the
+// resource are discarded.
 //
 // The scheme and trailing slash property values in the path template must be
 // compatible with the existing resource's properties, otherwise the function
 // returns an error. A newly created resource is configured with the values in
 // the path template.
-func (rb *_ResourceBase) SetPathRequestHandler(
+func (rb *_ResourceBase) SetImplementationAt(
 	path string,
-	rh RequestHandler,
+	rh Impl,
 ) error {
 	var r, err = rb.Resource(path)
 	if err != nil {
 		return newError("<- %w", err)
 	}
 
-	err = r.SetRequestHandler(rh)
+	err = r.SetImplementation(rh)
 	if err != nil {
 		return newError("<- %w", err)
 	}
@@ -1862,17 +1904,14 @@ func (rb *_ResourceBase) SetPathRequestHandler(
 	return nil
 }
 
-// PathRequestHandler returns the RequestHandler of the resource at the path.
-// If the resource doesn't exist or it wasn't created from a RequestHandler or
-// it has no RequestHandler set, nil is returned.
+// ImplementationAt returns the implementation of the resource at the path.
+// If the resource doesn't exist or it wasn't created from an Impl or it has
+// no Impl set, nil is returned.
 //
 // The scheme and trailing slash property values in the path template must be
 // compatible with the resource's properties, otherwise the method returns an
 // error.
-func (rb *_ResourceBase) PathRequestHandler(path string) (
-	RequestHandler,
-	error,
-) {
+func (rb *_ResourceBase) ImplementationAt(path string) (Impl, error) {
 	var r, err = rb.RegisteredResource(path)
 	if err != nil {
 		return nil, newError("<- %w", err)
@@ -1882,7 +1921,7 @@ func (rb *_ResourceBase) PathRequestHandler(path string) (
 		return nil, newError("%w", ErrNonExistentResource)
 	}
 
-	return r.RequestHandler(), nil
+	return r.Implementation(), nil
 }
 
 // -------------------------
@@ -1976,6 +2015,18 @@ func (rb *_ResourceBase) PathHandlerOf(method, path string) (
 // WrapPathSegmentHandler wraps the segment handler of the resource at the path.
 // Handler is wrapped in the middlewares' passed order. If the resource doesn't
 // exist, an error is returned.
+//
+// The segment handler is called when the request passes through the resource.
+// It calls the request handler of its own resource if the resource is the last
+// resource in the request's URL. Or, it finds the next resource that matches
+// the next path segment and passes the request to it. If there is no matching
+// resource for the next path segment, the handler for a not-found resource is
+// called. The host's segment handler calls the request handler if the request
+// was made to the host.
+//
+// The scheme and trailing slash property values in the URL template must be
+// compatible with the resource's properties, otherwise the method returns an
+// error.
 func (rb *_ResourceBase) WrapPathSegmentHandler(
 	path string,
 	mwfs ...MiddlewareFunc,
@@ -1990,6 +2041,38 @@ func (rb *_ResourceBase) WrapPathSegmentHandler(
 	}
 
 	err = r.WrapSegmentHandler(mwfs...)
+	if err != nil {
+		return newError("<- %w", err)
+	}
+
+	return nil
+}
+
+// WrapPathRequestHandler wraps the request handler of the resource at the path.
+// Handler is wrapped in the middlewares' passed order. If the resource doesn't
+// exist, an error is returned.
+//
+// The request handler calls the HTTP method handler of the resource depending
+// on the request's method. Unlike the segment handler, the request handler is
+// called only when the resource is going to handle the request.
+//
+// The scheme and trailing slash property values in the URL template must be
+// compatible with the resource's properties, otherwise the method returns an
+// error.
+func (rb *_ResourceBase) WrapPathRequestHandler(
+	path string,
+	mwfs ...MiddlewareFunc,
+) error {
+	var r, err = rb.RegisteredResource(path)
+	if err != nil {
+		return newError("<- %w", err)
+	}
+
+	if r == nil {
+		return newError("%w", ErrNonExistentResource)
+	}
+
+	err = r.WrapRequestHandler(mwfs...)
 	if err != nil {
 		return newError("<- %w", err)
 	}
@@ -2047,6 +2130,14 @@ func (rb *_ResourceBase) ConfigureSubtree(config Config) {
 // WrapSubtreeSegmentHandlers wraps the segment handlers of the resources
 // in the hierarchy below the receiver resource. Handlers are wrapped in the
 // middlewares' passed order.
+//
+// The segment handler is called when the request passes through the resource.
+// It calls the request handler of its own resource if the resource is the last
+// resource in the request's URL. Or, it finds the next resource that matches
+// the next path segment and passes the request to it. If there is no matching
+// resource for the next path segment, the handler for a not-found resource is
+// called. The host's segment handler calls the request handler if the request
+// was made to the host.
 func (rb *_ResourceBase) WrapSubtreeSegmentHandlers(
 	mwfs ...MiddlewareFunc,
 ) error {
@@ -2054,6 +2145,37 @@ func (rb *_ResourceBase) WrapSubtreeSegmentHandlers(
 		rb._Resources(),
 		func(_r _Resource) error {
 			return _r.WrapSegmentHandler(mwfs...)
+		},
+	)
+
+	if err != nil {
+		return newError("<- %w", err)
+	}
+
+	return nil
+}
+
+// WrapSubtreeRequestHandlers wraps the request handlers of the resources
+// in the hierarchy below the receiver resource. Handlers are wrapped in the
+// middlewares' passed order.
+//
+// The request handler calls the HTTP method handler of the resource depending
+// on the request's method. Unlike the segment handler, the request handler is
+// called only when the resource is going to handle the request.
+func (rb *_ResourceBase) WrapSubtreeRequestHandlers(
+	mwfs ...MiddlewareFunc,
+) error {
+	var err = traverseAndCall(
+		rb._Resources(),
+		func(_r _Resource) error {
+			var err = _r.WrapRequestHandler(mwfs...)
+			// Subtree below hosts cannot return the ErrDummyHost.
+			// It's enough to check the ErrDummyResource.
+			if errors.Is(err, ErrDummyResource) {
+				return nil
+			}
+
+			return err
 		},
 	)
 
@@ -2105,6 +2227,7 @@ func (rb *_ResourceBase) _Resources() []_Resource {
 
 func (rb *_ResourceBase) setRequestHandlerBase(rhb *_RequestHandlerBase) {
 	rb._RequestHandlerBase = rhb
+	rb.requestHandler = http.HandlerFunc(rhb.handleRequest)
 }
 
 func (rb *_ResourceBase) requestHandlerBase() *_RequestHandlerBase {
