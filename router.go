@@ -1518,12 +1518,7 @@ func (ro *Router) WrapAllHandlersOf(
 	methods string,
 	mwfs ...MiddlewareFunc,
 ) error {
-	var ms = toUpperSplitByCommaSpace(methods)
-	if len(ms) == 0 {
-		return newError("<- %w", ErrNoMethod)
-	}
-
-	var err = wrapRequestHandlersOfAll(ro._Resources(), ms, mwfs...)
+	var err = wrapEveryHandlerOf(methods, ro._Resources(), mwfs...)
 	if err != nil {
 		return newError("<- %w", err)
 	}
