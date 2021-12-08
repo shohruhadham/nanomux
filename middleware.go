@@ -20,45 +20,48 @@ type MiddlewareFunc func(next http.Handler) http.Handler
 
 // --------------------------------------------------
 
-// wrapRequestHandlersOfAll wraps the request handlers of the host and resources
-// and their child resources recursively. Handlers are wrapped with middlewares
-// in their passed order.
-func wrapRequestHandlersOfAll(
+// wrapEveryHandlerOf wraps the handlers of the HTTP methods of the passed
+// host and resources and all their subtree resources. Handlers are wrapped
+// with middlewares in their passed order.
+func wrapEveryHandlerOf(
+	methods string,
 	rs []_Resource,
-	methods []string,
 	mwfs ...MiddlewareFunc,
 ) error {
-	var lrs = len(rs)
-	if lrs == 0 {
-		return nil
+	var ms = toUpperSplitByCommaSpace(methods)
+	if len(ms) == 0 {
+		return newError("<- %w", ErrNoMethod)
 	}
 
-	for i := 0; i < lrs; i++ {
-		var r = rs[i]
-		var err error
+	var err = traverseAndCall(
+		rs,
+		func(_r _Resource) error {
+			if _r.canHandleRequest() {
+				var rhb = _r.requestHandlerBase()
+				for _, m := range ms {
+					var err = rhb.wrapHandlerOf(m, mwfs...)
+					if err != nil {
+						// If the _Resource can handle a request, then
+						// ErrNoHandlerExists is returned only when there
+						// is no handler for a specific HTTP method, which
+						// can be ignored.
+						if errors.Is(err, ErrNoHandlerExists) {
+							continue
+						}
 
-		if r.canHandleRequest() {
-			var rhb = r.requestHandlerBase()
-			for _, m := range methods {
-				err = rhb.wrapHandlerOf(m, mwfs...)
-				if err != nil {
-					// If the _Resource can handle a request, then
-					// ErrNoHandlerExists is returned only when there is no
-					// handler for a specific HTTP method, which can be ignored.
-					if errors.Is(err, ErrNoHandlerExists) {
-						continue
+						return err
 					}
-
-					return newError("<- %w", err)
 				}
 			}
-		}
 
-		err = wrapRequestHandlersOfAll(r._Resources(), methods, mwfs...)
-		if err != nil {
-			return newError("<- %w", err)
-		}
+			return nil
+		},
+	)
+
+	if err != nil {
+		return newError("<- %w", err)
 	}
 
 	return nil
+
 }

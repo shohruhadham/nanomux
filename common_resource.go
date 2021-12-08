@@ -2200,12 +2200,7 @@ func (rb *_ResourceBase) WrapSubtreeHandlersOf(
 	methods string,
 	mwfs ...MiddlewareFunc,
 ) error {
-	var ms = toUpperSplitByCommaSpace(methods)
-	if len(ms) == 0 {
-		return newError("%w", ErrNoMethod)
-	}
-
-	var err = wrapRequestHandlersOfAll(rb._Resources(), ms, mwfs...)
+	var err = wrapEveryHandlerOf(methods, rb._Resources(), mwfs...)
 	if err != nil {
 		return newError("<- %w", err)
 	}
