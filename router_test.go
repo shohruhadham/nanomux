@@ -4263,3 +4263,329 @@ func TestRouter_ServeHTTP(t *testing.T) {
 		t.Fatalf("WrapHandlerOfNotFoundResource() failed")
 	}
 }
+
+func getRouter5x500Static() (*Router, *http.Request, error) {
+	var (
+		ro   = NewRouter()
+		impl = &implType{}
+		err  error
+		strb strings.Builder
+	)
+
+	var urls []string
+
+	for a := 0; a < 5; a++ {
+		for b := 0; b < 5; b++ {
+			for c := 0; c < 5; c++ {
+				for d := 0; d < 5; d++ {
+					for e := 0; e < 5; e++ {
+						strb.WriteString("https://example")
+						strb.WriteString(strconv.Itoa(a))
+						strb.WriteString(".com/resource")
+						strb.WriteString(strconv.Itoa(b))
+						strb.WriteString("/resource")
+						strb.WriteString(strconv.Itoa(c))
+						strb.WriteString("/resource")
+						strb.WriteString(strconv.Itoa(d))
+						strb.WriteString("/resource")
+						strb.WriteString(strconv.Itoa(e))
+						urls = append(urls, strb.String())
+						strb.Reset()
+					}
+				}
+			}
+		}
+	}
+
+	var lurls = len(urls)
+	fmt.Println("count of static URLs:", lurls)
+	for i := 0; i < lurls; i++ {
+		// err = ro.SetURLHandlerFuncFor(
+		// 	"get",
+		// 	urls[i],
+		// 	func(w http.ResponseWriter, r *http.Request) {
+		// 		fmt.Println(r.URL)
+		// 	},
+		// )
+
+		err = ro.SetImplementationAt(urls[i], impl)
+		if err != nil {
+			return nil, nil, newError("%w at url %q", err, urls[i])
+		}
+	}
+
+	var r = httptest.NewRequest("GET", urls[1111], nil)
+	fmt.Println("static request URL:", urls[1111])
+
+	return ro, r, nil
+}
+
+func getRouter5x500Pattern() (*Router, *http.Request, error) {
+	var (
+		ro   = NewRouter()
+		impl = &implType{}
+		err  error
+		strb strings.Builder
+	)
+
+	var urls []string
+
+	for a := 0; a < 5; a++ {
+		for b := 0; b < 5; b++ {
+			for c := 0; c < 5; c++ {
+				for d := 0; d < 5; d++ {
+					for e := 0; e < 5; e++ {
+						strb.WriteString("https://{host-a")
+						strb.WriteString(strconv.Itoa(a))
+						strb.WriteString(":host-a")
+						strb.WriteString(strconv.Itoa(a))
+						strb.WriteString("}.example-a")
+						strb.WriteString(strconv.Itoa(a))
+						strb.WriteString(".com/{resource-b")
+						strb.WriteString(strconv.Itoa(b))
+						strb.WriteString(":resource-b")
+						strb.WriteString(strconv.Itoa(b))
+						strb.WriteString("}/{resource-c")
+						strb.WriteString(strconv.Itoa(c))
+						strb.WriteString(":resource-c")
+						strb.WriteString(strconv.Itoa(c))
+						strb.WriteString("}/{resource-d")
+						strb.WriteString(strconv.Itoa(d))
+						strb.WriteString(":resource-d")
+						strb.WriteString(strconv.Itoa(d))
+						strb.WriteString("}/{resource-e")
+						strb.WriteString(strconv.Itoa(e))
+						strb.WriteString(":resource-e")
+						strb.WriteString(strconv.Itoa(e))
+						strb.WriteString("}")
+						urls = append(urls, strb.String())
+						strb.Reset()
+					}
+				}
+			}
+		}
+	}
+
+	var lurls = len(urls)
+	fmt.Println("count of pattern URLs:", lurls)
+	for i := 0; i < lurls; i++ {
+		// err = ro.SetURLHandlerFuncFor(
+		// 	"get",
+		// 	urls[i],
+		// 	func(w http.ResponseWriter, r *http.Request) {
+		// 		fmt.Println(r.URL)
+		// 	},
+		// )
+
+		err = ro.SetImplementationAt(urls[i], impl)
+		if err != nil {
+			return nil, nil, newError("%w at url %q", err, urls[i])
+		}
+	}
+
+	var url = "https://host-a1.example-a1.com/resource-b3/resource-c4/resource-d2/resource-e1"
+
+	var r = httptest.NewRequest("GET", url, nil)
+	fmt.Println("pattern request URL:", urls[1111])
+
+	return ro, r, nil
+}
+
+func getRouter5x1Wildcard() (*Router, *http.Request, error) {
+	var (
+		ro   = NewRouter()
+		impl = &implType{}
+		err  error
+		url  = "https://{hostA}.exampleA.com/{resourceB}/{resourceC}/{resourceD}/{resourceE}"
+	)
+
+	// err = ro.SetURLHandlerFuncFor(
+	// 	"get",
+	// 	url,
+	// 	func(w http.ResponseWriter, r *http.Request) {
+	// 		fmt.Println(r.URL)
+	// 	},
+	// )
+
+	err = ro.SetImplementationAt(url, impl)
+	if err != nil {
+		return nil, nil, newError("%w at url %q", err, url)
+	}
+
+	url = "https://hostA.exampleA.com/resourceB/resourceC/resourceD/resourceE"
+
+	var r = httptest.NewRequest("GET", url, nil)
+	fmt.Println("wildcard request URL:", url)
+
+	return ro, r, nil
+}
+
+func getRouter() (ro *Router, err error) {
+	ro = NewRouter()
+
+	var impl = &implType{}
+	var strb strings.Builder
+	var urls []string
+
+	for a := 0; a < 5; a++ {
+		for b := 0; b < 5; b++ {
+			for c := 0; c < 5; c++ {
+				for d := 0; d < 5; d++ {
+					for e := 0; e < 5; e++ {
+						// static
+						strb.WriteString("https://example")
+						strb.WriteString(strconv.Itoa(a))
+						strb.WriteString(".com/resource")
+						strb.WriteString(strconv.Itoa(b))
+						strb.WriteString("/resource")
+						strb.WriteString(strconv.Itoa(c))
+						strb.WriteString("/resource")
+						strb.WriteString(strconv.Itoa(d))
+						strb.WriteString("/resource")
+						strb.WriteString(strconv.Itoa(e))
+						urls = append(urls, strb.String())
+						strb.Reset()
+
+						// pattern
+						strb.WriteString("https://{host-a")
+						strb.WriteString(strconv.Itoa(a))
+						strb.WriteString(":host-a")
+						strb.WriteString(strconv.Itoa(a))
+						strb.WriteString("}.example-a")
+						strb.WriteString(strconv.Itoa(a))
+						strb.WriteString(".com/{resource-b")
+						strb.WriteString(strconv.Itoa(b))
+						strb.WriteString(":resource-b")
+						strb.WriteString(strconv.Itoa(b))
+						strb.WriteString("}/{resource-c")
+						strb.WriteString(strconv.Itoa(c))
+						strb.WriteString(":resource-c")
+						strb.WriteString(strconv.Itoa(c))
+						strb.WriteString("}/{resource-d")
+						strb.WriteString(strconv.Itoa(d))
+						strb.WriteString(":resource-d")
+						strb.WriteString(strconv.Itoa(d))
+						strb.WriteString("}/{resource-e")
+						strb.WriteString(strconv.Itoa(e))
+						strb.WriteString(":resource-e")
+						strb.WriteString(strconv.Itoa(e))
+						strb.WriteString("}")
+						urls = append(urls, strb.String())
+						strb.Reset()
+					}
+				}
+			}
+		}
+	}
+
+	var lurls = len(urls)
+	for i := 0; i < lurls; i++ {
+		// err = ro.SetURLHandlerFuncFor(
+		// 	"get",
+		// 	urls[i],
+		// 	func(w http.ResponseWriter, r *http.Request) {
+		// 		fmt.Println(r.URL)
+		// 	},
+		// )
+
+		err = ro.SetImplementationAt(urls[i], impl)
+		if err != nil {
+			err = newError("%w at url %q", err, urls[i])
+			return
+		}
+	}
+
+	// --------------------------------------------------
+
+	var url = "https://{hostA}.exampleA.com/{resourceB}/{resourceC}/{resourceD}/{resourceE}"
+
+	// err = ro.SetURLHandlerFuncFor(
+	// 	"get",
+	// 	url,
+	// 	func(w http.ResponseWriter, r *http.Request) {
+	// 		fmt.Println(r.URL)
+	// 	},
+	// )
+
+	err = ro.SetImplementationAt(url, impl)
+	if err != nil {
+		err = newError("%w at url %q", err, url)
+		return
+	}
+
+	return
+}
+
+var (
+	w        *httptest.ResponseRecorder
+	staticRo *Router
+	sr       *http.Request
+
+	patternRo *Router
+	pr        *http.Request
+
+	wildcardRo *Router
+	wr         *http.Request
+
+	ro *Router
+)
+
+func init() {
+	w = httptest.NewRecorder()
+	var err error
+	staticRo, sr, err = getRouter5x500Static()
+	if err != nil {
+		panic(err)
+	}
+
+	patternRo, pr, err = getRouter5x500Pattern()
+	if err != nil {
+		panic(err)
+	}
+
+	wildcardRo, wr, err = getRouter5x1Wildcard()
+	if err != nil {
+		panic(err)
+	}
+
+	ro, err = getRouter()
+	if err != nil {
+		panic(err)
+	}
+}
+
+func BenchmarkStaticRouter(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		staticRo.ServeHTTP(w, sr)
+	}
+}
+
+func BenchmarkPatternRouter(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		patternRo.ServeHTTP(w, pr)
+	}
+}
+
+func BenchmarkWildcardRouter(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		wildcardRo.ServeHTTP(w, wr)
+	}
+}
+
+func BenchmarkRouterWithStaticRequest(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		ro.ServeHTTP(w, sr)
+	}
+}
+
+func BenchmarkRouterWithPatternRequest(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		ro.ServeHTTP(w, pr)
+	}
+}
+
+func BenchmarkRouterWithWildcardRequest(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		ro.ServeHTTP(w, wr)
+	}
+}
