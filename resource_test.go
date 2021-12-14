@@ -101,22 +101,17 @@ func TestResourceBase_URL(t *testing.T) {
 	r4.wildcardResource = r5
 	r5.papa = r4
 
-	type args struct {
-		hvs HostValues
-		pvs PathValues
-	}
-
 	var cases = []struct {
-		name    string
-		rb      _Resource
-		args    args
-		want    *url.URL
-		wantErr bool
+		name      string
+		rb        _Resource
+		urlValues URLValues
+		want      *url.URL
+		wantErr   bool
 	}{
 		{
 			"host",
 			h,
-			args{hvs: HostValues{"info": "forecast"}},
+			URLValues{"info": "forecast"},
 			&url.URL{
 				Scheme: "https",
 				Host:   "forecast.example.com",
@@ -126,13 +121,9 @@ func TestResourceBase_URL(t *testing.T) {
 		{
 			"host resource",
 			r1,
-			args{
-				HostValues{"info": "forecast"},
-				PathValues{
-					"country": SegmentValues{
-						"country": "Norway",
-					},
-				},
+			URLValues{
+				"info":    "forecast",
+				"country": "Norway",
 			},
 			&url.URL{
 				Scheme: "http",
@@ -144,16 +135,10 @@ func TestResourceBase_URL(t *testing.T) {
 		{
 			"host resource resource",
 			r2,
-			args{
-				HostValues{"info": "forecast"},
-				PathValues{
-					"country": SegmentValues{
-						"country": "Norway",
-					},
-					"city": SegmentValues{
-						"city": "Oslo",
-					},
-				},
+			URLValues{
+				"info":    "forecast",
+				"country": "Norway",
+				"city":    "Oslo",
 			},
 			&url.URL{
 				Scheme: "http",
@@ -165,13 +150,7 @@ func TestResourceBase_URL(t *testing.T) {
 		{
 			"resource",
 			r3,
-			args{
-				pvs: PathValues{
-					"info": SegmentValues{
-						"info": "statistics",
-					},
-				},
-			},
+			URLValues{"info": "statistics"},
 			&url.URL{
 				Scheme: "http",
 				Path:   "/statistics",
@@ -181,13 +160,7 @@ func TestResourceBase_URL(t *testing.T) {
 		{
 			"resource resource",
 			r4,
-			args{
-				pvs: PathValues{
-					"info": SegmentValues{
-						"info": "statistics",
-					},
-				},
-			},
+			URLValues{"info": "statistics"},
 			&url.URL{
 				Scheme: "http",
 				Path:   "/statistics/population",
@@ -197,15 +170,9 @@ func TestResourceBase_URL(t *testing.T) {
 		{
 			"resource resource resource",
 			r5,
-			args{
-				pvs: PathValues{
-					"info": SegmentValues{
-						"info": "statistics",
-					},
-					"country": SegmentValues{
-						"country": "Norway",
-					},
-				},
+			URLValues{
+				"info":    "statistics",
+				"country": "Norway",
 			},
 			&url.URL{
 				Scheme: "https",
@@ -217,7 +184,7 @@ func TestResourceBase_URL(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got, err := c.rb.URL(c.args.hvs, c.args.pvs)
+			got, err := c.rb.URL(c.urlValues)
 			if (err != nil) != c.wantErr {
 				t.Fatalf(
 					"ResourceBase.URL() error = %v, wantErr %v",
@@ -612,32 +579,40 @@ func TestResourceBase_canHandleRequest(t *testing.T) {
 	}
 }
 
-func TestResourceBase_checkNameIsUniqueInThePath(t *testing.T) {
+func TestResourceBase_checkNamesAreUniqueInThePath(t *testing.T) {
 	var (
-		rb1 = NewDormantResource("{country}")
-		rb2 = NewDormantResource("{city}")
-		rb3 = NewDormantResource("{info}")
-		rb4 = NewDormantResource("{extra}")
+		h  = NewDormantHost("{sub}.example.com")
+		r1 = NewDormantResource("$code:{country}")
+		r2 = NewDormantResource("{city}")
+		r3 = NewDormantResource("{info}")
+		r4 = NewDormantResource("{extra}")
 	)
 
-	rb4.papa = rb3
-	rb3.wildcardResource = rb4
-	rb3.papa = rb2
-	rb2.papa = rb1
+	r4.papa = r3
+	r3.wildcardResource = r4
+	r3.papa = r2
+	r2.papa = r1
+	r1.papa = h
 
 	var cases = []struct {
-		name    string
+		tmpl    *Template
 		wantErr bool
 	}{
-		{"index", false}, {"country", true}, {"city", true},
-		{"info", true}, {"extra", false},
+		{Parse("{index:\\d?}"), false},
+		{Parse("{extra}"), false},
+		{Parse("{extra}{sub:abc}"), true},
+		{Parse("$sub:exrta"), true},
+		{Parse("{country}"), true},
+		{Parse("{city}"), true},
+		{Parse("{code}"), true},
 	}
 
 	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			if err := rb3.checkNameIsUniqueInThePath(c.name); (err != nil) != c.wantErr {
+		t.Run(c.tmpl.String(), func(t *testing.T) {
+			var err = r3.checkNamesAreUniqueInThePath(c.tmpl)
+			if (err != nil) != c.wantErr {
 				t.Fatalf(
-					"ResourceBase.checkNameIsUniqueInThePath() error = %v, wantErr %v",
+					"ResourceBase.checkNamesAreUniqueInThePath() error = %v, wantErr %v",
 					err,
 					c.wantErr,
 				)
@@ -4463,16 +4438,11 @@ func addRequestHandlerSubresources(t *testing.T, r _Resource, i, limit int) {
 
 	if err = r.SetHandlerFor("get post custom", http.HandlerFunc(
 		func(w http.ResponseWriter, r *http.Request) {
-			var pValues, ok = r.Context().Value(PathValuesKey).(PathValues)
-			if ok && pValues != nil {
+			var urlValues, ok = r.Context().Value(URLValuesKey).(URLValues)
+			if ok && urlValues != nil {
 				var gotValue bool
-				for sn, psvs := range pValues {
-					if len(psvs) > 1 {
-						if psvs["id"] == "1" {
-							gotValue = true
-							break
-						}
-					} else if psvs[sn] == "1" {
+				for _, v := range urlValues {
+					if v == "1" {
 						gotValue = true
 						break
 					}
@@ -4545,7 +4515,7 @@ func addRequestHandlerSubresources(t *testing.T, r _Resource, i, limit int) {
 		addRequestHandlerSubresources(t, rr, i, limit)
 
 		rr = NewDormantResourceUsingConfig(
-			"https:///$pr"+istr+"1:{name:pr"+istr+"1}:{id:\\d?}",
+			"https:///$pr"+istr+"1:{name"+istr+":pr"+istr+"1}:{id"+istr+":\\d?}",
 			Config{RedirectInsecureRequest: true},
 		)
 
@@ -4556,7 +4526,7 @@ func addRequestHandlerSubresources(t *testing.T, r _Resource, i, limit int) {
 		addRequestHandlerSubresources(t, rr, i, limit)
 
 		rr = NewDormantResourceUsingConfig(
-			"https:///$pr"+istr+"2:{name:pr"+istr+"2}:{id:\\d?}",
+			"https:///$pr"+istr+"2:{name"+istr+":pr"+istr+"2}:{id"+istr+":\\d?}",
 			Config{
 				SubtreeHandler:          true,
 				RedirectInsecureRequest: true,
@@ -4572,7 +4542,7 @@ func addRequestHandlerSubresources(t *testing.T, r _Resource, i, limit int) {
 		addRequestHandlerSubresources(t, rr, i, limit)
 
 		rr = NewDormantResourceUsingConfig(
-			"$pr"+istr+"3:{name:pr"+istr+"3}:{id:\\d?}",
+			"$pr"+istr+"3:{name"+istr+":pr"+istr+"3}:{id"+istr+":\\d?}",
 			Config{HandleThePathAsIs: true},
 		)
 
@@ -4583,7 +4553,8 @@ func addRequestHandlerSubresources(t *testing.T, r _Resource, i, limit int) {
 		addRequestHandlerSubresources(t, rr, i, limit)
 
 		rr = NewDormantResourceUsingConfig(
-			"$pr"+istr+"4:{name:pr"+istr+"4}:{id:\\d?}",
+			"$pr"+istr+"4:{name"+istr+":pr"+istr+"4}:{id"+istr+":\\d?}",
+
 			Config{StrictOnTrailingSlash: true},
 		)
 
@@ -4594,7 +4565,7 @@ func addRequestHandlerSubresources(t *testing.T, r _Resource, i, limit int) {
 		addRequestHandlerSubresources(t, rr, i, limit)
 
 		rr = NewDormantResourceUsingConfig(
-			"$pr"+istr+"5:{name:pr"+istr+"5}:{id:\\d?}/",
+			"$pr"+istr+"5:{name"+istr+":pr"+istr+"5}:{id"+istr+":\\d?}/",
 			Config{
 				SubtreeHandler:        true,
 				StrictOnTrailingSlash: true,
@@ -4608,7 +4579,7 @@ func addRequestHandlerSubresources(t *testing.T, r _Resource, i, limit int) {
 		addRequestHandlerSubresources(t, rr, i, limit)
 
 		rr = NewDormantResourceUsingConfig(
-			"https:///$pr"+istr+"6:{name:pr"+istr+"6}:{id:\\d?}/",
+			"https:///$pr"+istr+"6:{name"+istr+":pr"+istr+"6}:{id"+istr+":\\d?}/",
 			Config{
 				SubtreeHandler:          true,
 				RedirectInsecureRequest: true,
@@ -7419,7 +7390,7 @@ func TestResourceBase_ServeHTTP(t *testing.T) {
 	rs = append(rs, rr)
 
 	rr, err = resource.RegisteredResource(
-		"https:///$pr02:{name:pr02}:{id:\\d?}",
+		"https:///$pr02:{name0:pr02}:{id0:\\d?}",
 	)
 
 	if err != nil {

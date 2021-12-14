@@ -1586,7 +1586,7 @@ func (ro *Router) passRequest(w http.ResponseWriter, r *http.Request) {
 		}
 
 		for _, ph := range ro.patternHosts {
-			if matches, values := ph.Template().Match(host); matches {
+			if matches, values := ph.Template().Match(host, nil); matches {
 				var rd *_RoutingData
 				var err error
 				r, rd, err = requestWithRoutingData(r, ph.derived)
@@ -1600,7 +1600,7 @@ func (ro *Router) passRequest(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 
-				rd.hostValues = values
+				rd.urlValues = values
 				ph.segmentHandler.ServeHTTP(w, r)
 				return
 			}

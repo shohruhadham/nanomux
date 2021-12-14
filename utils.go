@@ -99,33 +99,6 @@ func cloneRequestURL(r *http.Request) *url.URL {
 	return url
 }
 
-// cleanPath returns the canonical path for p, eliminating . and .. elements.
-// Copied from http.server.go
-func cleanPath(p string) string {
-	if p == "" {
-		return "/"
-	}
-
-	if p[0] != '/' {
-		p = "/" + p
-	}
-
-	var np = path.Clean(p)
-
-	// path.Clean removes trailing slash except for root;
-	// put the trailing slash back if necessary.
-	if lp := len(p); p[lp-1] == '/' && np != "/" {
-		// Fast path for common case of p being the string we want:
-		if lp == len(np)+1 && strings.HasPrefix(p, np) {
-			np = p
-		} else {
-			np += "/"
-		}
-	}
-
-	return np
-}
-
 func toUpperSplitByCommaSpace(str string) []string {
 	str = strings.TrimSpace(str)
 	var strs []string
@@ -322,12 +295,8 @@ func splitPathSegments(path string) (
 	return pss, false, psi.pathHasTrailingSlash(), nil
 }
 
-// resourceURL returns the resource's URL with host and path values applied.
-func resourceURL(
-	r _Resource,
-	hvs HostValues,
-	pvs PathValues,
-) (*url.URL, error) {
+// resourceURL returns the resource's URL with the URL values applied.
+func resourceURL(r _Resource, urlVs URLValues) (*url.URL, error) {
 	var (
 		host string
 		pss  []string
@@ -348,17 +317,7 @@ loop:
 				continue
 			}
 
-			var rName = tmpl.Name()
-			var rValues, found = pvs[rName]
-			if !found {
-				return nil, newError(
-					"%w for the resource %q",
-					ErrMissingValue,
-					rName,
-				)
-			}
-
-			var ps, err = tmpl.Apply(rValues, false)
+			var ps, err = tmpl.Apply(urlVs, false)
 			if err != nil {
 				return nil, newError("%w", err)
 			}
@@ -370,7 +329,7 @@ loop:
 				host = tmpl.Content()
 			} else {
 				var err error
-				host, err = tmpl.Apply(hvs, false)
+				host, err = tmpl.Apply(urlVs, false)
 				if err != nil {
 					return nil, newError("%w", err)
 				}
@@ -407,28 +366,8 @@ loop:
 
 // --------------------------------------------------
 
-type HostValues map[string]string
-
-// V returns the value of the key in the host.
-func (hv HostValues) V(key string) string {
-	return hv[key]
-}
-
-type SegmentValues map[string]string
-
-// V returns the value of the key in the path segment.
-func (sv SegmentValues) V(key string) string {
-	return sv[key]
-}
-
-type PathValues map[string]SegmentValues
-
-// V returns the value of the key in the path segment. Unlike its counterparts
-// in the HostValues and SegmentValues, the V method of the PathValues can be
-// used only when the path segment and its single key have the same name.
-func (pv PathValues) V(key string) string {
-	return pv[key][key]
-}
+// type URLValues map[string]string
+type URLValues = map[string]string
 
 // --------------------------------------------------
 
@@ -442,9 +381,8 @@ type _RoutingData struct {
 	subtreeExists         bool
 	handled               bool
 
-	hostValues HostValues
-	pathValues PathValues
-	_r         _Resource
+	urlValues URLValues
+	_r        _Resource
 }
 
 // -------------------------
@@ -463,22 +401,31 @@ func requestWithRoutingData(
 	// As the documentation of the URL.EscapedPath() states, it may return a
 	// different path from the URL.RawPath. Sometimes it's not suitable for
 	// our intentions. It's preferable to use URL.RawPath if it's not empty.
-	var path = r.URL.RawPath
+	var rawPath = r.URL.RawPath
 	var uncleanPath bool
 
 	// URL.RawPath may be empty if there is no need to escape the path.
-	if path == "" {
-		path = r.URL.Path
+	if rawPath == "" {
+		rawPath = r.URL.Path
 	}
 
-	if path != "" {
-		if p := cleanPath(path); p != path {
-			path = p
+	if rawPath != "" {
+		var pathStrb strings.Builder
+		pathStrb.WriteString(path.Clean(rawPath))
+
+		var lrawPath = len(rawPath)
+		if rawPath[lrawPath-1] == '/' && pathStrb.Len() != 1 {
+			pathStrb.WriteByte('/')
+		}
+
+		if pathStrb.Len() != lrawPath {
 			uncleanPath = true
 		}
+
+		rawPath = pathStrb.String()
 	}
 
-	var rd = &_RoutingData{path: path, uncleanPath: uncleanPath}
+	var rd = &_RoutingData{path: rawPath, uncleanPath: uncleanPath}
 	rd._r = _r
 	r = r.WithContext(newContext(r.Context(), rd))
 
@@ -551,8 +498,7 @@ type _ContextValueKey uint8
 
 const (
 	routingDataKey _ContextValueKey = iota
-	hostValuesKey
-	pathValuesKey
+	urlValuesKey
 	remainingPathKey
 	sharedDataKey
 	resourceKey
@@ -560,13 +506,9 @@ const (
 )
 
 var (
-	// HostValuesKey can be used to retrieve the host values from the request's
+	// URLValuesKey can be used to retrieve the path values from the request's
 	// context.
-	HostValuesKey interface{} = hostValuesKey
-
-	// PathValuesKey can be used to retrieve the path values from the request's
-	// context.
-	PathValuesKey interface{} = pathValuesKey
+	URLValuesKey interface{} = urlValuesKey
 
 	// RemainingPathKey can be used to get the remaining path of the
 	// request's URL below the host or resource. The remaining path is
@@ -617,10 +559,8 @@ func (c *_Context) Value(key interface{}) interface{} {
 		switch key {
 		case routingDataKey:
 			return c.rd
-		case hostValuesKey:
-			return c.rd.hostValues
-		case pathValuesKey:
-			return c.rd.pathValues
+		case urlValuesKey:
+			return c.rd.urlValues
 		case remainingPathKey:
 			return c.rd.remainingPath()
 		case sharedDataKey:

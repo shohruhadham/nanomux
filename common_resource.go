@@ -84,6 +84,13 @@ var ErrDuplicateResourceTemplate = fmt.Errorf("duplicate resource template")
 // unique in its path.
 var ErrDuplicateNameInThePath = fmt.Errorf("duplicate name in the path")
 
+// ErrDuplicateValueNameInThePath is returned when one of the value names
+// in the resource's template is a duplicate of a value name in the host's
+// or another resource's template.
+var ErrDuplicateValueNameInThePath = fmt.Errorf(
+	"duplicate value name int the path",
+)
+
 // ErrDuplicateNameAmongSiblings is returned when a new resource's name is not
 // unique among the resources registered under the same host or resource.
 var ErrDuplicateNameAmongSiblings = fmt.Errorf("duplicate name among siblings")
@@ -253,7 +260,7 @@ func (cfs _ConfigFlags) asConfig() Config {
 type _Resource interface {
 	Name() string
 	Template() *Template
-	URL(HostValues, PathValues) (*url.URL, error)
+	URL(URLValues) (*url.URL, error)
 
 	Router() *Router
 
@@ -407,9 +414,9 @@ func (rb *_ResourceBase) Template() *Template {
 	return rb.tmpl
 }
 
-// URL returns the resource's URL with host and path values applied to it.
-func (rb *_ResourceBase) URL(hvs HostValues, pvs PathValues) (*url.URL, error) {
-	var url, err = resourceURL(rb.derived, hvs, pvs)
+// URL returns the resource's URL with values applied to it.
+func (rb *_ResourceBase) URL(values URLValues) (*url.URL, error) {
+	var url, err = resourceURL(rb.derived, values)
 	if err != nil {
 		return nil, newError("<- %w", err)
 	}
@@ -651,26 +658,25 @@ func (rb *_ResourceBase) canHandleRequest() bool {
 
 // -------------------------
 
-// checkNameIsUniqueInThePath checks whether the name is unique in the
-// resource's path. It ignores the host of the resource.
-func (rb *_ResourceBase) checkNameIsUniqueInThePath(name string) error {
-	if name == "" {
+// checkNamesAreUniqueInThePath checks whether the name and value names of
+// the template are unique in the resource's URL.
+func (rb *_ResourceBase) checkNamesAreUniqueInThePath(tmpl *Template) error {
+	if tmpl.name == "" && tmpl.ValueNames() == nil {
 		return nil
 	}
 
-	if _, ok := rb.derived.(*Host); !ok {
-		if !rb.Template().IsStatic() && rb.Name() == name {
-			return ErrDuplicateNameInThePath
-		}
-
-		for p := rb.parent(); p != nil; p = p.parent() {
-			if r, ok := p.(*Resource); ok {
-				if !r.Template().IsStatic() && r.Name() == name {
-					return ErrDuplicateNameInThePath
-				}
-			} else {
-				break
+	var tmplValueNames = tmpl.ValueNames()
+	for p := _Parent(rb); p != nil; p = p.parent() {
+		if r, ok := p.(_Resource); ok {
+			if r.Name() == tmpl.name {
+				return ErrDuplicateNameInThePath
 			}
+
+			if r.Template().HasValueName(tmplValueNames...) {
+				return ErrDuplicateValueNameInThePath
+			}
+		} else {
+			break
 		}
 	}
 
@@ -687,12 +693,14 @@ func (rb *_ResourceBase) checkChildResourceNamesAreUniqueInThePath(
 		return nil
 	}
 
-	for _, rr := range r.ChildResources() {
-		if err := rb.checkNameIsUniqueInThePath(rr.Name()); err != nil {
+	for _, chr := range r.ChildResources() {
+		var err = rb.checkNamesAreUniqueInThePath(chr.Template())
+		if err != nil {
 			return err
 		}
 
-		if err := rb.checkChildResourceNamesAreUniqueInThePath(rr); err != nil {
+		err = rb.checkChildResourceNamesAreUniqueInThePath(chr)
+		if err != nil {
 			return err
 		}
 	}
@@ -708,15 +716,8 @@ func (rb *_ResourceBase) validate(tmpl *Template) error {
 		return newError("%w", ErrNilArgument)
 	}
 
-	if !tmpl.IsStatic() {
-		var name = tmpl.Name()
-		if name == "" {
-			return newError("%w", ErrUnnamedResource)
-		}
-
-		if err := rb.checkNameIsUniqueInThePath(name); err != nil {
-			return newError("%q is %w", name, err)
-		}
+	if err := rb.checkNamesAreUniqueInThePath(tmpl); err != nil {
+		return newError("%w", err)
 	}
 
 	return nil
@@ -1041,9 +1042,9 @@ func (rb *_ResourceBase) segmentResources(pathSegments []string) (
 
 			var r = newDummyResource(tmpl)
 			if newLast != nil {
-				var name = tmpl.Name()
-				if err = newLast.checkNameIsUniqueInThePath(name); err != nil {
-					err = newError("%s is %w", name, err)
+				err = newLast.checkNamesAreUniqueInThePath(tmpl)
+				if err != nil {
+					err = newError("%w", err)
 					return
 				}
 
@@ -2263,12 +2264,9 @@ func (rb *_ResourceBase) passRequestToChildResource(
 		}
 
 		for _, pr := range rb.patternResources {
-			if matches, values := pr.Template().Match(ps); matches {
-				if rd.pathValues == nil {
-					rd.pathValues = make(PathValues)
-				}
-
-				rd.pathValues[pr.Name()] = values
+			var matches bool
+			matches, rd.urlValues = pr.Template().Match(ps, rd.urlValues)
+			if matches {
 				rd._r = pr.derived
 				pr.segmentHandler.ServeHTTP(w, r)
 				return rd.handled
@@ -2276,13 +2274,11 @@ func (rb *_ResourceBase) passRequestToChildResource(
 		}
 
 		if rb.wildcardResource != nil {
-			var n = rb.wildcardResource.Name()
-			if rd.pathValues == nil {
-				rd.pathValues = make(PathValues)
-			}
+			_, rd.urlValues = rb.wildcardResource.Template().Match(
+				ps,
+				rd.urlValues,
+			)
 
-			var _, value = rb.wildcardResource.Template().Match(ps)
-			rd.pathValues[n] = value
 			rd._r = rb.wildcardResource.derived
 			rb.wildcardResource.segmentHandler.ServeHTTP(w, r)
 			return rd.handled

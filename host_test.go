@@ -14,7 +14,7 @@ import (
 func setHandlers(t *testing.T, h *Host) {
 	if err := h.SetHandlerFor("get post custom", http.HandlerFunc(
 		func(w http.ResponseWriter, r *http.Request) {
-			var hValues, ok = r.Context().Value(HostValuesKey).(HostValues)
+			var hValues, ok = r.Context().Value(URLValuesKey).(URLValues)
 			if ok && hValues != nil {
 				var gotValue bool
 				for _, value := range hValues {
