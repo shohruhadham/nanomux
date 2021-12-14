@@ -235,14 +235,7 @@ func (t *Template) IsStatic() bool {
 // IsWildcard returns true if the template doesn't have any static or pattern
 // parts.
 func (t *Template) IsWildcard() bool {
-	if len(t.slices) == 1 {
-		var vp = t.slices[0].valuePattern
-		if vp != nil && vp.re == nil {
-			return true
-		}
-	}
-
-	return false
+	return len(t.slices) == 1 && t.wildCardIdx == 0
 }
 
 // HasPattern returns true if the template has any value-pattern parts.
@@ -361,14 +354,14 @@ func (t *Template) Match(
 	// 	return t.slices[0].staticStr == str, values
 	// }
 
-	if t.IsWildcard() {
-		if values == nil {
-			values = make(map[string]string)
-		}
+	// if t.IsWildcard() {
+	// 	if values == nil {
+	// 		values = make(map[string]string)
+	// 	}
 
-		values[t.slices[0].valuePattern.name] = str
-		return true, values
-	}
+	// 	values[t.slices[0].valuePattern.name] = str
+	// 	return true, values
+	// }
 
 	var ltslices = len(t.slices)
 	var k = ltslices
@@ -441,11 +434,11 @@ func (t *Template) Match(
 	}
 
 	if t.wildCardIdx >= 0 && len(str) > 0 {
-		var vpName = t.slices[t.wildCardIdx].valuePattern.name
 		if values == nil {
 			values = make(map[string]string)
 		}
-		values[vpName] = str
+
+		values[t.slices[t.wildCardIdx].valuePattern.name] = str
 	}
 
 	return true, values

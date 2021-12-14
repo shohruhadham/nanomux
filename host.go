@@ -382,7 +382,8 @@ func (hb *Host) handleOrPassRequest(
 	r *http.Request,
 ) {
 	var rd = r.Context().Value(routingDataKey).(*_RoutingData)
-	if len(rd.path) > 1 {
+	var lpath = rd.pathLen()
+	if lpath > 1 {
 		if hb.IsSubtreeHandler() {
 			rd.subtreeExists = true
 		}
@@ -418,17 +419,17 @@ func (hb *Host) handleOrPassRequest(
 	}
 
 	// Following checks unclean paths, like '////'.
-	if rd.uncleanPath && !hb.IsLenientOnUncleanPath() {
+	if len(rd.cleanPath) > 0 && !hb.IsLenientOnUncleanPath() {
 		if newURL == nil {
 			newURL = cloneRequestURL(r)
 		}
 
-		newURL.Path = rd.path
+		newURL.Path = rd.cleanPath
 	}
 
-	if len(rd.path) < 2 && !hb.IsLenientOnTrailingSlash() {
+	if lpath < 2 && !hb.IsLenientOnTrailingSlash() {
 		// Here, the path can be either empty or root.
-		if hb.HasTrailingSlash() && rd.path != "/" {
+		if hb.HasTrailingSlash() && !rd.pathIsRoot() {
 			if hb.IsStrictOnTrailingSlash() {
 				notFoundResourceHandler.ServeHTTP(w, r)
 				return
@@ -439,7 +440,7 @@ func (hb *Host) handleOrPassRequest(
 			}
 
 			newURL.Path += "/"
-		} else if !hb.HasTrailingSlash() && rd.path == "/" {
+		} else if !hb.HasTrailingSlash() && rd.pathIsRoot() {
 			if hb.IsStrictOnTrailingSlash() {
 				notFoundResourceHandler.ServeHTTP(w, r)
 				return

@@ -375,11 +375,12 @@ type URLValues = map[string]string
 // pattern or when the request's URL contains path segments. It's kept in the
 // request's context.
 type _RoutingData struct {
-	path                  string
+	url                   *url.URL
+	cleanPath             string
 	currentPathSegmentIdx int
-	uncleanPath           bool
-	subtreeExists         bool
-	handled               bool
+
+	subtreeExists bool
+	handled       bool
 
 	urlValues URLValues
 	_r        _Resource
@@ -398,36 +399,40 @@ func requestWithRoutingData(
 		return nil, nil, newError("%w", ErrNilArgument)
 	}
 
+	var rd = &_RoutingData{url: r.URL, _r: _r}
+	r = r.WithContext(newContext(r.Context(), rd))
+
+	var pathPtr = &r.URL.Path
+
+	// The escaped path may have a slash "/", which is a part of the path
+	// segment, not a separator. So the unescaped path must be used for routing.
+	//
 	// As the documentation of the URL.EscapedPath() states, it may return a
 	// different path from the URL.RawPath. Sometimes it's not suitable for
 	// our intentions. It's preferable to use URL.RawPath if it's not empty.
-	var rawPath = r.URL.RawPath
-	var uncleanPath bool
-
-	// URL.RawPath may be empty if there is no need to escape the path.
-	if rawPath == "" {
-		rawPath = r.URL.Path
+	if len(r.URL.RawPath) > 0 {
+		pathPtr = &r.URL.RawPath
 	}
 
-	if rawPath != "" {
+	if (*pathPtr) != "" {
 		var pathStrb strings.Builder
-		pathStrb.WriteString(path.Clean(rawPath))
-
-		var lrawPath = len(rawPath)
-		if rawPath[lrawPath-1] == '/' && pathStrb.Len() != 1 {
+		if (*pathPtr)[0] != '/' {
 			pathStrb.WriteByte('/')
 		}
 
-		if pathStrb.Len() != lrawPath {
-			uncleanPath = true
+		pathStrb.WriteString(path.Clean(*pathPtr))
+
+		var lpath = len(*pathPtr)
+		if (*pathPtr)[lpath-1] == '/' && pathStrb.Len() != 1 {
+			pathStrb.WriteByte('/')
 		}
 
-		rawPath = pathStrb.String()
+		if pathStrb.Len() != lpath {
+			// The request's path is unclean. The clean path will be used
+			// for routing.
+			rd.cleanPath = pathStrb.String()
+		}
 	}
-
-	var rd = &_RoutingData{path: rawPath, uncleanPath: uncleanPath}
-	rd._r = _r
-	r = r.WithContext(newContext(r.Context(), rd))
 
 	return r, rd, nil
 }
@@ -435,7 +440,28 @@ func requestWithRoutingData(
 // -------------------------
 
 func (rd *_RoutingData) pathIsRoot() bool {
-	return rd.path == "/"
+	if rd.cleanPath == "" {
+		if rd.url.RawPath != "" {
+			return rd.url.RawPath == "/"
+		}
+
+		return rd.url.Path == "/"
+	}
+
+	return rd.cleanPath == "/"
+}
+
+// pathLen returns the length of the path that rd is using.
+func (rd *_RoutingData) pathLen() int {
+	var lpath = len(rd.cleanPath)
+	if lpath == 0 {
+		lpath = len(rd.url.RawPath)
+		if lpath == 0 {
+			lpath = len(rd.url.Path)
+		}
+	}
+
+	return lpath
 }
 
 // remainingPath returns the remaining path of the request's URL below the
@@ -445,51 +471,107 @@ func (rd *_RoutingData) remainingPath() string {
 		return ""
 	}
 
-	if rd._r.HasTrailingSlash() || rd.path == "/" {
+	var uncleanPath = len(rd.cleanPath) > 0
+	var rawPath = len(rd.url.RawPath) > 0
+
+	if rd._r.HasTrailingSlash() || rd.pathIsRoot() {
+		// If the _r is a host or resource with a trailing slash, or if the
+		// request's path contains only a slash "/" (root), the remaining path
+		// should not start with or contain only a trailing slash. When the
+		// request's path contains only a slash "/", that means the remaining
+		// path is being retrieved by a host which is lenient on the trailing
+		// slash or a root resource.
 		if rd.currentPathSegmentIdx == 0 {
-			// If the _r is a host or root resource, the remaining path
-			// should not start with a trailing slash.
-			return rd.path[rd.currentPathSegmentIdx+1:]
+			if uncleanPath {
+				return rd.cleanPath[1:]
+			}
+
+			if rawPath {
+				return rd.url.RawPath[1:]
+			}
+
+			return rd.url.Path[1:]
 		}
 	} else if rd.currentPathSegmentIdx > 0 {
-		return rd.path[rd.currentPathSegmentIdx-1:]
+		if uncleanPath {
+			return rd.cleanPath[rd.currentPathSegmentIdx-1:]
+		}
+
+		if rawPath {
+			return rd.url.RawPath[rd.currentPathSegmentIdx-1:]
+		}
+
+		return rd.url.Path[rd.currentPathSegmentIdx-1:]
 	}
 
-	return rd.path[rd.currentPathSegmentIdx:]
+	if uncleanPath {
+		return rd.cleanPath[rd.currentPathSegmentIdx:]
+	}
+
+	if rawPath {
+		return rd.url.RawPath[rd.currentPathSegmentIdx:]
+	}
+
+	return rd.url.Path[rd.currentPathSegmentIdx:]
 }
 
-// nextPathSegment returns the next path segment of the request's URL below
-// the resource that is using the routing data.
-func (rd *_RoutingData) nextPathSegment() string {
-	if rd.currentPathSegmentIdx == len(rd.path) {
-		return ""
+// nextPathSegment returns the unescaped next path segment of the request's URL
+// below the resource that is using the routing data.
+func (rd *_RoutingData) nextPathSegment() (string, error) {
+	var lpath = rd.pathLen()
+	if rd.currentPathSegmentIdx == lpath {
+		return "", nil
 	}
 
 	if rd.currentPathSegmentIdx == 0 {
 		rd.currentPathSegmentIdx++
-		return "/"
+		return "/", nil
 	}
 
-	var remainingPath = rd.path[rd.currentPathSegmentIdx:]
+	var rawPath = rd.url.RawPath != ""
+	var remainingPath string
+	if len(rd.cleanPath) > 0 {
+		remainingPath = rd.cleanPath[rd.currentPathSegmentIdx:]
+	} else if rawPath {
+		remainingPath = rd.url.RawPath[rd.currentPathSegmentIdx:]
+	} else {
+		remainingPath = rd.url.Path[rd.currentPathSegmentIdx:]
+	}
+
 	var idx = strings.IndexByte(remainingPath, '/')
 	if idx < 0 {
-		rd.currentPathSegmentIdx = len(rd.path)
-		return remainingPath
+		rd.currentPathSegmentIdx = lpath
+		if rawPath {
+			return url.PathUnescape(remainingPath)
+		}
+
+		return remainingPath, nil
 	}
 
 	rd.currentPathSegmentIdx += idx + 1
-	return remainingPath[:idx]
+	if rawPath {
+		return url.PathUnescape(remainingPath[:idx])
+	}
+
+	return remainingPath[:idx], nil
 }
 
 // reachedTheLastPathSegment returns true when the resource that is using the
 // routing data is the last resource in the request's URL.
 func (rd *_RoutingData) reachedTheLastPathSegment() bool {
-	return rd.currentPathSegmentIdx == len(rd.path)
+	return rd.currentPathSegmentIdx == rd.pathLen()
 }
 
 // pathHasTrailingSlash returns true if the request's URL has a trailing slash.
 func (rd *_RoutingData) pathHasTrailingSlash() bool {
-	return rd.path != "" && rd.path != "/" && rd.path[len(rd.path)-1] == '/'
+	if lpath := len(rd.cleanPath); lpath > 0 {
+		return rd.cleanPath != "/" && rd.cleanPath[lpath-1] == '/'
+	} else if lpath = len(rd.url.RawPath); lpath > 0 {
+		return rd.url.RawPath != "/" && rd.url.RawPath[lpath-1] == '/'
+	}
+
+	return rd.url.Path != "" && rd.url.Path != "/" &&
+		rd.url.Path[len(rd.url.Path)-1] == '/'
 }
 
 // --------------------------------------------------

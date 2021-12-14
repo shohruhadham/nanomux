@@ -510,13 +510,24 @@ func (rb *Resource) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var ps = rd.nextPathSegment() // First call returns '/'.
+	var ps, _ = rd.nextPathSegment() // First call returns '/'.
 	if rb.tmpl.IsStatic() && rb.tmpl.Content() == ps {
 		rb.segmentHandler.ServeHTTP(w, r)
 		return
 	}
 
-	ps = rd.nextPathSegment()
+	ps, err = rd.nextPathSegment()
+	if err != nil {
+		http.Error(
+			w,
+			http.StatusText(http.StatusBadRequest),
+			http.StatusBadRequest,
+		)
+
+		rd.handled = true
+		return
+	}
+
 	if len(ps) > 0 {
 		if rb.tmpl.IsStatic() && rb.tmpl.Content() == ps {
 			rb.segmentHandler.ServeHTTP(w, r)
@@ -605,12 +616,12 @@ func (rb *Resource) handleOrPassRequest(
 		newURL.Scheme = "https"
 	}
 
-	if rd.uncleanPath && !rb.IsLenientOnUncleanPath() {
+	if len(rd.cleanPath) > 0 && !rb.IsLenientOnUncleanPath() {
 		if newURL == nil {
 			newURL = cloneRequestURL(r)
 		}
 
-		newURL.Path = rd.path
+		newURL.Path = rd.cleanPath
 	}
 
 	if lastSegment && !rb.IsLenientOnTrailingSlash() {
