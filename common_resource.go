@@ -2242,21 +2242,19 @@ func (rb *_ResourceBase) passRequestToChildResource(
 	var currentPathSegmentIdx = rd.currentPathSegmentIdx
 	defer func() { rd.currentPathSegmentIdx = currentPathSegmentIdx }()
 
-	var ps = rd.nextPathSegment()
+	var ps, err = rd.nextPathSegment()
+	if err != nil {
+		http.Error(
+			w,
+			http.StatusText(http.StatusBadRequest),
+			http.StatusBadRequest,
+		)
+
+		rd.handled = true
+		return rd.handled
+	}
+
 	if len(ps) > 0 {
-		var err error
-		ps, err = url.PathUnescape(ps)
-		if err != nil {
-			http.Error(
-				w,
-				http.StatusText(http.StatusBadRequest),
-				http.StatusBadRequest,
-			)
-
-			rd.handled = true
-			return rd.handled
-		}
-
 		if sr, found := rb.staticResources[ps]; found {
 			rd._r = sr.derived
 			sr.segmentHandler.ServeHTTP(w, r)

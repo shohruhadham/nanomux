@@ -211,28 +211,9 @@ func TestTemplate_IsWildCard(t *testing.T) {
 		tmpl *Template
 		want bool
 	}{
-		{
-			"wildcard template",
-			&Template{slices: []_TemplateSlice{{
-				valuePattern: &_ValuePattern{name: "wildcard"},
-			}}},
-			true,
-		},
-		{
-			"pattern template",
-			&Template{slices: []_TemplateSlice{{
-				valuePattern: &_ValuePattern{
-					"pattern",
-					regexp.MustCompile(`\d{3}`),
-				},
-			}}},
-			false,
-		},
-		{
-			"static template",
-			&Template{slices: []_TemplateSlice{{staticStr: "static template"}}},
-			false,
-		},
+		{"wildcard template", Parse("{wildcard}"), true},
+		{"pattern template", Parse("{pattern:\\d{3}}"), false},
+		{"static template", Parse("static template"), false},
 	}
 
 	for _, c := range cases {
