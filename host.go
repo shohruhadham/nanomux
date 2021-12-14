@@ -349,8 +349,8 @@ func (hb *Host) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if matches, values := tmpl.Match(host); matches {
-			rd.hostValues = values
+		if matches, values := tmpl.Match(host, nil); matches {
+			rd.urlValues = values
 			hb.segmentHandler.ServeHTTP(w, r)
 			return
 		}

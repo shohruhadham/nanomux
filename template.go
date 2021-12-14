@@ -139,6 +139,37 @@ func (t *Template) Name() string {
 	return t.name
 }
 
+// ValueNames returns the value names given in the value-patterns.
+func (t *Template) ValueNames() []string {
+	var vns []string
+	for _, slice := range t.slices {
+		if slice.valuePattern != nil {
+			vns = append(vns, slice.valuePattern.name)
+		}
+	}
+
+	return vns
+}
+
+// HasValueName returns true if the template contains one of the names.
+func (t *Template) HasValueName(names ...string) bool {
+	var (
+		tvalueNames  = t.ValueNames()
+		ltvalueNames = len(tvalueNames)
+		lnames       = len(names)
+	)
+
+	for i := 0; i < lnames; i++ {
+		for j := 0; j < ltvalueNames; j++ {
+			if names[i] == tvalueNames[j] {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
 // Content returns the content of the template without a name.
 // A pattern is omitted from a repeated value-pattern starting from the second
 // repitition.
@@ -315,14 +346,26 @@ func (t *Template) SimilarityWith(anotherT *Template) Similarity {
 // Match returns true if the string matches the template. If the template has
 // value-pattern parts, Match also returns the values of those matched patterns.
 // The names of the patterns in the template are used as keys for the values.
-func (t *Template) Match(str string) (matched bool, values map[string]string) {
-	if t.IsStatic() {
-		return t.slices[0].staticStr == str, nil
-	}
-
-	values = make(map[string]string)
+//
+// The values map is returned as is when the template doesn't match. If
+// the template matches, the values of the matches are added to the map
+// and returned.
+func (t *Template) Match(
+	str string,
+	values map[string]string,
+) (bool, map[string]string) {
+	// The following if statement was added for the sake of completeness, but
+	// commented out because it's not needed here. The resources with static
+	// templates don't need the Match method.
+	// if t.IsStatic() {
+	// 	return t.slices[0].staticStr == str, values
+	// }
 
 	if t.IsWildcard() {
+		if values == nil {
+			values = make(map[string]string)
+		}
+
 		values[t.slices[0].valuePattern.name] = str
 		return true, values
 	}
@@ -339,7 +382,7 @@ func (t *Template) Match(str string) (matched bool, values map[string]string) {
 			if strings.HasPrefix(str, sstr) {
 				str = str[len(sstr):]
 			} else {
-				return false, nil
+				return false, values
 			}
 		} else {
 			var vp = t.slices[i].valuePattern
@@ -348,15 +391,19 @@ func (t *Template) Match(str string) (matched bool, values map[string]string) {
 				var v = str[:idxs[1]]
 				if vf, found := values[vp.name]; found {
 					if v != vf {
-						return false, nil
+						return false, values
 					}
 				} else {
+					if values == nil {
+						values = make(map[string]string)
+					}
+
 					values[vp.name] = v
 				}
 
 				str = str[idxs[1]:]
 			} else {
-				return false, nil
+				return false, values
 			}
 		}
 	}
@@ -367,31 +414,37 @@ func (t *Template) Match(str string) (matched bool, values map[string]string) {
 			if strings.HasSuffix(str, sstr) {
 				str = str[:len(str)-len(sstr)]
 			} else {
-				return false, nil
+				return false, values
 			}
 		} else {
 			var vp = t.slices[i].valuePattern
 			var idxs = vp.re.FindAllStringIndex(str, -1)
-			if idxs != nil {
-				var lastIdxs = idxs[len(idxs)-1]
-				var v = str[lastIdxs[0]:]
+			if len(idxs) == 1 {
+				var v = str[idxs[0][0]:]
 				if vf, found := values[vp.name]; found {
 					if v != vf {
-						return false, nil
+						return false, values
 					}
 				} else {
+					if values == nil {
+						values = make(map[string]string)
+					}
+
 					values[vp.name] = v
 				}
 
-				str = str[:lastIdxs[0]]
+				str = str[:idxs[0][0]]
 			} else {
-				return false, nil
+				return false, values
 			}
 		}
 	}
 
 	if t.wildCardIdx >= 0 && len(str) > 0 {
 		var vpName = t.slices[t.wildCardIdx].valuePattern.name
+		if values == nil {
+			values = make(map[string]string)
+		}
 		values[vpName] = str
 	}
 

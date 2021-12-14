@@ -415,77 +415,35 @@ func TestTemplate_Match(t *testing.T) {
 	}{
 		{
 			"static",
-			&Template{
-				slices:      []_TemplateSlice{{staticStr: "green-energy"}},
-				wildCardIdx: -1,
-			},
+			Parse("green-energy"),
 			"green-energy",
 			nil,
 			[]string{"solar-power"},
 		},
 		{
 			"wildcard",
-			&Template{
-				slices: []_TemplateSlice{
-					{valuePattern: &_ValuePattern{name: "river"}},
-				},
-				wildCardIdx: 0,
-			},
+			Parse("{river}"),
 			"Sir-Daryo",
 			map[string]string{"river": "Sir-Daryo"},
 			nil,
 		},
 		{
 			"pattern",
-			&Template{
-				slices: []_TemplateSlice{
-					{valuePattern: &_ValuePattern{
-						name: "id",
-						re:   regexp.MustCompile(`\d{3}`),
-					}},
-				},
-				wildCardIdx: -1,
-			},
-			"12345",
+			Parse("{id:\\d{3}}"),
+			"123",
 			map[string]string{"id": "123"},
-			[]string{"abc", "12"},
+			[]string{"abc", "12", "12345"},
 		},
 		{
 			"pattern pattern",
-			&Template{
-				slices: []_TemplateSlice{
-					{valuePattern: &_ValuePattern{
-						name: "name",
-						re:   regexp.MustCompile(`[A-Za-z]+`),
-					}},
-					{valuePattern: &_ValuePattern{
-						name: "id",
-						re:   regexp.MustCompile(`\d+`),
-					}},
-				},
-				wildCardIdx: -1,
-			},
+			Parse("{name:[A-Za-z]+}{id:\\d+}"),
 			"abc123",
 			map[string]string{"name": "abc", "id": "123"},
 			[]string{"abc", "12", "1234", " 123", "123 ", " 123 ", "123ab"},
 		},
 		{
 			"static pattern static pattern",
-			&Template{
-				slices: []_TemplateSlice{
-					{staticStr: "name: "},
-					{valuePattern: &_ValuePattern{
-						name: "name",
-						re:   regexp.MustCompile(`[A-Za-z]{3}`),
-					}},
-					{staticStr: ", id: "},
-					{valuePattern: &_ValuePattern{
-						name: "id",
-						re:   regexp.MustCompile(`\d{3}`),
-					}},
-				},
-				wildCardIdx: -1,
-			},
+			Parse("name: {name:[A-Za-z]{3}}, id: {id:\\d{3}}"),
 			"name: abc, id: 123",
 			map[string]string{"name": "abc", "id": "123"},
 			[]string{
@@ -494,20 +452,7 @@ func TestTemplate_Match(t *testing.T) {
 		},
 		{
 			"static pattern static wildcard",
-			&Template{
-				slices: []_TemplateSlice{
-					{staticStr: "name: "},
-					{valuePattern: &_ValuePattern{
-						name: "name",
-						re:   regexp.MustCompile(`[A-Za-z]{3}`),
-					}},
-					{staticStr: ", address: "},
-					{valuePattern: &_ValuePattern{
-						name: "address",
-					}},
-				},
-				wildCardIdx: 3,
-			},
+			Parse("name: {name:[A-Za-z]{3}}, address: {address}"),
 			"name: abc, address: Kepler-452b",
 			map[string]string{"name": "abc", "address": "Kepler-452b"},
 			[]string{
@@ -516,25 +461,9 @@ func TestTemplate_Match(t *testing.T) {
 		},
 		{
 			"static pattern static wildcard static pattern",
-			&Template{
-				slices: []_TemplateSlice{
-					{staticStr: "id: "},
-					{valuePattern: &_ValuePattern{
-						name: "id",
-						re:   regexp.MustCompile(`\d{3}`),
-					}},
-					{staticStr: ", address: "},
-					{valuePattern: &_ValuePattern{
-						name: "address",
-					}},
-					{staticStr: ", state: "},
-					{valuePattern: &_ValuePattern{
-						name: "state",
-						re:   regexp.MustCompile(`(unknown|active|dormant)`),
-					}},
-				},
-				wildCardIdx: 3,
-			},
+			Parse(
+				"id: {id:\\d{3}}, address: {address}, state: {state:(unknown|active|dormant)}",
+			),
 			"id: 123, address: Proxima b, state: active",
 			map[string]string{
 				"id":      "123",
@@ -547,17 +476,7 @@ func TestTemplate_Match(t *testing.T) {
 		},
 		{
 			"wildcard static pattern",
-			&Template{
-				slices: []_TemplateSlice{
-					{valuePattern: &_ValuePattern{name: "galaxy"}},
-					{staticStr: ", "},
-					{valuePattern: &_ValuePattern{
-						name: "color",
-						re:   regexp.MustCompile(`(red|blue|white)`),
-					}},
-				},
-				wildCardIdx: 0,
-			},
+			Parse("{galaxy}, {color:(red|blue|white)}"),
 			"Eye of Sauron, red",
 			map[string]string{"galaxy": "Eye of Sauron", "color": "red"},
 			[]string{
@@ -568,7 +487,7 @@ func TestTemplate_Match(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			var matched, values = c.tmpl.Match(c.matchingStr)
+			var matched, values = c.tmpl.Match(c.matchingStr, nil)
 			if !matched {
 				t.Fatalf("Template.Match() matched = false, want true")
 			}
@@ -582,13 +501,9 @@ func TestTemplate_Match(t *testing.T) {
 			}
 
 			for _, str := range c.nonMatchingStrs {
-				var matched, values = c.tmpl.Match(str)
+				var matched, _ = c.tmpl.Match(str, nil)
 				if matched {
 					t.Fatalf("Template.Match() matched = true, want false")
-				}
-
-				if values != nil {
-					t.Fatalf("Template.Match() values = %v, want nil", values)
 				}
 			}
 		})

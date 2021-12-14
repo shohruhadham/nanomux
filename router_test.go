@@ -3763,7 +3763,7 @@ func TestRouter_ServeHTTP(t *testing.T) {
 
 	var patternHost1 *Host
 	patternHost1, err = ro.HostUsingConfig(
-		"{sub:abc}.example.com/",
+		"{sub:\\d?}.example1.com/",
 		Config{SubtreeHandler: true},
 	)
 
@@ -3774,7 +3774,7 @@ func TestRouter_ServeHTTP(t *testing.T) {
 	addRequestHandlerSubresources(t, patternHost1, 0, 2)
 
 	var patternHost2 *Host
-	patternHost2, err = ro.Host("https://{sub2:bca}.example.com")
+	patternHost2, err = ro.Host("https://{sub2:\\d?}.example2.com")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -3829,19 +3829,19 @@ func TestRouter_ServeHTTP(t *testing.T) {
 			"ph1/pr02#1",
 			nil,
 			"POST",
-			"http://abc.example.com/pr02:1/",
+			"http://1.example1.com/pr02:1/",
 			true,
 			false,
-			"POST https://abc.example.com/pr02:1/",
+			"POST https://1.example1.com/pr02:1/",
 		},
 		{
 			"wh1/pr02#2",
 			nil,
 			"POST",
-			"http://test.example1.com/pr02:1",
+			"http://1.example1.com/pr02:1",
 			true,
 			false,
-			"POST https://test.example1.com/pr02:1",
+			"POST https://1.example1.com/pr02:1",
 		},
 		{
 			"/pr02#3",
@@ -3874,19 +3874,19 @@ func TestRouter_ServeHTTP(t *testing.T) {
 			"ph2/pr02#6",
 			nil,
 			"POST",
-			"https://bca.example.com/pr02:1",
+			"https://1.example2.com/pr02:1",
 			false,
 			false,
-			"POST https://bca.example.com/pr02:1",
+			"POST https://1.example2.com/pr02:1",
 		},
 		{
 			"wh1/pr02#7",
 			nil,
 			"POST",
-			"https://www.example1.com/..///.//pr02:1/",
+			"https://1.example1.com/..///.//pr02:1/",
 			true,
 			false,
-			"POST https://www.example1.com/pr02:1/",
+			"POST https://1.example1.com/pr02:1/",
 		},
 		{
 			"/pr02#8",
@@ -3939,19 +3939,19 @@ func TestRouter_ServeHTTP(t *testing.T) {
 			"ph2/sr02/sr11#5",
 			nil,
 			"GET",
-			"https://bca.example.com/sr02/sr11",
+			"https://1.example2.com/sr02/sr11",
 			false,
 			false,
-			"GET https://bca.example.com/sr02/sr11",
+			"GET https://1.example2.com/sr02/sr11",
 		},
 		{
 			"wh2/pr04/sr11#6",
 			nil,
 			"GET",
-			"https://info.example2.com/pr04:1/sr11/",
+			"https://1.example2.com/pr04:1/sr11/",
 			true,
 			false,
-			"GET https://info.example2.com/pr04:1/sr11",
+			"GET https://1.example2.com/pr04:1/sr11",
 		},
 		{
 			"/pr02/sr11#7",
@@ -3978,55 +3978,55 @@ func TestRouter_ServeHTTP(t *testing.T) {
 			"ph1#1",
 			nil,
 			"CUSTOM",
-			"http://abc.example.com",
+			"http://1.example1.com",
 			true,
 			false,
-			"CUSTOM http://abc.example.com/",
+			"CUSTOM http://1.example1.com/",
 		},
 		{
 			"ph1#2",
 			nil,
 			"CUSTOM",
-			"http://abc.example.com/",
+			"http://1.example1.com/",
 			false,
 			false,
-			"CUSTOM http://abc.example.com/",
+			"CUSTOM http://1.example1.com/",
 		},
 		{
 			"ph1#3",
 			nil,
 			"CUSTOM",
-			"http://abc.example.com///..//.//",
+			"http://1.example1.com///..//.//",
 			true,
 			false,
-			"CUSTOM http://abc.example.com/",
+			"CUSTOM http://1.example1.com/",
 		},
 		{
 			"ph1#4",
 			nil,
 			"CUSTOM",
-			"https://abc.example.com/",
+			"https://1.example1.com/",
 			false,
 			false,
-			"CUSTOM https://abc.example.com/",
+			"CUSTOM https://1.example1.com/",
 		},
 		{
 			"ph1#5",
 			nil,
 			"POST",
-			"https://abc.example.com",
+			"https://1.example1.com",
 			true,
 			false,
-			"POST https://abc.example.com/",
+			"POST https://1.example1.com/",
 		},
 		{
 			"ph1#6",
 			nil,
 			"CUSTOM",
-			"https://abc.example.com///..//.//",
+			"https://1.example1.com///..//.//",
 			true,
 			false,
-			"CUSTOM https://abc.example.com/",
+			"CUSTOM https://1.example1.com/",
 		},
 
 		// ----------
@@ -4035,7 +4035,7 @@ func TestRouter_ServeHTTP(t *testing.T) {
 			"ph2#1",
 			nil,
 			"CUSTOM",
-			"http://bca.example.com",
+			"http://1.example2.com",
 			false,
 			true,
 			"Not Found\n",
@@ -4044,7 +4044,7 @@ func TestRouter_ServeHTTP(t *testing.T) {
 			"ph2#2",
 			nil,
 			"CUSTOM",
-			"http://bca.example.com/",
+			"http://1.example2.com/",
 			false,
 			true,
 			"Not Found\n",
@@ -4053,7 +4053,7 @@ func TestRouter_ServeHTTP(t *testing.T) {
 			"ph2#3",
 			nil,
 			"CUSTOM",
-			"http://bca.example.com///..//.//",
+			"http://1.example2.com///..//.//",
 			false,
 			true,
 			"Not Found\n",
@@ -4062,28 +4062,28 @@ func TestRouter_ServeHTTP(t *testing.T) {
 			"ph2#4",
 			nil,
 			"CUSTOM",
-			"https://bca.example.com",
+			"https://1.example2.com",
 			false,
 			false,
-			"CUSTOM https://bca.example.com",
+			"CUSTOM https://1.example2.com",
 		},
 		{
 			"ph2#5",
 			nil,
 			"POST",
-			"https://bca.example.com/",
+			"https://1.example2.com/",
 			true,
 			false,
-			"POST https://bca.example.com",
+			"POST https://1.example2.com",
 		},
 		{
 			"ph2#6",
 			nil,
 			"CUSTOM",
-			"https://bca.example.com///..//.//",
+			"https://1.example2.com///..//.//",
 			true,
 			false,
-			"CUSTOM https://bca.example.com",
+			"CUSTOM https://1.example2.com",
 		},
 	}
 
@@ -4264,7 +4264,7 @@ func TestRouter_ServeHTTP(t *testing.T) {
 	}
 }
 
-func getRouter5x500Static() (*Router, *http.Request, error) {
+func getStaticRouter() (*Router, *http.Request, error) {
 	var (
 		ro   = NewRouter()
 		impl = &implType{}
@@ -4298,7 +4298,7 @@ func getRouter5x500Static() (*Router, *http.Request, error) {
 	}
 
 	var lurls = len(urls)
-	fmt.Println("count of static URLs:", lurls)
+	// fmt.Println("count of static URLs:", lurls)
 	for i := 0; i < lurls; i++ {
 		// err = ro.SetURLHandlerFuncFor(
 		// 	"get",
@@ -4320,7 +4320,7 @@ func getRouter5x500Static() (*Router, *http.Request, error) {
 	return ro, r, nil
 }
 
-func getRouter5x500Pattern() (*Router, *http.Request, error) {
+func getPatternRouter() (*Router, *http.Request, error) {
 	var (
 		ro   = NewRouter()
 		impl = &implType{}
@@ -4367,7 +4367,7 @@ func getRouter5x500Pattern() (*Router, *http.Request, error) {
 	}
 
 	var lurls = len(urls)
-	fmt.Println("count of pattern URLs:", lurls)
+	// fmt.Println("count of pattern URLs:", lurls)
 	for i := 0; i < lurls; i++ {
 		// err = ro.SetURLHandlerFuncFor(
 		// 	"get",
@@ -4391,7 +4391,7 @@ func getRouter5x500Pattern() (*Router, *http.Request, error) {
 	return ro, r, nil
 }
 
-func getRouter5x1Wildcard() (*Router, *http.Request, error) {
+func getWildcardRouter() (*Router, *http.Request, error) {
 	var (
 		ro   = NewRouter()
 		impl = &implType{}
@@ -4533,17 +4533,17 @@ var (
 func init() {
 	w = httptest.NewRecorder()
 	var err error
-	staticRo, sr, err = getRouter5x500Static()
+	staticRo, sr, err = getStaticRouter()
 	if err != nil {
 		panic(err)
 	}
 
-	patternRo, pr, err = getRouter5x500Pattern()
+	patternRo, pr, err = getPatternRouter()
 	if err != nil {
 		panic(err)
 	}
 
-	wildcardRo, wr, err = getRouter5x1Wildcard()
+	wildcardRo, wr, err = getWildcardRouter()
 	if err != nil {
 		panic(err)
 	}

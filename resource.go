@@ -524,22 +524,13 @@ func (rb *Resource) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if rb.tmpl.IsWildcard() {
-			if rd.pathValues == nil {
-				rd.pathValues = make(PathValues)
-			}
-
-			var _, value = rb.tmpl.Match(ps)
-			rd.pathValues[rb.Name()] = value
+			_, rd.urlValues = rb.tmpl.Match(ps, nil)
 			rb.segmentHandler.ServeHTTP(w, r)
 			return
 		}
 
-		if matched, values := rb.tmpl.Match(ps); matched {
-			if rd.pathValues == nil {
-				rd.pathValues = make(PathValues)
-			}
-
-			rd.pathValues[rb.Name()] = values
+		if matched, values := rb.tmpl.Match(ps, nil); matched {
+			rd.urlValues = values
 			rb.segmentHandler.ServeHTTP(w, r)
 			return
 		}
