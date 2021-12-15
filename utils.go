@@ -388,21 +388,21 @@ type _RoutingData struct {
 
 // -------------------------
 
-// requestWithRoutingData creates a new _RoutingData for the HTTP request and
-// inserts it into the request's context. It also keeps the _Resource in the
-// newly created _RoutingData.
-func requestWithRoutingData(
-	r *http.Request,
+// contextWithRoutingData returns a new context with the _RoutingData created
+// for the URL. It also keeps the passed _Resource in the _RoutingData.
+func contextWithRoutingData(
+	c context.Context,
+	url *url.URL,
 	_r _Resource,
-) (*http.Request, *_RoutingData, error) {
-	if r == nil || _r == nil {
+) (context.Context, *_RoutingData, error) {
+	if c == nil || _r == nil {
 		return nil, nil, newError("%w", ErrNilArgument)
 	}
 
-	var rd = &_RoutingData{url: r.URL, _r: _r}
-	r = r.WithContext(newContext(r.Context(), rd))
+	var rd = &_RoutingData{url: url, _r: _r}
+	c = newContext(c, rd)
 
-	var pathPtr = &r.URL.Path
+	var pathPtr = &url.Path
 
 	// The escaped path may have a slash "/", which is a part of the path
 	// segment, not a separator. So the unescaped path must be used for routing.
@@ -410,8 +410,8 @@ func requestWithRoutingData(
 	// As the documentation of the URL.EscapedPath() states, it may return a
 	// different path from the URL.RawPath. Sometimes it's not suitable for
 	// our intentions. It's preferable to use URL.RawPath if it's not empty.
-	if len(r.URL.RawPath) > 0 {
-		pathPtr = &r.URL.RawPath
+	if len(url.RawPath) > 0 {
+		pathPtr = &url.RawPath
 	}
 
 	if (*pathPtr) != "" {
@@ -428,13 +428,13 @@ func requestWithRoutingData(
 		}
 
 		if pathStrb.Len() != lpath {
-			// The request's path is unclean. The clean path will be used
+			// The URL's path is unclean. The clean path will be used
 			// for routing.
 			rd.cleanPath = pathStrb.String()
 		}
 	}
 
-	return r, rd, nil
+	return c, rd, nil
 }
 
 // -------------------------

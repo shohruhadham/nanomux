@@ -4,6 +4,7 @@
 package nanomux
 
 import (
+	"context"
 	"errors"
 	"net"
 	"net/http"
@@ -19,12 +20,12 @@ type Router struct {
 	patternHosts []*Host
 	r            *Resource
 
-	segmentHandler http.Handler
+	segmentHandler Handler
 }
 
 func NewRouter() *Router {
 	var ro = &Router{}
-	ro.segmentHandler = http.HandlerFunc(ro.passRequest)
+	ro.segmentHandler = HandlerFunc(ro.passRequest)
 	return ro
 }
 
@@ -325,7 +326,7 @@ func (ro *Router) ImplementationAt(urlTmplStr string) (Impl, error) {
 func (ro *Router) SetURLHandlerFor(
 	methods string,
 	urlTmplStr string,
-	handler http.Handler,
+	handler Handler,
 ) error {
 	var _r, err = ro._Resource(urlTmplStr)
 	if err != nil {
@@ -356,7 +357,7 @@ func (ro *Router) SetURLHandlerFor(
 func (ro *Router) SetURLHandlerFuncFor(
 	methods string,
 	urlTmplStr string,
-	handlerFunc http.HandlerFunc,
+	handlerFunc HandlerFunc,
 ) error {
 	if err := ro.SetURLHandlerFor(methods, urlTmplStr, handlerFunc); err != nil {
 		return newError("<- %w", err)
@@ -376,7 +377,7 @@ func (ro *Router) SetURLHandlerFuncFor(
 // to get the handler of HTTP methods that are not allowed. Examples: "get",
 // "POST" or "!".
 func (ro *Router) URLHandlerOf(method string, urlTmplStr string) (
-	http.Handler,
+	Handler,
 	error,
 ) {
 	var _r, _, err = ro.registered_Resource(urlTmplStr)
@@ -1549,12 +1550,16 @@ func (ro *Router) _Resources() []_Resource {
 // -------------------------
 
 func (ro *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	ro.segmentHandler.ServeHTTP(w, r)
+	ro.segmentHandler.ServeHTTP(r.Context(), w, r)
 }
 
 // passRequest is the segment handler of the router. It passes the request
 // to the first matching host or the root resource if there is no matching host.
-func (ro *Router) passRequest(w http.ResponseWriter, r *http.Request) {
+func (ro *Router) passRequest(
+	c context.Context,
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	var host = r.URL.Host
 	if host == "" {
 		host = r.Host
@@ -1570,7 +1575,7 @@ func (ro *Router) passRequest(w http.ResponseWriter, r *http.Request) {
 
 		if h := ro.staticHosts[host]; h != nil {
 			var err error
-			r, _, err = requestWithRoutingData(r, h.derived)
+			c, _, err = contextWithRoutingData(c, r.URL, h.derived)
 			if err != nil {
 				http.Error(
 					w,
@@ -1581,7 +1586,7 @@ func (ro *Router) passRequest(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
-			h.segmentHandler.ServeHTTP(w, r)
+			h.segmentHandler.ServeHTTP(c, w, r)
 			return
 		}
 
@@ -1589,7 +1594,7 @@ func (ro *Router) passRequest(w http.ResponseWriter, r *http.Request) {
 			if matches, values := ph.Template().Match(host, nil); matches {
 				var rd *_RoutingData
 				var err error
-				r, rd, err = requestWithRoutingData(r, ph.derived)
+				c, rd, err = contextWithRoutingData(c, r.URL, ph.derived)
 				if err != nil {
 					http.Error(
 						w,
@@ -1601,7 +1606,7 @@ func (ro *Router) passRequest(w http.ResponseWriter, r *http.Request) {
 				}
 
 				rd.urlValues = values
-				ph.segmentHandler.ServeHTTP(w, r)
+				ph.segmentHandler.ServeHTTP(c, w, r)
 				return
 			}
 		}
@@ -1610,7 +1615,7 @@ func (ro *Router) passRequest(w http.ResponseWriter, r *http.Request) {
 	if ro.r != nil && r.URL.Path != "" {
 		var rd *_RoutingData
 		var err error
-		r, rd, err = requestWithRoutingData(r, ro.r.derived)
+		c, rd, err = contextWithRoutingData(c, r.URL, ro.r.derived)
 		if err != nil {
 			http.Error(
 				w,
@@ -1622,9 +1627,9 @@ func (ro *Router) passRequest(w http.ResponseWriter, r *http.Request) {
 		}
 
 		rd.nextPathSegment() // Returns '/'.
-		ro.r.segmentHandler.ServeHTTP(w, r)
+		ro.r.segmentHandler.ServeHTTP(c, w, r)
 		return
 	}
 
-	notFoundResourceHandler.ServeHTTP(w, r)
+	notFoundResourceHandler.ServeHTTP(c, w, r)
 }

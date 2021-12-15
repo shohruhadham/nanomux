@@ -4,6 +4,7 @@
 package nanomux
 
 import (
+	"context"
 	"net"
 	"net/http"
 	"net/url"
@@ -30,7 +31,7 @@ func createDummyHost(tmpl *Template) (*Host, error) {
 	var h = &Host{}
 	h.derived = h
 	h.tmpl = tmpl
-	h.segmentHandler = http.HandlerFunc(h.handleOrPassRequest)
+	h.segmentHandler = HandlerFunc(h.handleOrPassRequest)
 	return h, nil
 }
 
@@ -86,7 +87,7 @@ func createHost(
 
 	h.derived = h
 	h.tmpl = tmpl
-	h.segmentHandler = http.HandlerFunc(h.handleOrPassRequest)
+	h.segmentHandler = HandlerFunc(h.handleOrPassRequest)
 	return h, nil
 }
 
@@ -128,7 +129,7 @@ func CreateDormantHostUsingConfig(
 //
 // The Impl is, in a sense, the implementation of the host. It is an instance
 // of a type with methods to handle HTTP requests. Methods must have the
-// signature of the http.HandlerFunc and must start with the "Handle" prefix.
+// signature of the HandlerFunc and must start with the "Handle" prefix.
 // The remaining part of any such method's name is considered an HTTP method.
 // For example, HandleGet and HandleCustom are considered the handlers of the
 // GET and CUSTOM HTTP methods, respectively. If the value of the impl has the
@@ -164,7 +165,7 @@ func CreateHost(urlTmplStr string, impl Impl) (*Host, error) {
 //
 // The Impl is, in a sense, the implementation of the host. It is an instance
 // of a type with methods to handle HTTP requests. Methods must have the
-// signature of the http.HandlerFunc and must start with the "Handle" prefix.
+// signature of the HandlerFunc and must start with the "Handle" prefix.
 // The remaining part of any such method's name is considered an HTTP method.
 // For example, HandleGet and HandleCustom are considered the handlers of the
 // GET and CUSTOM HTTP methods, respectively. If the value of the impl has the
@@ -244,7 +245,7 @@ func NewDormantHostUsingConfig(urlTmplStr string, config Config) *Host {
 //
 // The Impl is, in a sense, the implementation of the host. It is an instance
 // of a type with methods to handle HTTP requests. Methods must have the
-// signature of the http.HandlerFunc and must start with the "Handle" prefix.
+// signature of the HandlerFunc and must start with the "Handle" prefix.
 // The remaining part of any such method's name is considered an HTTP method.
 // For example, HandleGet and HandleCustom are considered the handlers of the
 // GET and CUSTOM HTTP methods, respectively. If the value of the impl has the
@@ -279,7 +280,7 @@ func NewHost(urlTmplStr string, impl Impl) *Host {
 //
 // The Impl is, in a sense, the implementation of the host. It is an instance
 // of a type with methods to handle HTTP requests. Methods must have the
-// signature of the http.HandlerFunc and must start with the "Handle" prefix.
+// signature of the HandlerFunc and must start with the "Handle" prefix.
 // The remaining part of any such method's name is considered an HTTP method.
 // For example, HandleGet and HandleCustom are considered the handlers of the
 // GET and CUSTOM HTTP methods, respectively. If the value of the impl has the
@@ -322,9 +323,7 @@ func (hb *Host) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		host = r.Host
 	}
 
-	var rd *_RoutingData
-	var err error
-	r, rd, err = requestWithRoutingData(r, hb.derived)
+	var c, rd, err = contextWithRoutingData(r.Context(), r.URL, hb.derived)
 	if err != nil {
 		http.Error(
 			w,
@@ -345,18 +344,18 @@ func (hb *Host) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		var tmpl = hb.Template()
 		if tmpl.IsStatic() && tmpl.Content() == host {
-			hb.segmentHandler.ServeHTTP(w, r)
+			hb.segmentHandler.ServeHTTP(c, w, r)
 			return
 		}
 
 		if matches, values := tmpl.Match(host, nil); matches {
 			rd.urlValues = values
-			hb.segmentHandler.ServeHTTP(w, r)
+			hb.segmentHandler.ServeHTTP(c, w, r)
 			return
 		}
 	}
 
-	notFoundResourceHandler.ServeHTTP(w, r)
+	notFoundResourceHandler.ServeHTTP(c, w, r)
 }
 
 // handleOrPassRequest is the segment handler of the host. It handles the
@@ -378,10 +377,11 @@ func (hb *Host) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // handler, the request is handled by the host itself, otherwise a "404 Not
 // Found" status code is returned.
 func (hb *Host) handleOrPassRequest(
+	c context.Context,
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
-	var rd = r.Context().Value(routingDataKey).(*_RoutingData)
+	var rd = c.Value(routingDataKey).(*_RoutingData)
 	var lpath = rd.pathLen()
 	if lpath > 1 {
 		if hb.IsSubtreeHandler() {
@@ -389,7 +389,7 @@ func (hb *Host) handleOrPassRequest(
 		}
 
 		rd.nextPathSegment() // First call returns '/'.
-		if hb.passRequestToChildResource(w, r, rd) {
+		if hb.passRequestToChildResource(c, w, r, rd) {
 			return
 		}
 
@@ -397,20 +397,20 @@ func (hb *Host) handleOrPassRequest(
 		rd._r = hb.derived
 
 		if !hb.IsSubtreeHandler() {
-			notFoundResourceHandler.ServeHTTP(w, r)
+			notFoundResourceHandler.ServeHTTP(c, w, r)
 			return
 		}
 	}
 
 	if !hb.canHandleRequest() {
-		notFoundResourceHandler.ServeHTTP(w, r)
+		notFoundResourceHandler.ServeHTTP(c, w, r)
 		return
 	}
 
 	var newURL *url.URL
 	if r.TLS == nil && hb.IsSecure() {
 		if !hb.RedirectsInsecureRequest() {
-			notFoundResourceHandler.ServeHTTP(w, r)
+			notFoundResourceHandler.ServeHTTP(c, w, r)
 			return
 		}
 
@@ -431,7 +431,7 @@ func (hb *Host) handleOrPassRequest(
 		// Here, the path can be either empty or root.
 		if hb.HasTrailingSlash() && !rd.pathIsRoot() {
 			if hb.IsStrictOnTrailingSlash() {
-				notFoundResourceHandler.ServeHTTP(w, r)
+				notFoundResourceHandler.ServeHTTP(c, w, r)
 				return
 			}
 
@@ -442,7 +442,7 @@ func (hb *Host) handleOrPassRequest(
 			newURL.Path += "/"
 		} else if !hb.HasTrailingSlash() && rd.pathIsRoot() {
 			if hb.IsStrictOnTrailingSlash() {
-				notFoundResourceHandler.ServeHTTP(w, r)
+				notFoundResourceHandler.ServeHTTP(c, w, r)
 				return
 			}
 
@@ -455,9 +455,9 @@ func (hb *Host) handleOrPassRequest(
 	}
 
 	if newURL != nil {
-		permanentRedirect(w, r, newURL.String(), permanentRedirectCode)
+		permanentRedirect(c, w, r, newURL.String(), permanentRedirectCode)
 		return
 	}
 
-	hb.requestHandler.ServeHTTP(w, r)
+	hb.requestHandler.ServeHTTP(c, w, r)
 }
