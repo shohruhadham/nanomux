@@ -4,6 +4,7 @@
 package nanomux
 
 import (
+	"context"
 	"net/http"
 	"net/url"
 )
@@ -25,7 +26,7 @@ func createDummyResource(tmpl *Template) (*Resource, error) {
 	var rb = &Resource{}
 	rb.derived = rb
 	rb.tmpl = tmpl
-	rb.segmentHandler = http.HandlerFunc(rb.handleOrPassRequest)
+	rb.segmentHandler = HandlerFunc(rb.handleOrPassRequest)
 	return rb, nil
 }
 
@@ -91,7 +92,7 @@ func createResource(
 
 	r.derived = r
 	r.tmpl = tmpl
-	r.segmentHandler = http.HandlerFunc(r.handleOrPassRequest)
+	r.segmentHandler = HandlerFunc(r.handleOrPassRequest)
 	return r, nil
 }
 
@@ -158,7 +159,7 @@ func CreateDormantResourceUsingConfig(
 //
 // The Impl is, in a sense, the implementation of the resource. It is an
 // instance of a type with methods to handle HTTP requests. Methods must have
-// the signature of the http.HandlerFunc and must start with the "Handle"
+// the signature of the HandlerFunc and must start with the "Handle"
 // prefix. The remaining part of any such method's name is considered an HTTP
 // method. For example, HandleGet and HandleCustom are considered the handlers
 // of the GET and CUSTOM HTTP methods, respectively. If the value of the impl
@@ -213,7 +214,7 @@ func CreateResource(urlTmplStr string, impl Impl) (*Resource, error) {
 //
 // The Impl is, in a sense, the implementation of the resource. It is an
 // instance of a type with methods to handle HTTP requests. Methods must have
-// the signature of the http.HandlerFunc and must start with the "Handle"
+// the signature of the HandlerFunc and must start with the "Handle"
 // prefix. The remaining part of any such method's name is considered an HTTP
 // method. For example, HandleGet and HandleCustom are considered the handlers
 // of the GET and CUSTOM HTTP methods, respectively. If the value of the impl
@@ -334,7 +335,7 @@ func NewDormantResourceUsingConfig(urlTmplStr string, config Config) *Resource {
 //
 // The Impl is, in a sense, the implementation of the resource. It is an
 // instance of a type with methods to handle HTTP requests. Methods must have
-// the signature of the http.HandlerFunc and must start with the "Handle"
+// the signature of the HandlerFunc and must start with the "Handle"
 // prefix. The remaining part of any such method's name is considered an HTTP
 // method. For example, HandleGet and HandleCustom are considered the handlers
 // of the GET and CUSTOM HTTP methods, respectively. If the value of the impl
@@ -388,7 +389,7 @@ func NewResource(urlTmplStr string, impl Impl) *Resource {
 //
 // The Impl is, in a sense, the implementation of the resource. It is an
 // instance of a type with methods to handle HTTP requests. Methods must have
-// the signature of the http.HandlerFunc and must start with the "Handle"
+// the signature of the HandlerFunc and must start with the "Handle"
 // prefix. The remaining part of any such method's name is considered an HTTP
 // method. For example, HandleGet and HandleCustom are considered the handlers
 // of the GET and CUSTOM HTTP methods, respectively. If the value of the impl
@@ -497,9 +498,7 @@ func (rb *Resource) IsRoot() bool {
 // HTTP request handler when the resource's template matches the request's first
 // path segment.
 func (rb *Resource) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	var rd *_RoutingData
-	var err error
-	r, rd, err = requestWithRoutingData(r, rb.derived)
+	var c, rd, err = contextWithRoutingData(r.Context(), r.URL, rb.derived)
 	if err != nil {
 		http.Error(
 			w,
@@ -512,7 +511,7 @@ func (rb *Resource) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	var ps, _ = rd.nextPathSegment() // First call returns '/'.
 	if rb.tmpl.IsStatic() && rb.tmpl.Content() == ps {
-		rb.segmentHandler.ServeHTTP(w, r)
+		rb.segmentHandler.ServeHTTP(c, w, r)
 		return
 	}
 
@@ -530,24 +529,24 @@ func (rb *Resource) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if len(ps) > 0 {
 		if rb.tmpl.IsStatic() && rb.tmpl.Content() == ps {
-			rb.segmentHandler.ServeHTTP(w, r)
+			rb.segmentHandler.ServeHTTP(c, w, r)
 			return
 		}
 
 		if rb.tmpl.IsWildcard() {
 			_, rd.urlValues = rb.tmpl.Match(ps, nil)
-			rb.segmentHandler.ServeHTTP(w, r)
+			rb.segmentHandler.ServeHTTP(c, w, r)
 			return
 		}
 
 		if matched, values := rb.tmpl.Match(ps, nil); matched {
 			rd.urlValues = values
-			rb.segmentHandler.ServeHTTP(w, r)
+			rb.segmentHandler.ServeHTTP(c, w, r)
 			return
 		}
 	}
 
-	notFoundResourceHandler.ServeHTTP(w, r)
+	notFoundResourceHandler.ServeHTTP(c, w, r)
 }
 
 // handleOrPassRequest is the segment handler of the resource. It handles
@@ -568,10 +567,11 @@ func (rb *Resource) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // and the resource was configured as a subtree handler, the request is handled
 // by the resource itself, otherwise a "404 Not Found" status code is returned.
 func (rb *Resource) handleOrPassRequest(
+	c context.Context,
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
-	var rd = r.Context().Value(routingDataKey).(*_RoutingData)
+	var rd = c.Value(routingDataKey).(*_RoutingData)
 	if rb.IsSubtreeHandler() {
 		// If there is no resource in the hierarchy below that matches the
 		// request's path, this resource handles the request.
@@ -584,7 +584,7 @@ func (rb *Resource) handleOrPassRequest(
 	if !rd.reachedTheLastPathSegment() {
 		lastSegment = false
 
-		if rb.passRequestToChildResource(w, r, rd) {
+		if rb.passRequestToChildResource(c, w, r, rd) {
 			return
 		}
 
@@ -599,7 +599,7 @@ func (rb *Resource) handleOrPassRequest(
 		// If rb is a subtree handler that cannot handle a request, this
 		// prevents other subtree handlers above the hierarchy from handling
 		// the request.
-		notFoundResourceHandler.ServeHTTP(w, r)
+		notFoundResourceHandler.ServeHTTP(c, w, r)
 		rd.handled = true
 		return
 	}
@@ -607,7 +607,7 @@ func (rb *Resource) handleOrPassRequest(
 	var newURL *url.URL
 	if r.TLS == nil && rb.IsSecure() {
 		if !rb.RedirectsInsecureRequest() {
-			notFoundResourceHandler.ServeHTTP(w, r)
+			notFoundResourceHandler.ServeHTTP(c, w, r)
 			rd.handled = true
 			return
 		}
@@ -627,7 +627,7 @@ func (rb *Resource) handleOrPassRequest(
 	if lastSegment && !rb.IsLenientOnTrailingSlash() {
 		if rb.HasTrailingSlash() && !rd.pathHasTrailingSlash() {
 			if rb.IsStrictOnTrailingSlash() {
-				notFoundResourceHandler.ServeHTTP(w, r)
+				notFoundResourceHandler.ServeHTTP(c, w, r)
 				rd.handled = true
 				return
 			}
@@ -639,7 +639,7 @@ func (rb *Resource) handleOrPassRequest(
 			newURL.Path += "/"
 		} else if !rb.HasTrailingSlash() && rd.pathHasTrailingSlash() {
 			if rb.IsStrictOnTrailingSlash() {
-				notFoundResourceHandler.ServeHTTP(w, r)
+				notFoundResourceHandler.ServeHTTP(c, w, r)
 				rd.handled = true
 				return
 			}
@@ -653,12 +653,12 @@ func (rb *Resource) handleOrPassRequest(
 	}
 
 	if newURL != nil {
-		permanentRedirect(w, r, newURL.String(), permanentRedirectCode)
+		permanentRedirect(c, w, r, newURL.String(), permanentRedirectCode)
 		rd.handled = true
 		return
 	}
 
 	// At this point, the request may have been modified by subresources.
-	rb.requestHandler.ServeHTTP(w, r)
+	rb.requestHandler.ServeHTTP(c, w, r)
 	rd.handled = true
 }

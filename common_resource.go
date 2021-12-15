@@ -4,6 +4,7 @@
 package nanomux
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -338,9 +339,9 @@ type _Resource interface {
 	SetImplementation(impl Impl) error
 	Implementation() Impl
 
-	SetHandlerFor(methods string, handler http.Handler) error
-	SetHandlerFuncFor(methods string, handlerFunc http.HandlerFunc) error
-	HandlerOf(method string) http.Handler
+	SetHandlerFor(methods string, handler Handler) error
+	SetHandlerFuncFor(methods string, handlerFunc HandlerFunc) error
+	HandlerOf(method string) Handler
 
 	WrapSegmentHandler(mwfs ...MiddlewareFunc) error
 	WrapRequestHandler(mwfs ...MiddlewareFunc) error
@@ -354,9 +355,9 @@ type _Resource interface {
 	SetImplementationAt(path string, impl Impl) error
 	ImplementationAt(path string) (Impl, error)
 
-	SetPathHandlerFor(methods, path string, handler http.Handler) error
-	SetPathHandlerFuncFor(methods, path string, handler http.HandlerFunc) error
-	PathHandlerOf(method, path string) (http.Handler, error)
+	SetPathHandlerFor(methods, path string, handler Handler) error
+	SetPathHandlerFuncFor(methods, path string, handler HandlerFunc) error
+	PathHandlerOf(method, path string) (Handler, error)
 
 	WrapPathSegmentHandler(path string, mwfs ...MiddlewareFunc) error
 	WrapPathRequestHandler(path string, mwfs ...MiddlewareFunc) error
@@ -394,8 +395,8 @@ type _ResourceBase struct {
 	wildcardResource *Resource
 
 	*_RequestHandlerBase
-	segmentHandler http.Handler
-	requestHandler http.Handler
+	segmentHandler Handler
+	requestHandler Handler
 
 	cfs        _ConfigFlags
 	sharedData interface{}
@@ -1695,7 +1696,7 @@ func (rb *_ResourceBase) Implementation() Impl {
 // methods: "get", "PUT POST", "get, custom" or "!".
 func (rb *_ResourceBase) SetHandlerFor(
 	methods string,
-	handler http.Handler,
+	handler Handler,
 ) error {
 	if rb._RequestHandlerBase == nil {
 		var rhb = &_RequestHandlerBase{}
@@ -1732,7 +1733,7 @@ func (rb *_ResourceBase) SetHandlerFor(
 // methods: "get", "PUT POST", "get, custom" or "!".
 func (rb *_ResourceBase) SetHandlerFuncFor(
 	methods string,
-	handlerFunc http.HandlerFunc,
+	handlerFunc HandlerFunc,
 ) error {
 	var err = rb.SetHandlerFor(methods, handlerFunc)
 	if err != nil {
@@ -1748,7 +1749,7 @@ func (rb *_ResourceBase) SetHandlerFuncFor(
 // The argument method is an HTTP method. An exclamation mark "!" can be used
 // to get the handler of HTTP methods that are not allowed. Examples: "get",
 // "POST" or "!".
-func (rb *_ResourceBase) HandlerOf(method string) http.Handler {
+func (rb *_ResourceBase) HandlerOf(method string) Handler {
 	if rb._RequestHandlerBase == nil {
 		return nil
 	}
@@ -1942,7 +1943,7 @@ func (rb *_ResourceBase) ImplementationAt(path string) (Impl, error) {
 // methods: "get", "PUT POST", "get, custom" or "!".
 func (rb *_ResourceBase) SetPathHandlerFor(
 	methods, path string,
-	handler http.Handler,
+	handler Handler,
 ) error {
 	var r, err = rb.Resource(path)
 	if err != nil {
@@ -1972,7 +1973,7 @@ func (rb *_ResourceBase) SetPathHandlerFor(
 // methods: "get", "PUT POST", "get, custom" or "!".
 func (rb *_ResourceBase) SetPathHandlerFuncFor(
 	methods, path string,
-	handler http.HandlerFunc,
+	handler HandlerFunc,
 ) error {
 	var r, err = rb.Resource(path)
 	if err != nil {
@@ -1998,7 +1999,7 @@ func (rb *_ResourceBase) SetPathHandlerFuncFor(
 // to get the handler of HTTP methods that are not allowed. Examples: "get",
 // "POST" or "!".
 func (rb *_ResourceBase) PathHandlerOf(method, path string) (
-	http.Handler,
+	Handler,
 	error,
 ) {
 	var r, err = rb.RegisteredResource(path)
@@ -2223,7 +2224,7 @@ func (rb *_ResourceBase) _Resources() []_Resource {
 
 func (rb *_ResourceBase) setRequestHandlerBase(rhb *_RequestHandlerBase) {
 	rb._RequestHandlerBase = rhb
-	rb.requestHandler = http.HandlerFunc(rhb.handleRequest)
+	rb.requestHandler = HandlerFunc(rhb.handleRequest)
 }
 
 func (rb *_ResourceBase) requestHandlerBase() *_RequestHandlerBase {
@@ -2235,6 +2236,7 @@ func (rb *_ResourceBase) requestHandlerBase() *_RequestHandlerBase {
 // passRequestToChildResource passes the request that was made to a resource
 // below in the hierarchy.
 func (rb *_ResourceBase) passRequestToChildResource(
+	c context.Context,
 	w http.ResponseWriter,
 	r *http.Request,
 	rd *_RoutingData,
@@ -2257,7 +2259,7 @@ func (rb *_ResourceBase) passRequestToChildResource(
 	if len(ps) > 0 {
 		if sr, found := rb.staticResources[ps]; found {
 			rd._r = sr.derived
-			sr.segmentHandler.ServeHTTP(w, r)
+			sr.segmentHandler.ServeHTTP(c, w, r)
 			return rd.handled
 		}
 
@@ -2266,7 +2268,7 @@ func (rb *_ResourceBase) passRequestToChildResource(
 			matches, rd.urlValues = pr.Template().Match(ps, rd.urlValues)
 			if matches {
 				rd._r = pr.derived
-				pr.segmentHandler.ServeHTTP(w, r)
+				pr.segmentHandler.ServeHTTP(c, w, r)
 				return rd.handled
 			}
 		}
@@ -2278,7 +2280,7 @@ func (rb *_ResourceBase) passRequestToChildResource(
 			)
 
 			rd._r = rb.wildcardResource.derived
-			rb.wildcardResource.segmentHandler.ServeHTTP(w, r)
+			rb.wildcardResource.segmentHandler.ServeHTTP(c, w, r)
 			return rd.handled
 		}
 	}
@@ -2287,7 +2289,7 @@ func (rb *_ResourceBase) passRequestToChildResource(
 		return false
 	}
 
-	notFoundResourceHandler.ServeHTTP(w, r)
+	notFoundResourceHandler.ServeHTTP(c, w, r)
 	rd.handled = true
 	return true
 }

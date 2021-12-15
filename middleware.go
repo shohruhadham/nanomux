@@ -6,7 +6,6 @@ package nanomux
 import (
 	"errors"
 	"fmt"
-	"net/http"
 )
 
 // --------------------------------------------------
@@ -16,7 +15,7 @@ var ErrConflictingMethod = fmt.Errorf("conflicting method")
 
 // --------------------------------------------------
 
-type MiddlewareFunc func(next http.Handler) http.Handler
+type MiddlewareFunc func(next Handler) Handler
 
 // --------------------------------------------------
 

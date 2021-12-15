@@ -4,6 +4,7 @@
 package nanomux
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -12,8 +13,11 @@ import (
 )
 
 func setHandlers(t *testing.T, h *Host) {
-	if err := h.SetHandlerFor("get post custom", http.HandlerFunc(
-		func(w http.ResponseWriter, r *http.Request) {
+	if err := h.SetHandlerFor("get post custom", HandlerFunc(
+		func(
+			c context.Context,
+			w http.ResponseWriter, r *http.Request,
+		) {
 			var hValues, ok = r.Context().Value(URLValuesKey).(URLValues)
 			if ok && hValues != nil {
 				var gotValue bool
@@ -756,16 +760,20 @@ func TestHostBase_ServeHTTP(t *testing.T) {
 		})
 	}
 
-	var customMethodMw = func(next http.Handler) http.Handler {
-		return http.HandlerFunc(
-			func(w http.ResponseWriter, r *http.Request) {
+	var customMethodMw = func(next Handler) Handler {
+		return HandlerFunc(
+			func(
+				c context.Context,
+				w http.ResponseWriter,
+				r *http.Request,
+			) {
 				var strb strings.Builder
 				strb.WriteString("middleware ")
 				strb.WriteString(r.Method)
 				strb.WriteByte(' ')
 				strb.WriteString(r.URL.String())
 
-				var extra, ok = r.Context().Value(RemainingPathKey).(string)
+				var extra, ok = c.Value(RemainingPathKey).(string)
 				if ok && extra != "" {
 					strb.WriteByte(' ')
 					strb.WriteString(extra)
@@ -776,16 +784,20 @@ func TestHostBase_ServeHTTP(t *testing.T) {
 		)
 	}
 
-	var notAlloweddMethodsMw = func(next http.Handler) http.Handler {
-		return http.HandlerFunc(
-			func(w http.ResponseWriter, r *http.Request) {
+	var notAlloweddMethodsMw = func(next Handler) Handler {
+		return HandlerFunc(
+			func(
+				c context.Context,
+				w http.ResponseWriter,
+				r *http.Request,
+			) {
 				var strb strings.Builder
 				strb.WriteString("middleware of the not allowed ")
 				strb.WriteString(r.Method)
 				strb.WriteByte(' ')
 				strb.WriteString(r.URL.String())
 
-				var extra, ok = r.Context().Value(RemainingPathKey).(string)
+				var extra, ok = c.Value(RemainingPathKey).(string)
 				if ok && extra != "" {
 					strb.WriteByte(' ')
 					strb.WriteString(extra)
