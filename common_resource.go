@@ -654,7 +654,7 @@ func (rb *_ResourceBase) HandlesThePathAsIs() bool {
 // canHandleRequest returns true if the resource has any HTTP method handler.
 func (rb *_ResourceBase) canHandleRequest() bool {
 	return rb._RequestHandlerBase != nil &&
-		len(rb._RequestHandlerBase.handlers) > 0
+		len(rb._RequestHandlerBase.mhPairs) > 0
 }
 
 // -------------------------
