@@ -5,7 +5,6 @@ package nanomux
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -21,8 +20,8 @@ func setHandlers(t *testing.T, h *Host) {
 			var hValues, ok = r.Context().Value(URLValuesKey).(URLValues)
 			if ok && hValues != nil {
 				var gotValue bool
-				for _, value := range hValues {
-					if value == "sub" {
+				for _, pair := range hValues {
+					if pair.value == "sub" {
 						gotValue = true
 					} else {
 						gotValue = false
@@ -750,7 +749,7 @@ func TestHostBase_ServeHTTP(t *testing.T) {
 	// hs9	-secure, -redirect insecure request, -drop request on unmatched tslash
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			fmt.Println(c.name)
+			// fmt.Println(c.name)
 			var w = httptest.NewRecorder()
 			var r = httptest.NewRequest(c.reqMethod, c.reqURLStr, nil)
 			c._resource.ServeHTTP(w, r)
@@ -883,7 +882,7 @@ func TestHostBase_ServeHTTP(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			fmt.Println(c.name)
+			// fmt.Println(c.name)
 			var w = httptest.NewRecorder()
 			var r = httptest.NewRequest(c.reqMethod, c.reqURLStr, nil)
 			c._resource.ServeHTTP(w, r)
@@ -903,7 +902,7 @@ func TestHostBase_ServeHTTP(t *testing.T) {
 	}
 
 	t.Run(c.name, func(t *testing.T) {
-		fmt.Println(c.name)
+		// fmt.Println(c.name)
 		var w = httptest.NewRecorder()
 
 		// When method is CONNECT httptest.NewRequest() is using URL's scheme

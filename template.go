@@ -75,6 +75,8 @@ var ErrRepeatedWildcardName = fmt.Errorf("repeated wild card name")
 // in the template.
 var ErrAnotherWildcardName = fmt.Errorf("another wild card name")
 
+// --------------------------------------------------
+
 type _ValuePattern struct {
 	name string
 	re   *regexp.Regexp
@@ -83,6 +85,44 @@ type _ValuePattern struct {
 type _TemplateSlice struct {
 	staticStr    string         // Static slice of the template.
 	valuePattern *_ValuePattern // Name-pattern slice of the template.
+}
+
+type _StringPair struct{ key, value string }
+
+// TemplateValues is a slice of key-value pairs (for 3-4 values, a slice is
+// lighter than a map).
+type TemplateValues []_StringPair
+
+func NewTemplateValues() TemplateValues {
+	return TemplateValues{}
+}
+
+// Set sets the value for the key. If the key doesn't exist, it's added to the
+// slice.
+func (tmplVs *TemplateValues) Set(key, value string) {
+	var notFound = true
+	for i, l := 0, len(*tmplVs); i < l; i++ {
+		if (*tmplVs)[i].key == key {
+			(*tmplVs)[i].value = value
+			notFound = false
+		}
+	}
+
+	if notFound {
+		*tmplVs = append(*tmplVs, _StringPair{key, value})
+	}
+}
+
+// Get returns the value and true, if the key exists, or an empty string and
+// false.
+func (tmplVs TemplateValues) Get(key string) (string, bool) {
+	for i := len(tmplVs) - 1; i >= 0; i-- {
+		if tmplVs[i].key == key {
+			return tmplVs[i].value, true
+		}
+	}
+
+	return "", false
 }
 
 // --------------------------------------------------
@@ -345,8 +385,8 @@ func (t *Template) SimilarityWith(anotherT *Template) Similarity {
 // and returned.
 func (t *Template) Match(
 	str string,
-	values map[string]string,
-) (bool, map[string]string) {
+	values TemplateValues,
+) (bool, TemplateValues) {
 	// The following if statement was added for the sake of completeness, but
 	// commented out because it's not needed here. The resources with static
 	// templates don't need the Match method.
@@ -370,10 +410,9 @@ func (t *Template) Match(
 	}
 
 	for i := 0; i < k; i++ {
-		var sstr = t.slices[i].staticStr
-		if sstr != "" {
-			if strings.HasPrefix(str, sstr) {
-				str = str[len(sstr):]
+		if t.slices[i].staticStr != "" {
+			if strings.HasPrefix(str, t.slices[i].staticStr) {
+				str = str[len(t.slices[i].staticStr):]
 			} else {
 				return false, values
 			}
@@ -382,16 +421,16 @@ func (t *Template) Match(
 			var idxs = vp.re.FindStringIndex(str)
 			if idxs != nil {
 				var v = str[:idxs[1]]
-				if vf, found := values[vp.name]; found {
+				if vf, found := values.Get(vp.name); found {
 					if v != vf {
 						return false, values
 					}
 				} else {
 					if values == nil {
-						values = make(map[string]string)
+						values = make(TemplateValues, 0, 5)
 					}
 
-					values[vp.name] = v
+					values = append(values, _StringPair{vp.name, v})
 				}
 
 				str = str[idxs[1]:]
@@ -402,10 +441,9 @@ func (t *Template) Match(
 	}
 
 	for i := ltslices - 1; i > k; i-- {
-		var sstr = t.slices[i].staticStr
-		if sstr != "" {
-			if strings.HasSuffix(str, sstr) {
-				str = str[:len(str)-len(sstr)]
+		if t.slices[i].staticStr != "" {
+			if strings.HasSuffix(str, t.slices[i].staticStr) {
+				str = str[:len(str)-len(t.slices[i].staticStr)]
 			} else {
 				return false, values
 			}
@@ -414,16 +452,16 @@ func (t *Template) Match(
 			var idxs = vp.re.FindAllStringIndex(str, -1)
 			if len(idxs) == 1 {
 				var v = str[idxs[0][0]:]
-				if vf, found := values[vp.name]; found {
+				if vf, found := values.Get(vp.name); found {
 					if v != vf {
 						return false, values
 					}
 				} else {
 					if values == nil {
-						values = make(map[string]string)
+						values = make(TemplateValues, 0, 5)
 					}
 
-					values[vp.name] = v
+					values = append(values, _StringPair{vp.name, v})
 				}
 
 				str = str[:idxs[0][0]]
@@ -435,10 +473,13 @@ func (t *Template) Match(
 
 	if t.wildCardIdx >= 0 && len(str) > 0 {
 		if values == nil {
-			values = make(map[string]string)
+			values = make(TemplateValues, 0, 5)
 		}
 
-		values[t.slices[t.wildCardIdx].valuePattern.name] = str
+		values = append(
+			values,
+			_StringPair{t.slices[t.wildCardIdx].valuePattern.name, str},
+		)
 	}
 
 	return true, values
@@ -447,7 +488,7 @@ func (t *Template) Match(
 // Apply puts the values in the place of patterns if they match.
 // When ignoreMissing is true, Apply ignores the missing values for the
 // patterns instead of returning an error.
-func (t *Template) Apply(values map[string]string, ignoreMissing bool) (
+func (t *Template) Apply(values TemplateValues, ignoreMissing bool) (
 	string,
 	error,
 ) {
@@ -461,7 +502,7 @@ func (t *Template) Apply(values map[string]string, ignoreMissing bool) (
 			continue
 		}
 
-		if v, found := values[slc.valuePattern.name]; found {
+		if v, found := values.Get(slc.valuePattern.name); found {
 			if slc.valuePattern.re != nil {
 				var idxs = slc.valuePattern.re.FindStringIndex(v)
 				if idxs == nil || (idxs[0] != 0 && idxs[1] != len(v)) {

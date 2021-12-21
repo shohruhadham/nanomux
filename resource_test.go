@@ -5,7 +5,6 @@ package nanomux
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -112,7 +111,7 @@ func TestResourceBase_URL(t *testing.T) {
 		{
 			"host",
 			h,
-			URLValues{"info": "forecast"},
+			URLValues{{"info", "forecast"}},
 			&url.URL{
 				Scheme: "https",
 				Host:   "forecast.example.com",
@@ -123,8 +122,8 @@ func TestResourceBase_URL(t *testing.T) {
 			"host resource",
 			r1,
 			URLValues{
-				"info":    "forecast",
-				"country": "Norway",
+				{"info", "forecast"},
+				{"country", "Norway"},
 			},
 			&url.URL{
 				Scheme: "http",
@@ -137,9 +136,9 @@ func TestResourceBase_URL(t *testing.T) {
 			"host resource resource",
 			r2,
 			URLValues{
-				"info":    "forecast",
-				"country": "Norway",
-				"city":    "Oslo",
+				{"info", "forecast"},
+				{"country", "Norway"},
+				{"city", "Oslo"},
 			},
 			&url.URL{
 				Scheme: "http",
@@ -151,7 +150,7 @@ func TestResourceBase_URL(t *testing.T) {
 		{
 			"resource",
 			r3,
-			URLValues{"info": "statistics"},
+			URLValues{{"info", "statistics"}},
 			&url.URL{
 				Scheme: "http",
 				Path:   "/statistics",
@@ -161,7 +160,7 @@ func TestResourceBase_URL(t *testing.T) {
 		{
 			"resource resource",
 			r4,
-			URLValues{"info": "statistics"},
+			URLValues{{"info", "statistics"}},
 			&url.URL{
 				Scheme: "http",
 				Path:   "/statistics/population",
@@ -172,8 +171,8 @@ func TestResourceBase_URL(t *testing.T) {
 			"resource resource resource",
 			r5,
 			URLValues{
-				"info":    "statistics",
-				"country": "Norway",
+				{"info", "statistics"},
+				{"country", "Norway"},
 			},
 			&url.URL{
 				Scheme: "https",
@@ -2640,7 +2639,7 @@ func TestResourceBase_SetImplementation(t *testing.T) {
 		t.Fatalf("ResourceBase.SetImplementation() err = %v, want nil", err)
 	}
 
-	if n := len(r._RequestHandlerBase.handlers); n != nHandlers {
+	if n := len(r._RequestHandlerBase.mhPairs); n != nHandlers {
 		t.Fatalf(
 			"ResourceBase.SetImplementation() len(handlers) = %d, want %d",
 			n,
@@ -2703,7 +2702,7 @@ func TestResourceBase_SetHandlerFor(t *testing.T) {
 	}
 
 	// Count of handlers with default options handler.
-	if count := len(r.handlers); count != 4 {
+	if count := len(r.mhPairs); count != 4 {
 		t.Fatalf(
 			"ResourceBase.SetHandlerFor(): count of handlers = %d, want %d",
 			count,
@@ -2711,19 +2710,19 @@ func TestResourceBase_SetHandlerFor(t *testing.T) {
 		)
 	}
 
-	if r.handlers["GET"] == nil {
+	if _, h := r.mhPairs.get("GET"); h == nil {
 		t.Fatalf(
 			"ResourceBase.SetHandlerFor() failed to set handler for GET",
 		)
 	}
 
-	if r.handlers["POST"] == nil {
+	if _, h := r.mhPairs.get("POST"); h == nil {
 		t.Fatalf(
 			"ResourceBase.SetHandlerFor() failed to set handler for POST",
 		)
 	}
 
-	if r.handlers["CUSTOM"] == nil {
+	if _, h := r.mhPairs.get("CUSTOM"); h == nil {
 		t.Fatalf(
 			"ResourceBase.SetHandlerFor() failed to set handler for CUSTOM",
 		)
@@ -2775,7 +2774,7 @@ func TestResourceBase_SetHandlerFuncFor(t *testing.T) {
 	}
 
 	// Count of handlers with default options handler.
-	if count := len(r.handlers); count != 4 {
+	if count := len(r.mhPairs); count != 4 {
 		t.Fatalf(
 			"ResourceBase.SetHandlerFuncFor(): count of handlers = %d, want %d",
 			count,
@@ -2783,19 +2782,19 @@ func TestResourceBase_SetHandlerFuncFor(t *testing.T) {
 		)
 	}
 
-	if r.handlers["GET"] == nil {
+	if _, h := r.mhPairs.get("GET"); h == nil {
 		t.Fatalf(
 			"ResourceBase.SetHandlerFuncFor() failed to set handler for GET",
 		)
 	}
 
-	if r.handlers["POST"] == nil {
+	if _, h := r.mhPairs.get("POST"); h == nil {
 		t.Fatalf(
 			"ResourceBase.SetHandlerFuncFor() failed to set handler for POST",
 		)
 	}
 
-	if r.handlers["CUSTOM"] == nil {
+	if _, h := r.mhPairs.get("CUSTOM"); h == nil {
 		t.Fatalf(
 			"ResourceBase.SetHandlerFuncFor() failed to set handler for CUSTOM",
 		)
@@ -4535,8 +4534,8 @@ func addRequestHandlerSubresources(t *testing.T, r _Resource, i, limit int) {
 			var urlValues, ok = c.Value(URLValuesKey).(URLValues)
 			if ok && urlValues != nil {
 				var gotValue bool
-				for _, v := range urlValues {
-					if v == "1" {
+				for _, pair := range urlValues {
+					if pair.value == "1" {
 						gotValue = true
 						break
 					}
@@ -7407,7 +7406,7 @@ func TestResourceBase_ServeHTTP(t *testing.T) {
 	//      -drop request on unmatched tslash
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			fmt.Println(c.name)
+			// fmt.Println(c.name)
 			var w = httptest.NewRecorder()
 			var r = httptest.NewRequest(c.reqMethod, c.reqURLStr, nil)
 			resource.ServeHTTP(w, r)
@@ -7545,7 +7544,7 @@ func TestResourceBase_ServeHTTP(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			fmt.Println(c.name)
+			// fmt.Println(c.name)
 			var w = httptest.NewRecorder()
 			var r = httptest.NewRequest(c.reqMethod, c.reqURLStr, nil)
 			c._resource.ServeHTTP(w, r)
@@ -7565,7 +7564,7 @@ func TestResourceBase_ServeHTTP(t *testing.T) {
 	}
 
 	t.Run(c.name, func(t *testing.T) {
-		fmt.Println(c.name)
+		// fmt.Println(c.name)
 		var w = httptest.NewRecorder()
 
 		// When method is CONNECT httptest.NewRequest() is using URL's scheme

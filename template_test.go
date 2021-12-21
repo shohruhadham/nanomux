@@ -391,7 +391,7 @@ func TestTemplate_Match(t *testing.T) {
 		name            string
 		tmpl            *Template
 		matchingStr     string
-		wantValues      map[string]string
+		wantValues      TemplateValues
 		nonMatchingStrs []string
 	}{
 		{
@@ -405,28 +405,28 @@ func TestTemplate_Match(t *testing.T) {
 			"wildcard",
 			Parse("{river}"),
 			"Sir-Daryo",
-			map[string]string{"river": "Sir-Daryo"},
+			TemplateValues{{"river", "Sir-Daryo"}},
 			nil,
 		},
 		{
 			"pattern",
 			Parse("{id:\\d{3}}"),
 			"123",
-			map[string]string{"id": "123"},
+			TemplateValues{{"id", "123"}},
 			[]string{"abc", "12", "12345"},
 		},
 		{
 			"pattern pattern",
 			Parse("{name:[A-Za-z]+}{id:\\d+}"),
 			"abc123",
-			map[string]string{"name": "abc", "id": "123"},
+			TemplateValues{{"name", "abc"}, {"id", "123"}},
 			[]string{"abc", "12", "1234", " 123", "123 ", " 123 ", "123ab"},
 		},
 		{
 			"static pattern static pattern",
 			Parse("name: {name:[A-Za-z]{3}}, id: {id:\\d{3}}"),
 			"name: abc, id: 123",
-			map[string]string{"name": "abc", "id": "123"},
+			TemplateValues{{"name", "abc"}, {"id", "123"}},
 			[]string{
 				"name: abc", "id: 123", "name: abc, id: 12", "name: 123, id: abc", "id: 123, name: abc",
 			},
@@ -435,7 +435,7 @@ func TestTemplate_Match(t *testing.T) {
 			"static pattern static wildcard",
 			Parse("name: {name:[A-Za-z]{3}}, address: {address}"),
 			"name: abc, address: Kepler-452b",
-			map[string]string{"name": "abc", "address": "Kepler-452b"},
+			TemplateValues{{"name", "abc"}, {"address", "Kepler-452b"}},
 			[]string{
 				"name: abc", "address: Mars", "address: Ocean, name: abc",
 			},
@@ -446,10 +446,10 @@ func TestTemplate_Match(t *testing.T) {
 				"id: {id:\\d{3}}, address: {address}, state: {state:(unknown|active|dormant)}",
 			),
 			"id: 123, address: Proxima b, state: active",
-			map[string]string{
-				"id":      "123",
-				"address": "Proxima b",
-				"state":   "active",
+			TemplateValues{
+				{"id", "123"},
+				{"address", "Proxima b"},
+				{"state", "active"},
 			},
 			[]string{
 				"id: 321, address: Moon, state: unclear", "address: Mars", "id: 12, address: Ocean, state: dormant",
@@ -459,7 +459,7 @@ func TestTemplate_Match(t *testing.T) {
 			"wildcard static pattern",
 			Parse("{galaxy}, {color:(red|blue|white)}"),
 			"Eye of Sauron, red",
-			map[string]string{"galaxy": "Eye of Sauron", "color": "red"},
+			TemplateValues{{"galaxy", "Eye of Sauron"}, {"color", "red"}},
 			[]string{
 				"Medusa Merger, yellow", "Malin 1", "white",
 			},
@@ -473,12 +473,15 @@ func TestTemplate_Match(t *testing.T) {
 				t.Fatalf("Template.Match() matched = false, want true")
 			}
 
-			if !reflect.DeepEqual(values, c.wantValues) {
-				t.Fatalf(
-					"Template.Match() values = %v, want %v",
-					values,
-					c.wantValues,
-				)
+			for _, wantPair := range c.wantValues {
+				var v, found = values.Get(wantPair.key)
+				if !found || v != wantPair.value {
+					t.Fatalf(
+						"Template.Match() values = %v, want %v",
+						values,
+						c.wantValues,
+					)
+				}
 			}
 
 			for _, str := range c.nonMatchingStrs {
@@ -495,7 +498,7 @@ func TestTemplate_Apply(t *testing.T) {
 	var cases = []struct {
 		name          string
 		tmpl          *Template
-		values        map[string]string
+		values        TemplateValues
 		ignoreMissing bool
 		resultStr     string
 		wantErr       bool
@@ -503,7 +506,7 @@ func TestTemplate_Apply(t *testing.T) {
 		{
 			"static",
 			&Template{slices: []_TemplateSlice{{staticStr: "green-energy"}}},
-			map[string]string{"key": "value"},
+			TemplateValues{{"key", "value"}},
 			false,
 			"green-energy",
 			false,
@@ -513,7 +516,7 @@ func TestTemplate_Apply(t *testing.T) {
 			&Template{slices: []_TemplateSlice{
 				{valuePattern: &_ValuePattern{name: "river"}},
 			}},
-			map[string]string{"river": "Sir-Daryo"},
+			TemplateValues{{"river", "Sir-Daryo"}},
 			false,
 			"Sir-Daryo",
 			false,
@@ -526,7 +529,7 @@ func TestTemplate_Apply(t *testing.T) {
 					re:   regexp.MustCompile(`\d{3}`),
 				}},
 			}},
-			map[string]string{"id": "123"},
+			TemplateValues{{"id", "123"}},
 			false,
 			"123",
 			false,
@@ -543,7 +546,7 @@ func TestTemplate_Apply(t *testing.T) {
 					re:   regexp.MustCompile(`\d{3}`),
 				}},
 			}},
-			map[string]string{"name": "abc", "id": "123"},
+			TemplateValues{{"name", "abc"}, {"id", "123"}},
 			false,
 			"abc123",
 			false,
@@ -562,7 +565,7 @@ func TestTemplate_Apply(t *testing.T) {
 					re:   regexp.MustCompile(`\d{3}`),
 				}},
 			}},
-			map[string]string{"name": "abc", "id": "123"},
+			TemplateValues{{"name", "abc"}, {"id", "123"}},
 			false,
 			"name: abc, id: 123",
 			false,
@@ -580,7 +583,7 @@ func TestTemplate_Apply(t *testing.T) {
 					name: "address",
 				}},
 			}},
-			map[string]string{"name": "abc", "address": "Kepler-62e"},
+			TemplateValues{{"name", "abc"}, {"address", "Kepler-62e"}},
 			false,
 			"name: abc, address: Kepler-62e",
 			false,
@@ -603,10 +606,10 @@ func TestTemplate_Apply(t *testing.T) {
 					re:   regexp.MustCompile(`(unknown|active|dormant)`),
 				}},
 			}},
-			map[string]string{
-				"id":      "123",
-				"address": "unknown",
-				"state":   "unknown",
+			TemplateValues{
+				{"id", "123"},
+				{"address", "unknown"},
+				{"state", "unknown"},
 			},
 			false,
 			"id: 123, address: unknown, state: unknown",
@@ -624,7 +627,7 @@ func TestTemplate_Apply(t *testing.T) {
 					re:   regexp.MustCompile(`(red|blue|white)`),
 				}},
 			}},
-			map[string]string{"galaxy": "Eye of Sauron", "color": "red"},
+			TemplateValues{{"galaxy", "Eye of Sauron"}, {"color", "red"}},
 			false,
 			"Eye of Sauron, red",
 			false,
@@ -647,9 +650,7 @@ func TestTemplate_Apply(t *testing.T) {
 					re:   regexp.MustCompile(`(unknown|active|dormant)`),
 				}},
 			}},
-			map[string]string{
-				"id": "123",
-			},
+			TemplateValues{{"id", "123"}},
 			true,
 			"id: 123, address: , state: ",
 			false,
@@ -672,9 +673,7 @@ func TestTemplate_Apply(t *testing.T) {
 					re:   regexp.MustCompile(`(unknown|active|dormant)`),
 				}},
 			}},
-			map[string]string{
-				"id": "123",
-			},
+			TemplateValues{{"id", "123"}},
 			false,
 			"",
 			true,

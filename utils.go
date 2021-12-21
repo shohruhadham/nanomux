@@ -367,7 +367,7 @@ loop:
 // --------------------------------------------------
 
 // type URLValues map[string]string
-type URLValues = map[string]string
+type URLValues = TemplateValues
 
 // --------------------------------------------------
 

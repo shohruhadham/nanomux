@@ -57,12 +57,117 @@ type Impl interface{}
 
 // --------------------------------------------------
 
+type _MethodHandlerPair struct {
+	method  string
+	handler Handler
+}
+
+type _MethodHandlerPairs []_MethodHandlerPair
+
+func (mhps _MethodHandlerPairs) quickSort(l, h int) {
+	if l < h {
+		var p = mhps[l+(h-l)/2].method
+		var i, j = l, h
+		for {
+			for mhps[i].method < p {
+				i++
+			}
+
+			for mhps[j].method > p {
+				j--
+			}
+
+			if i >= j {
+				break
+			}
+
+			mhps[i], mhps[j] = mhps[j], mhps[i]
+		}
+
+		mhps.quickSort(l, j)
+		mhps.quickSort(j+1, h)
+	}
+}
+
+func (mhps _MethodHandlerPairs) sort() {
+	mhps.quickSort(0, len(mhps)-1)
+}
+
+// get returns the index and the handler of the method, if the method exists,
+// or -1 and nil otherwise.
+func (mhps _MethodHandlerPairs) get(method string) (int, Handler) {
+	var hi = len(mhps)
+	if hi < 15 {
+		for i := 0; i < hi; i++ {
+			if method == mhps[i].method {
+				return i, mhps[i].handler
+			}
+		}
+
+		return -1, nil
+	}
+
+	var lo, c, m, d, lmMethod int
+	var lmethod = len(method)
+
+	for {
+		c = hi - lo
+		m = lo + c/2
+		lmMethod = len(mhps[m].method)
+
+		if lmethod < lmMethod {
+			lmMethod = lmethod
+		}
+
+		for i := 0; i < lmMethod; i++ {
+			d = int(method[i]) - int(mhps[m].method[i])
+			if d != 0 {
+				break
+			}
+		}
+
+		if d == 0 {
+			d = lmethod - lmMethod
+
+			if d == 0 {
+				return m, mhps[m].handler
+			}
+		}
+
+		if c == 1 {
+			return -1, nil
+		}
+
+		if d < 0 {
+			hi = m
+		} else {
+			lo = m + 1
+		}
+	}
+}
+
+// set sets the handlet for the method. If the method doesn't exist, it's added
+// to the slice.
+func (mhps *_MethodHandlerPairs) set(method string, handler Handler) {
+	var i, _ = mhps.get(method)
+	if i < 0 {
+		*mhps = append(*mhps, _MethodHandlerPair{method, handler})
+		mhps.sort()
+
+		return
+	}
+
+	(*mhps)[i].handler = handler
+}
+
+// --------------------------------------------------
+
 // _RequestHandlerBase is intended to be embedded into the _ResourceBase
 // struct. It keeps the HTTP method handlers of the host or resource and
 // provides them with the functionality to manage them. It also handles the
 // HTTP request by calling the responsible handler of the request's HTTP method.
 type _RequestHandlerBase struct {
-	handlers                     map[string]Handler
+	mhPairs                      _MethodHandlerPairs
 	notAllowedHTTPMethodsHandler Handler
 }
 
@@ -87,7 +192,7 @@ func detectHTTPMethodHandlersOf(impl Impl) (
 		}
 	}
 
-	var handlers = make(map[string]Handler)
+	var handlers = _MethodHandlerPairs{}
 	var notAllowedMethodsHandler HandlerFunc
 
 	// reflect.Value allows us to compare method signatures directly instead of
@@ -122,7 +227,7 @@ func detectHTTPMethodHandlersOf(impl Impl) (
 		if hm == "NOTALLOWEDMETHOD" {
 			notAllowedMethodsHandler = HandlerFunc(hf)
 		} else {
-			handlers[hm] = HandlerFunc(hf)
+			handlers.set(hm, HandlerFunc(hf))
 		}
 	}
 
@@ -133,14 +238,15 @@ func detectHTTPMethodHandlersOf(impl Impl) (
 
 	var rhb = &_RequestHandlerBase{handlers, notAllowedMethodsHandler}
 	if lhandlers > 0 {
-		var hf = rhb.handlers[http.MethodOptions]
+		var _, hf = rhb.mhPairs.get(http.MethodOptions)
 		if hf == nil {
-			rhb.handlers[http.MethodOptions] = HandlerFunc(
-				rhb.handleOptionsHTTPMethod,
+			rhb.mhPairs.set(
+				http.MethodOptions,
+				HandlerFunc(rhb.handleOptionsHTTPMethod),
 			)
 		}
 	} else {
-		rhb.handlers = nil
+		rhb.mhPairs = nil
 	}
 
 	return rhb, nil
@@ -169,7 +275,7 @@ func (rhb *_RequestHandlerBase) setHandlerFor(
 	}
 
 	if lms == 1 && ms[0] == "!" {
-		if len(rhb.handlers) == 0 {
+		if len(rhb.mhPairs) == 0 {
 			return newError("%w", ErrNoHandlerExists)
 		}
 
@@ -177,18 +283,19 @@ func (rhb *_RequestHandlerBase) setHandlerFor(
 		return nil
 	}
 
-	if rhb.handlers == nil {
-		rhb.handlers = make(map[string]Handler)
+	if rhb.mhPairs == nil {
+		rhb.mhPairs = _MethodHandlerPairs{}
 	}
 
 	for _, m := range ms {
-		rhb.handlers[m] = h
+		rhb.mhPairs.set(m, h)
 	}
 
-	h = rhb.handlers[http.MethodOptions]
+	_, h = rhb.mhPairs.get(http.MethodOptions)
 	if h == nil {
-		rhb.handlers[http.MethodOptions] = HandlerFunc(
-			rhb.handleOptionsHTTPMethod,
+		rhb.mhPairs.set(
+			http.MethodOptions,
+			HandlerFunc(rhb.handleOptionsHTTPMethod),
 		)
 	}
 
@@ -210,8 +317,9 @@ func (rhb *_RequestHandlerBase) handlerOf(method string) Handler {
 		return HandlerFunc(rhb.handleNotAllowedHTTPMethods)
 	}
 
-	if rhb.handlers != nil {
-		return rhb.handlers[ms[0]]
+	if rhb.mhPairs != nil {
+		var _, h = rhb.mhPairs.get(ms[0])
+		return h
 	}
 
 	return nil
@@ -225,7 +333,7 @@ func (rhb *_RequestHandlerBase) wrapHandlerOf(
 		return newError("%w", ErrNoMiddleware)
 	}
 
-	if len(rhb.handlers) == 0 {
+	if len(rhb.mhPairs) == 0 {
 		return newError("%w", ErrNoHandlerExists)
 	}
 
@@ -250,14 +358,14 @@ func (rhb *_RequestHandlerBase) wrapHandlerOf(
 
 			return nil
 		} else if ms[0] == "*" {
-			for m, h := range rhb.handlers {
+			for _, mhp := range rhb.mhPairs {
 				for i, mwf := range mwfs {
 					if mwf == nil {
 						return newError("%w at index %d", ErrNoMiddleware, i)
 					}
 
-					h = mwf(h)
-					rhb.handlers[m] = h
+					mhp.handler = mwf(mhp.handler)
+					rhb.mhPairs.set(mhp.method, mhp.handler)
 				}
 			}
 
@@ -266,14 +374,14 @@ func (rhb *_RequestHandlerBase) wrapHandlerOf(
 	}
 
 	for _, m := range ms {
-		if h := rhb.handlers[m]; h != nil {
+		if _, h := rhb.mhPairs.get(m); h != nil {
 			for i, mwf := range mwfs {
 				if mwf == nil {
 					return newError("%w at index %d", ErrNoMiddleware, i)
 				}
 
 				h = mwf(h)
-				rhb.handlers[m] = h
+				rhb.mhPairs.set(m, h)
 			}
 		} else {
 			return newError("%w for the method %q", ErrNoHandlerExists, m)
@@ -290,12 +398,12 @@ func (rhb *_RequestHandlerBase) handleRequest(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
-	if rhb == nil || len(rhb.handlers) == 0 {
+	if rhb == nil || len(rhb.mhPairs) == 0 {
 		notFoundResourceHandler.ServeHTTP(c, w, r)
 		return
 	}
 
-	if handler := rhb.handlers[r.Method]; handler != nil {
+	if _, handler := rhb.mhPairs.get(r.Method); handler != nil {
 		handler.ServeHTTP(c, w, r)
 		return
 	}
@@ -313,8 +421,8 @@ func (rhb *_RequestHandlerBase) handleOptionsHTTPMethod(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
-	for m := range rhb.handlers {
-		w.Header().Add("Allow", m)
+	for _, mhp := range rhb.mhPairs {
+		w.Header().Add("Allow", mhp.method)
 	}
 
 	w.WriteHeader(http.StatusNoContent)
@@ -325,8 +433,8 @@ func (rhb *_RequestHandlerBase) handleNotAllowedHTTPMethods(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
-	for m := range rhb.handlers {
-		w.Header().Add("Allow", m)
+	for _, mhp := range rhb.mhPairs {
+		w.Header().Add("Allow", mhp.method)
 	}
 
 	http.Error(
@@ -340,13 +448,13 @@ func (rhb *_RequestHandlerBase) handleNotAllowedHTTPMethods(
 
 // AllowedHTTPMethods returns the HTTP methods in use.
 func (rhb *_RequestHandlerBase) AllowedHTTPMethods() []string {
-	if rhb == nil || len(rhb.handlers) == 0 {
+	if rhb == nil || len(rhb.mhPairs) == 0 {
 		return nil
 	}
 
 	var ms = []string{}
-	for m := range rhb.handlers {
-		ms = append(ms, m)
+	for _, mhp := range rhb.mhPairs {
+		ms = append(ms, mhp.method)
 	}
 
 	return ms

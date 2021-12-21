@@ -5,7 +5,6 @@ package nanomux
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -518,7 +517,7 @@ func TestRouter_SetImplementationAt(t *testing.T) {
 				}
 
 				var rhb = _r.requestHandlerBase()
-				if n := len(rhb.handlers); n != nHandlers {
+				if n := len(rhb.mhPairs); n != nHandlers {
 					t.Fatalf(
 						"Router.SetImplementationAt(): len(handlers) = %d, want %d",
 						n,
@@ -702,7 +701,7 @@ func TestRouter_SetURLHandlerFor(t *testing.T) {
 
 				switch _r := _r.(type) {
 				case *Host:
-					if n := len(_r.handlers); n != c.numberOfHandlers {
+					if n := len(_r.mhPairs); n != c.numberOfHandlers {
 						t.Fatalf(
 							"Router.SetURLHandlerFor(): len(handlers) = %d, want %d",
 							n, c.numberOfHandlers,
@@ -715,7 +714,7 @@ func TestRouter_SetURLHandlerFor(t *testing.T) {
 						)
 					}
 				case *Resource:
-					if n := len(_r.handlers); n != c.numberOfHandlers {
+					if n := len(_r.mhPairs); n != c.numberOfHandlers {
 						t.Fatalf(
 							"Router.SetURLHandlerFor(): len(handlers) = %d, want %d",
 							n, c.numberOfHandlers,
@@ -829,7 +828,7 @@ func TestRouter_SetURLHandlerFuncFor(t *testing.T) {
 
 				switch _r := _r.(type) {
 				case *Host:
-					if n := len(_r.handlers); n != c.numberOfHandlers {
+					if n := len(_r.mhPairs); n != c.numberOfHandlers {
 						t.Fatalf(
 							"Router.SetURLHandlerFuncFor(): len(handlers) = %d, want %d",
 							n, c.numberOfHandlers,
@@ -842,7 +841,7 @@ func TestRouter_SetURLHandlerFuncFor(t *testing.T) {
 						)
 					}
 				case *Resource:
-					if n := len(_r.handlers); n != c.numberOfHandlers {
+					if n := len(_r.mhPairs); n != c.numberOfHandlers {
 						t.Fatalf(
 							"Router.SetURLHandlerFuncFor(): len(handlers) = %d, want %d",
 							n, c.numberOfHandlers,
@@ -4191,7 +4190,7 @@ func TestRouter_ServeHTTP(t *testing.T) {
 	//      -drop request on unmatched tslash
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			fmt.Println(c.name)
+			// fmt.Println(c.name)
 			var w = httptest.NewRecorder()
 			var r = httptest.NewRequest(c.reqMethod, c.reqURLStr, nil)
 			ro.ServeHTTP(w, r)
@@ -4409,7 +4408,7 @@ func getStaticRouter() (*Router, *http.Request, error) {
 	}
 
 	var r = httptest.NewRequest("GET", urls[1111], nil)
-	fmt.Println("static request URL:", urls[1111])
+	// fmt.Println("static request URL:", urls[1111])
 
 	return ro, r, nil
 }
@@ -4480,7 +4479,7 @@ func getPatternRouter() (*Router, *http.Request, error) {
 	var url = "https://host-a1.example-a1.com/resource-b3/resource-c4/resource-d2/resource-e1"
 
 	var r = httptest.NewRequest("GET", url, nil)
-	fmt.Println("pattern request URL:", urls[1111])
+	// fmt.Println("pattern request URL:", urls[1111])
 
 	return ro, r, nil
 }
@@ -4509,7 +4508,7 @@ func getWildcardRouter() (*Router, *http.Request, error) {
 	url = "https://hostA.exampleA.com/resourceB/resourceC/resourceD/resourceE"
 
 	var r = httptest.NewRequest("GET", url, nil)
-	fmt.Println("wildcard request URL:", url)
+	// fmt.Println("wildcard request URL:", url)
 
 	return ro, r, nil
 }
@@ -4681,5 +4680,76 @@ func BenchmarkRouterWithPatternRequest(b *testing.B) {
 func BenchmarkRouterWithWildcardRequest(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		ro.ServeHTTP(w, wr)
+	}
+}
+
+func BenchmarkMap(b *testing.B) {
+	var h = func(context.Context, http.ResponseWriter, *http.Request) {}
+	var methods = []string{
+		"GET",
+		"POST",
+		"PUT",
+		"DELETE",
+		"TRACE",
+		"CONNECT",
+		"OPTIONS",
+		"HEAD",
+		"PATCH",
+	}
+
+	var m = map[string]HandlerFunc{
+		"GET":     h,
+		"POST":    h,
+		"PUT":     h,
+		"DELETE":  h,
+		"TRACE":   h,
+		"CONNECT": h,
+		"OPTIONS": h,
+		"HEAD":    h,
+		"PATCH":   h,
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		var method = methods[i%len(methods)]
+		var _ = m[method]
+	}
+}
+
+func BenchmarkSlice(b *testing.B) {
+	var h = HandlerFunc(
+		func(context.Context, http.ResponseWriter, *http.Request) {},
+	)
+
+	var methods = []string{
+		"GET",
+		"POST",
+		"PUT",
+		"DELETE",
+		"TRACE",
+		"CONNECT",
+		"OPTIONS",
+		"HEAD",
+		"PATCH",
+	}
+
+	var slc = _MethodHandlerPairs{
+		{"GET", h},
+		{"POST", h},
+		{"PUT", h},
+		{"DELETE", h},
+		{"TRACE", h},
+		{"CONNECT", h},
+		{"OPTIONS", h},
+		{"HEAD", h},
+		{"PATCH", h},
+	}
+
+	slc.sort()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		var method = methods[i%len(methods)]
+		var _, _ = slc.get(method)
 	}
 }
