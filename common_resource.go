@@ -2242,8 +2242,6 @@ func (rb *_ResourceBase) passRequestToChildResource(
 	rd *_RoutingData,
 ) bool {
 	var currentPathSegmentIdx = rd.currentPathSegmentIdx
-	defer func() { rd.currentPathSegmentIdx = currentPathSegmentIdx }()
-
 	var ps, err = rd.nextPathSegment()
 	if err != nil {
 		http.Error(
@@ -2253,22 +2251,27 @@ func (rb *_ResourceBase) passRequestToChildResource(
 		)
 
 		rd.handled = true
+		rd.currentPathSegmentIdx = currentPathSegmentIdx
 		return rd.handled
 	}
 
 	if len(ps) > 0 {
-		if sr, found := rb.staticResources[ps]; found {
+		if sr := rb.staticResources[ps]; sr != nil {
 			rd._r = sr.derived
 			sr.segmentHandler.ServeHTTP(c, w, r)
+
+			rd.currentPathSegmentIdx = currentPathSegmentIdx
 			return rd.handled
 		}
 
 		for _, pr := range rb.patternResources {
-			var matches bool
-			matches, rd.urlValues = pr.Template().Match(ps, rd.urlValues)
-			if matches {
+			var matched bool
+			matched, rd.urlValues = pr.Template().Match(ps, rd.urlValues)
+			if matched {
 				rd._r = pr.derived
 				pr.segmentHandler.ServeHTTP(c, w, r)
+
+				rd.currentPathSegmentIdx = currentPathSegmentIdx
 				return rd.handled
 			}
 		}
@@ -2281,15 +2284,19 @@ func (rb *_ResourceBase) passRequestToChildResource(
 
 			rd._r = rb.wildcardResource.derived
 			rb.wildcardResource.segmentHandler.ServeHTTP(c, w, r)
+
+			rd.currentPathSegmentIdx = currentPathSegmentIdx
 			return rd.handled
 		}
 	}
 
 	if rd.subtreeExists {
+		rd.currentPathSegmentIdx = currentPathSegmentIdx
 		return false
 	}
 
 	notFoundResourceHandler.ServeHTTP(c, w, r)
 	rd.handled = true
+	rd.currentPathSegmentIdx = currentPathSegmentIdx
 	return true
 }

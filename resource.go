@@ -498,24 +498,15 @@ func (rb *Resource) IsRoot() bool {
 // HTTP request handler when the resource's template matches the request's first
 // path segment.
 func (rb *Resource) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	var c, rd, err = contextWithRoutingData(r.Context(), r.URL, rb.derived)
-	if err != nil {
-		http.Error(
-			w,
-			http.StatusText(http.StatusInternalServerError),
-			http.StatusInternalServerError,
-		)
-
-		return
-	}
-
-	var ps, _ = rd.nextPathSegment() // First call returns '/'.
-	if rb.tmpl.IsStatic() && rb.tmpl.Content() == ps {
+	var c, rd = contextWithRoutingData(r.Context(), r.URL, rb.derived)
+	rd.nextPathSegment() // First call returns '/'.
+	if rb.tmpl == rootTmpl {
 		rb.segmentHandler.ServeHTTP(c, w, r)
+		putContextInThePool(c)
 		return
 	}
 
-	ps, err = rd.nextPathSegment()
+	var ps, err = rd.nextPathSegment()
 	if err != nil {
 		http.Error(
 			w,
@@ -523,30 +514,22 @@ func (rb *Resource) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			http.StatusBadRequest,
 		)
 
-		rd.handled = true
+		putContextInThePool(c)
 		return
 	}
 
 	if len(ps) > 0 {
-		if rb.tmpl.IsStatic() && rb.tmpl.Content() == ps {
+		var matched bool
+		matched, rd.urlValues = rb.tmpl.Match(ps, rd.urlValues)
+		if matched {
 			rb.segmentHandler.ServeHTTP(c, w, r)
-			return
-		}
-
-		if rb.tmpl.IsWildcard() {
-			_, rd.urlValues = rb.tmpl.Match(ps, nil)
-			rb.segmentHandler.ServeHTTP(c, w, r)
-			return
-		}
-
-		if matched, values := rb.tmpl.Match(ps, nil); matched {
-			rd.urlValues = values
-			rb.segmentHandler.ServeHTTP(c, w, r)
+			putContextInThePool(c)
 			return
 		}
 	}
 
 	notFoundResourceHandler.ServeHTTP(c, w, r)
+	putContextInThePool(c)
 }
 
 // handleOrPassRequest is the segment handler of the resource. It handles

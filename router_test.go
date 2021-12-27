@@ -1051,7 +1051,6 @@ func TestRouter_WrapURLSegmentHandler(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			var err error
-
 			if !c.wantErr {
 				_, err = ro._Resource(c.url)
 				if err != nil {
@@ -3858,6 +3857,7 @@ func TestRouter_ServeHTTP(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	patternHost1.SetSharedData(true)
 	addRequestHandlerSubresources(t, patternHost1, 0, 2)
 
 	var patternHost2 *Host
@@ -3866,6 +3866,7 @@ func TestRouter_ServeHTTP(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	patternHost2.SetSharedData(true)
 	addRequestHandlerSubresources(t, patternHost2, 0, 2)
 
 	var wildcardSub1 *Host
@@ -3878,6 +3879,7 @@ func TestRouter_ServeHTTP(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	wildcardSub1.SetSharedData(true)
 	addRequestHandlerSubresources(t, wildcardSub1, 0, 2)
 
 	var wildcardSub2 *Host
@@ -3890,6 +3892,7 @@ func TestRouter_ServeHTTP(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	wildcardSub2.SetSharedData(true)
 	addRequestHandlerSubresources(t, wildcardSub2, 0, 2)
 
 	ro.initializeRootResource()
