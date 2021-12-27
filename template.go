@@ -82,10 +82,33 @@ type _ValuePattern struct {
 	re   *regexp.Regexp
 }
 
-type _TemplateSlice struct {
-	staticStr    string         // Static slice of the template.
-	valuePattern *_ValuePattern // Name-pattern slice of the template.
+type _ValuePatterns []*_ValuePattern
+
+// set sets the regexp for the name. If the name doesn't exist, it's added to
+// the slice.
+func (vps *_ValuePatterns) set(name string, vp *_ValuePattern) {
+	var i, _ = vps.get(name)
+	if i < 0 {
+		*vps = append(*vps, vp)
+		return
+	}
+
+	(*vps)[i] = vp
 }
+
+// get returns the index and the regexp of the name, if the name exists, or
+// -1 and nil.
+func (vps _ValuePatterns) get(name string) (int, *_ValuePattern) {
+	for i, lvps := 0, len(vps); i < lvps; i++ {
+		if vps[i].name == name {
+			return i, vps[i]
+		}
+	}
+
+	return -1, nil
+}
+
+// -------------------------
 
 type _StringPair struct{ key, value string }
 
@@ -93,36 +116,35 @@ type _StringPair struct{ key, value string }
 // lighter than a map).
 type TemplateValues []_StringPair
 
-func NewTemplateValues() TemplateValues {
-	return TemplateValues{}
-}
-
 // Set sets the value for the key. If the key doesn't exist, it's added to the
 // slice.
 func (tmplVs *TemplateValues) Set(key, value string) {
-	var notFound = true
-	for i, l := 0, len(*tmplVs); i < l; i++ {
-		if (*tmplVs)[i].key == key {
-			(*tmplVs)[i].value = value
-			notFound = false
-		}
+	var i, _ = tmplVs.Get(key)
+	if i < 0 {
+		*tmplVs = append(*tmplVs, _StringPair{key, value})
+		return
 	}
 
-	if notFound {
-		*tmplVs = append(*tmplVs, _StringPair{key, value})
-	}
+	(*tmplVs)[i] = _StringPair{key, value}
 }
 
-// Get returns the value and true, if the key exists, or an empty string and
-// false.
-func (tmplVs TemplateValues) Get(key string) (string, bool) {
+// Get returns the index and the value, if the key exists, or -1 and an empty
+// string.
+func (tmplVs TemplateValues) Get(key string) (int, string) {
 	for i := len(tmplVs) - 1; i >= 0; i-- {
 		if tmplVs[i].key == key {
-			return tmplVs[i].value, true
+			return i, tmplVs[i].value
 		}
 	}
 
-	return "", false
+	return -1, ""
+}
+
+// --------------------------------------------------
+
+type _TemplateSlice struct {
+	staticStr    string         // Static slice of the template.
+	valuePattern *_ValuePattern // Name-pattern slice of the template.
 }
 
 // --------------------------------------------------
@@ -214,22 +236,21 @@ func (t *Template) HasValueName(names ...string) bool {
 // A pattern is omitted from a repeated value-pattern starting from the second
 // repitition.
 func (t *Template) Content() string {
-	var (
-		strb    = strings.Builder{}
-		vns     = make(map[string]bool)
-		tslices = t.slices
-	)
+	var strb = strings.Builder{}
 
-	if t.name == "" && len(tslices) != 0 {
-		if tslices[0].staticStr != "" && tslices[0].staticStr[0] == '$' {
+	if t.name == "" && len(t.slices) != 0 {
+		if t.slices[0].staticStr != "" && t.slices[0].staticStr[0] == '$' {
 			strb.WriteByte('\\')
 		}
 	}
+
+	var vns map[string]bool
 
 	for _, slice := range t.slices {
 		if slice.staticStr != "" {
 			var idx = 0
 			for i, ch := range slice.staticStr {
+				// '{' and '}' are escaped with a back slash '\'.
 				if ch == '{' || ch == '}' {
 					strb.WriteString(slice.staticStr[idx:i])
 					strb.WriteByte('\\')
@@ -251,6 +272,10 @@ func (t *Template) Content() string {
 				strb.WriteString(str[:idx])
 				strb.WriteString(`\:`)
 				str = str[idx+1:]
+			}
+
+			if vns == nil {
+				vns = make(map[string]bool)
 			}
 
 			if slice.valuePattern.re != nil && !vns[slice.valuePattern.name] {
@@ -387,22 +412,6 @@ func (t *Template) Match(
 	str string,
 	values TemplateValues,
 ) (bool, TemplateValues) {
-	// The following if statement was added for the sake of completeness, but
-	// commented out because it's not needed here. The resources with static
-	// templates don't need the Match method.
-	// if t.IsStatic() {
-	// 	return t.slices[0].staticStr == str, values
-	// }
-
-	// if t.IsWildcard() {
-	// 	if values == nil {
-	// 		values = make(map[string]string)
-	// 	}
-
-	// 	values[t.slices[0].valuePattern.name] = str
-	// 	return true, values
-	// }
-
 	var ltslices = len(t.slices)
 	var k = ltslices
 	if t.wildCardIdx >= 0 {
@@ -421,7 +430,7 @@ func (t *Template) Match(
 			var idxs = vp.re.FindStringIndex(str)
 			if idxs != nil {
 				var v = str[:idxs[1]]
-				if vf, found := values.Get(vp.name); found {
+				if vi, vf := values.Get(vp.name); vi >= 0 {
 					if v != vf {
 						return false, values
 					}
@@ -452,7 +461,7 @@ func (t *Template) Match(
 			var idxs = vp.re.FindAllStringIndex(str, -1)
 			if len(idxs) == 1 {
 				var v = str[idxs[0][0]:]
-				if vf, found := values.Get(vp.name); found {
+				if vi, vf := values.Get(vp.name); vi >= 0 {
 					if v != vf {
 						return false, values
 					}
@@ -471,15 +480,19 @@ func (t *Template) Match(
 		}
 	}
 
-	if t.wildCardIdx >= 0 && len(str) > 0 {
-		if values == nil {
-			values = make(TemplateValues, 0, 5)
-		}
+	if len(str) > 0 {
+		if t.wildCardIdx >= 0 {
+			if values == nil {
+				values = make(TemplateValues, 0, 5)
+			}
 
-		values = append(
-			values,
-			_StringPair{t.slices[t.wildCardIdx].valuePattern.name, str},
-		)
+			values = append(
+				values,
+				_StringPair{t.slices[t.wildCardIdx].valuePattern.name, str},
+			)
+		} else {
+			return false, values
+		}
 	}
 
 	return true, values
@@ -502,10 +515,10 @@ func (t *Template) Apply(values TemplateValues, ignoreMissing bool) (
 			continue
 		}
 
-		if v, found := values.Get(slc.valuePattern.name); found {
+		if vi, vf := values.Get(slc.valuePattern.name); vi >= 0 {
 			if slc.valuePattern.re != nil {
-				var idxs = slc.valuePattern.re.FindStringIndex(v)
-				if idxs == nil || (idxs[0] != 0 && idxs[1] != len(v)) {
+				var idxs = slc.valuePattern.re.FindStringIndex(vf)
+				if idxs == nil || (idxs[0] != 0 && idxs[1] != len(vf)) {
 					return "", newError(
 						"%w value for %q",
 						ErrInvalidValue,
@@ -514,7 +527,7 @@ func (t *Template) Apply(values TemplateValues, ignoreMissing bool) (
 				}
 			}
 
-			strb.WriteString(v)
+			strb.WriteString(vf)
 		} else if ignoreMissing {
 			continue
 		} else {
@@ -553,6 +566,13 @@ func (t *Template) String() string {
 
 	strb.WriteString(t.Content())
 	return strb.String()
+}
+
+// Clear clears the content and the name of the template.
+func (t *Template) Clear() {
+	t.name = ""
+	t.slices = nil
+	t.wildCardIdx = -1
 }
 
 // --------------------------------------------------
@@ -625,6 +645,7 @@ func staticSlice(tmplStrSlc string) (
 				return
 			}
 
+			// Escaped '{'.
 			strb.WriteString(tmplStrSlc[idx : i-1])
 			strb.WriteByte('{')
 			idx = i + 1
@@ -639,6 +660,7 @@ func staticSlice(tmplStrSlc string) (
 				return
 			}
 
+			// Escaped '}'.
 			strb.WriteString(tmplStrSlc[idx : i-1])
 			strb.WriteByte('}')
 			idx = i + 1
@@ -806,19 +828,19 @@ func dynamicSlice(tmplStrSlc string) (
 func appendDynamicSliceTo(
 	tss []_TemplateSlice,
 	vName, pattern string,
-	valuePatterns map[string]*_ValuePattern,
-	wildCardIdx int,
-) ([]_TemplateSlice, int, error) {
-	if vp, exists := valuePatterns[vName]; exists {
+	valuePatterns _ValuePatterns,
+	wildcardIdx int,
+) ([]_TemplateSlice, _ValuePatterns, int, error) {
+	if vpi, vp := valuePatterns.get(vName); vpi >= 0 {
 		if pattern != "" {
-			if wildCardIdx >= 0 {
+			if wildcardIdx >= 0 {
 				pattern += "$"
 			} else {
 				pattern = "^" + pattern
 			}
 
 			if pattern != vp.re.String() {
-				return nil, -1, newError(
+				return tss, valuePatterns, -1, newError(
 					"%w for a value %q",
 					ErrDifferentPattern,
 					vName,
@@ -829,24 +851,28 @@ func appendDynamicSliceTo(
 		// If a value-pattern pair already exists, we don't have to create a
 		// new one.
 		tss = append(tss, _TemplateSlice{valuePattern: vp})
-		return tss, wildCardIdx, nil
+		return tss, valuePatterns, wildcardIdx, nil
 	}
 
 	if pattern == "" {
-		if wildCardIdx >= 0 {
-			var wc = tss[wildCardIdx]
+		if wildcardIdx >= 0 {
+			var wc = tss[wildcardIdx]
 			if vName == wc.valuePattern.name {
-				return nil, -1, newError(
+				return tss, valuePatterns, wildcardIdx, newError(
 					"%w %q",
 					ErrRepeatedWildcardName,
 					vName,
 				)
 			}
 
-			return nil, -1, newError("%w %q", ErrAnotherWildcardName, vName)
+			return tss, valuePatterns, wildcardIdx, newError(
+				"%w %q",
+				ErrAnotherWildcardName,
+				vName,
+			)
 		}
 
-		wildCardIdx = len(tss)
+		wildcardIdx = len(tss)
 		tss = append(tss, _TemplateSlice{
 			valuePattern: &_ValuePattern{name: vName},
 		})
@@ -860,16 +886,16 @@ func appendDynamicSliceTo(
 
 			var re, err = regexp.Compile(p)
 			if err != nil {
-				return nil, -1, err
+				return tss, valuePatterns, wildcardIdx, err
 			}
 
-			valuePatterns[vp.name] = &_ValuePattern{vp.name, re}
+			valuePatterns.set(vp.name, &_ValuePattern{vp.name, re})
 		}
 
-		return tss, wildCardIdx, nil
+		return tss, valuePatterns, wildcardIdx, nil
 	}
 
-	if wildCardIdx >= 0 {
+	if wildcardIdx >= 0 {
 		pattern += "$"
 	} else {
 		pattern = "^" + pattern
@@ -877,14 +903,14 @@ func appendDynamicSliceTo(
 
 	var re, err = regexp.Compile(pattern)
 	if err != nil {
-		return nil, -1, err
+		return tss, valuePatterns, wildcardIdx, err
 	}
 
 	var vp = &_ValuePattern{name: vName, re: re}
 	tss = append(tss, _TemplateSlice{valuePattern: vp})
-	valuePatterns[vName] = vp
+	valuePatterns.set(vName, vp)
 
-	return tss, wildCardIdx, nil
+	return tss, valuePatterns, wildcardIdx, nil
 }
 
 // $name:static{key1:pattern}static{key2:pattern}{key1}{key3}
@@ -903,7 +929,7 @@ func parse(tmplStr string) (
 		tmplStrSlc = tmplStr
 		tss        = []_TemplateSlice{}
 
-		valuePatterns = make(map[string]*_ValuePattern)
+		valuePatterns = make(_ValuePatterns, 0, 1)
 	)
 
 	wildcardIdx = -1
@@ -929,7 +955,7 @@ func parse(tmplStr string) (
 			return nil, -1, err
 		}
 
-		tss, wildcardIdx, err = appendDynamicSliceTo(
+		tss, valuePatterns, wildcardIdx, err = appendDynamicSliceTo(
 			tss,
 			vName, pattern,
 			valuePatterns,

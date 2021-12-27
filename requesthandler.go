@@ -107,43 +107,24 @@ func (mhps _MethodHandlerPairs) get(method string) (int, Handler) {
 		return -1, nil
 	}
 
-	var lo, c, m, d, lmMethod int
-	var lmethod = len(method)
+	var lo, m int
 
-	for {
-		c = hi - lo
-		m = lo + c/2
-		lmMethod = len(mhps[m].method)
+	for lo < hi {
+		m = lo + (hi-lo)/2
 
-		if lmethod < lmMethod {
-			lmMethod = lmethod
-		}
-
-		for i := 0; i < lmMethod; i++ {
-			d = int(method[i]) - int(mhps[m].method[i])
-			if d != 0 {
-				break
-			}
-		}
-
-		if d == 0 {
-			d = lmethod - lmMethod
-
-			if d == 0 {
-				return m, mhps[m].handler
-			}
-		}
-
-		if c == 1 {
-			return -1, nil
-		}
-
-		if d < 0 {
+		if method < mhps[m].method {
 			hi = m
-		} else {
-			lo = m + 1
+			continue
 		}
+
+		if mhps[m].method < method {
+			lo = m
+		}
+
+		return m, mhps[m].handler
 	}
+
+	return -1, nil
 }
 
 // set sets the handlet for the method. If the method doesn't exist, it's added
@@ -466,7 +447,7 @@ func (rhb *_RequestHandlerBase) ServeHTTP(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
-	rhb.handleRequest(r.Context(), w, r)
+	rhb.handleRequest(nil, w, r)
 }
 
 // --------------------------------------------------

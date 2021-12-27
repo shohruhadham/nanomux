@@ -323,17 +323,7 @@ func (hb *Host) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		host = r.Host
 	}
 
-	var c, rd, err = contextWithRoutingData(r.Context(), r.URL, hb.derived)
-	if err != nil {
-		http.Error(
-			w,
-			http.StatusText(http.StatusInternalServerError),
-			http.StatusInternalServerError,
-		)
-
-		return
-	}
-
+	var c, rd = contextWithRoutingData(r.Context(), r.URL, hb.derived)
 	if host != "" {
 		if strings.LastIndexByte(host, ':') >= 0 {
 			var h, _, err = net.SplitHostPort(host)
@@ -342,20 +332,17 @@ func (hb *Host) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		var tmpl = hb.Template()
-		if tmpl.IsStatic() && tmpl.Content() == host {
+		var matched bool
+		matched, rd.urlValues = hb.Template().Match(host, rd.urlValues)
+		if matched {
 			hb.segmentHandler.ServeHTTP(c, w, r)
-			return
-		}
-
-		if matches, values := tmpl.Match(host, nil); matches {
-			rd.urlValues = values
-			hb.segmentHandler.ServeHTTP(c, w, r)
+			putContextInThePool(c)
 			return
 		}
 	}
 
 	notFoundResourceHandler.ServeHTTP(c, w, r)
+	putContextInThePool(c)
 }
 
 // handleOrPassRequest is the segment handler of the host. It handles the
@@ -428,7 +415,6 @@ func (hb *Host) handleOrPassRequest(
 	}
 
 	if lpath < 2 && !hb.IsLenientOnTrailingSlash() {
-		// Here, the path can be either empty or root.
 		if hb.HasTrailingSlash() && !rd.pathIsRoot() {
 			if hb.IsStrictOnTrailingSlash() {
 				notFoundResourceHandler.ServeHTTP(c, w, r)

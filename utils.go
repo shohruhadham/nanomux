@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -388,21 +389,15 @@ type _RoutingData struct {
 
 // -------------------------
 
-// contextWithRoutingData returns a new context with the _RoutingData created
-// for the URL. It also keeps the passed _Resource in the _RoutingData.
+// contextWithRoutingData returns a context with _RoutingData that keeps the
+// passed URL and the _Resource.
 func contextWithRoutingData(
 	c context.Context,
 	url *url.URL,
 	_r _Resource,
-) (context.Context, *_RoutingData, error) {
-	if c == nil || _r == nil {
-		return nil, nil, newError("%w", ErrNilArgument)
-	}
-
-	var rd = &_RoutingData{url: url, _r: _r}
-	c = newContext(c, rd)
-
-	var pathPtr = &url.Path
+) (context.Context, *_RoutingData) {
+	var _c = getContextFromThePool(c, url, _r)
+	var tmpPath = url.Path
 
 	// The escaped path may have a slash "/", which is a part of the path
 	// segment, not a separator. So the unescaped path must be used for routing.
@@ -411,44 +406,45 @@ func contextWithRoutingData(
 	// different path from the URL.RawPath. Sometimes it's not suitable for
 	// our intentions. It's preferable to use URL.RawPath if it's not empty.
 	if len(url.RawPath) > 0 {
-		pathPtr = &url.RawPath
+		tmpPath = url.RawPath
 	}
 
-	if (*pathPtr) != "" {
-		var pathStrb strings.Builder
-		if (*pathPtr)[0] != '/' {
-			pathStrb.WriteByte('/')
+	if tmpPath != "" {
+		var trailingSlash bool
+		var ltmpPath = len(tmpPath)
+		if ltmpPath > 1 && tmpPath[ltmpPath-1] == '/' {
+			trailingSlash = true
 		}
 
-		pathStrb.WriteString(path.Clean(*pathPtr))
-
-		var lpath = len(*pathPtr)
-		if (*pathPtr)[lpath-1] == '/' && pathStrb.Len() != 1 {
-			pathStrb.WriteByte('/')
+		if tmpPath[0] != '/' {
+			tmpPath = "/" + tmpPath
 		}
 
-		if pathStrb.Len() != lpath {
-			// The URL's path is unclean. The clean path will be used
-			// for routing.
-			rd.cleanPath = pathStrb.String()
+		var cleanPath = path.Clean(tmpPath)
+		if trailingSlash && len(cleanPath) > 1 {
+			cleanPath += "/"
+		}
+
+		if len(cleanPath) != len(tmpPath) {
+			_c.rd.cleanPath = cleanPath
 		}
 	}
 
-	return c, rd, nil
+	return _c, &_c.rd
 }
 
 // -------------------------
 
 func (rd *_RoutingData) pathIsRoot() bool {
-	if rd.cleanPath == "" {
-		if rd.url.RawPath != "" {
-			return rd.url.RawPath == "/"
-		}
-
-		return rd.url.Path == "/"
+	if rd.cleanPath != "" {
+		return rd.cleanPath == "/"
 	}
 
-	return rd.cleanPath == "/"
+	if rd.url.RawPath != "" {
+		return rd.url.RawPath == "/"
+	}
+
+	return rd.url.Path == "/"
 }
 
 // pathLen returns the length of the path that rd is using.
@@ -464,15 +460,15 @@ func (rd *_RoutingData) pathLen() int {
 	return lpath
 }
 
-// remainingPath returns the remaining path of the request's URL below the
-// resource that is using the routing data.
+// remainingPath returns the escaped remaining path of the request's URL below
+// the resource that is using the routing data.
 func (rd *_RoutingData) remainingPath() string {
 	if rd.reachedTheLastPathSegment() {
 		return ""
 	}
 
-	var uncleanPath = len(rd.cleanPath) > 0
-	var rawPath = len(rd.url.RawPath) > 0
+	var pathWasCleaned = len(rd.cleanPath) > 0
+	var pathIsRaw = len(rd.url.RawPath) > 0
 
 	if rd._r.HasTrailingSlash() || rd.pathIsRoot() {
 		// If the _r is a host or resource with a trailing slash, or if the
@@ -482,33 +478,33 @@ func (rd *_RoutingData) remainingPath() string {
 		// path is being retrieved by a host which is lenient on the trailing
 		// slash or a root resource.
 		if rd.currentPathSegmentIdx == 0 {
-			if uncleanPath {
+			if pathWasCleaned {
 				return rd.cleanPath[1:]
 			}
 
-			if rawPath {
+			if pathIsRaw {
 				return rd.url.RawPath[1:]
 			}
 
 			return rd.url.Path[1:]
 		}
 	} else if rd.currentPathSegmentIdx > 0 {
-		if uncleanPath {
+		if pathWasCleaned {
 			return rd.cleanPath[rd.currentPathSegmentIdx-1:]
 		}
 
-		if rawPath {
+		if pathIsRaw {
 			return rd.url.RawPath[rd.currentPathSegmentIdx-1:]
 		}
 
 		return rd.url.Path[rd.currentPathSegmentIdx-1:]
 	}
 
-	if uncleanPath {
+	if pathWasCleaned {
 		return rd.cleanPath[rd.currentPathSegmentIdx:]
 	}
 
-	if rawPath {
+	if pathIsRaw {
 		return rd.url.RawPath[rd.currentPathSegmentIdx:]
 	}
 
@@ -528,32 +524,49 @@ func (rd *_RoutingData) nextPathSegment() (string, error) {
 		return "/", nil
 	}
 
-	var rawPath = rd.url.RawPath != ""
-	var remainingPath string
-	if len(rd.cleanPath) > 0 {
-		remainingPath = rd.cleanPath[rd.currentPathSegmentIdx:]
-	} else if rawPath {
-		remainingPath = rd.url.RawPath[rd.currentPathSegmentIdx:]
+	var pathWasCleaned = rd.cleanPath != ""
+	var pathIsRaw = rd.url.RawPath != ""
+
+	var idx int
+	if pathWasCleaned {
+		idx = strings.IndexByte(
+			rd.cleanPath[rd.currentPathSegmentIdx:],
+			'/',
+		)
+	} else if pathIsRaw {
+		idx = strings.IndexByte(
+			rd.url.RawPath[rd.currentPathSegmentIdx:],
+			'/',
+		)
 	} else {
-		remainingPath = rd.url.Path[rd.currentPathSegmentIdx:]
+		idx = strings.IndexByte(
+			rd.url.Path[rd.currentPathSegmentIdx:],
+			'/',
+		)
 	}
 
-	var idx = strings.IndexByte(remainingPath, '/')
-	if idx < 0 {
+	var cIdx = rd.currentPathSegmentIdx
+	rd.currentPathSegmentIdx += idx + 1
+	idx += cIdx
+
+	if idx < cIdx {
+		idx = lpath
 		rd.currentPathSegmentIdx = lpath
-		if rawPath {
-			return url.PathUnescape(remainingPath)
+	}
+
+	if pathIsRaw {
+		if pathWasCleaned {
+			return url.PathUnescape(rd.cleanPath[cIdx:idx])
 		}
 
-		return remainingPath, nil
+		return url.PathUnescape(rd.url.RawPath[cIdx:idx])
 	}
 
-	rd.currentPathSegmentIdx += idx + 1
-	if rawPath {
-		return url.PathUnescape(remainingPath[:idx])
+	if pathWasCleaned {
+		return rd.cleanPath[cIdx:idx], nil
 	}
 
-	return remainingPath[:idx], nil
+	return rd.url.Path[cIdx:idx], nil
 }
 
 // reachedTheLastPathSegment returns true when the resource that is using the
@@ -598,8 +611,8 @@ var (
 	// below it there is no resource that can match the next path segment.
 	RemainingPathKey interface{} = remainingPathKey
 
-	// SharedDataKey can be used to retrieve the shared data of the resource
-	// that is handling the request.
+	// SharedDataKey can be used to retrieve the shared data of the host or
+	// resource that is handling the request.
 	SharedDataKey interface{} = sharedDataKey
 
 	// ResourceKey can be used to retrieve a reference to the host or resource
@@ -617,11 +630,7 @@ var (
 // _Context is used as a request's context.
 type _Context struct {
 	original context.Context
-	rd       *_RoutingData
-}
-
-func newContext(original context.Context, rd *_RoutingData) *_Context {
-	return &_Context{original: original, rd: rd}
+	rd       _RoutingData
 }
 
 func (c *_Context) Deadline() (deadline time.Time, ok bool) {
@@ -640,7 +649,7 @@ func (c *_Context) Value(key interface{}) interface{} {
 	if key, ok := key.(_ContextValueKey); ok {
 		switch key {
 		case routingDataKey:
-			return c.rd
+			return &c.rd
 		case urlValuesKey:
 			return c.rd.urlValues
 		case remainingPathKey:
@@ -657,6 +666,46 @@ func (c *_Context) Value(key interface{}) interface{} {
 	}
 
 	return c.original.Value(key)
+}
+
+// -------------------------
+
+var contextPool = sync.Pool{
+	New: func() interface{} {
+		return &_Context{}
+	},
+}
+
+func putContextInThePool(c context.Context) {
+	var _c, ok = c.(*_Context)
+	if ok {
+		_c.rd.cleanPath = ""
+		_c.rd.currentPathSegmentIdx = 0
+
+		_c.rd.subtreeExists = false
+		_c.rd.handled = false
+
+		if _c.rd.urlValues != nil {
+			_c.rd.urlValues = _c.rd.urlValues[:0]
+		}
+
+		// Other fields will be set at retrieval.
+
+		contextPool.Put(_c)
+	}
+}
+
+func getContextFromThePool(
+	c context.Context,
+	url *url.URL,
+	_r _Resource,
+) *_Context {
+	var _c = contextPool.Get().(*_Context)
+	_c.original = c
+	_c.rd.url = url
+	_c.rd._r = _r
+
+	return _c
 }
 
 // --------------------------------------------------

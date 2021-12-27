@@ -4531,24 +4531,27 @@ func addRequestHandlerSubresources(t *testing.T, r _Resource, i, limit int) {
 
 	if err = r.SetHandlerFor("get post custom", HandlerFunc(
 		func(c context.Context, w http.ResponseWriter, r *http.Request) {
-			var urlValues, ok = c.Value(URLValuesKey).(URLValues)
-			if ok && urlValues != nil {
-				var gotValue bool
-				for _, pair := range urlValues {
-					if pair.value == "1" {
-						gotValue = true
-						break
+			var hasValue, ok = c.Value(SharedDataKey).(bool)
+			if ok && hasValue {
+				var urlValues, ok = c.Value(URLValuesKey).(URLValues)
+				if ok && urlValues != nil {
+					var gotValue bool
+					for _, pair := range urlValues {
+						if pair.value == "1" {
+							gotValue = true
+							break
+						}
 					}
-				}
 
-				if !gotValue {
-					http.Error(
-						w,
-						http.StatusText(http.StatusInternalServerError),
-						http.StatusInternalServerError,
-					)
+					if !gotValue {
+						http.Error(
+							w,
+							http.StatusText(http.StatusInternalServerError),
+							http.StatusInternalServerError,
+						)
 
-					return
+						return
+					}
 				}
 			}
 
@@ -4612,6 +4615,8 @@ func addRequestHandlerSubresources(t *testing.T, r _Resource, i, limit int) {
 			Config{RedirectInsecureRequest: true},
 		)
 
+		rr.SetSharedData(true)
+
 		if err = r.RegisterResource(rr); err != nil {
 			t.Fatal(err)
 		}
@@ -4628,6 +4633,8 @@ func addRequestHandlerSubresources(t *testing.T, r _Resource, i, limit int) {
 			},
 		)
 
+		rr.SetSharedData(true)
+
 		if err = r.RegisterResource(rr); err != nil {
 			t.Fatal(err)
 		}
@@ -4638,6 +4645,8 @@ func addRequestHandlerSubresources(t *testing.T, r _Resource, i, limit int) {
 			"$pr"+istr+"3:{name"+istr+":pr"+istr+"3}:{id"+istr+":\\d?}",
 			Config{HandleThePathAsIs: true},
 		)
+
+		rr.SetSharedData(true)
 
 		if err = r.RegisterResource(rr); err != nil {
 			t.Fatal(err)
@@ -4650,6 +4659,8 @@ func addRequestHandlerSubresources(t *testing.T, r _Resource, i, limit int) {
 
 			Config{StrictOnTrailingSlash: true},
 		)
+
+		rr.SetSharedData(true)
 
 		if err = r.RegisterResource(rr); err != nil {
 			t.Fatal(err)
@@ -4664,6 +4675,8 @@ func addRequestHandlerSubresources(t *testing.T, r _Resource, i, limit int) {
 				StrictOnTrailingSlash: true,
 			},
 		)
+
+		rr.SetSharedData(true)
 
 		if err = r.RegisterResource(rr); err != nil {
 			t.Fatal(err)
@@ -4681,6 +4694,8 @@ func addRequestHandlerSubresources(t *testing.T, r _Resource, i, limit int) {
 			},
 		)
 
+		rr.SetSharedData(true)
+
 		if err = r.RegisterResource(rr); err != nil {
 			t.Fatal(err)
 		}
@@ -4695,6 +4710,8 @@ func addRequestHandlerSubresources(t *testing.T, r _Resource, i, limit int) {
 				LeniencyOnUncleanPath:   true,
 			},
 		)
+
+		rr.SetSharedData(true)
 
 		if err = r.RegisterResource(rr); err != nil {
 			t.Fatal(err)

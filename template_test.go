@@ -474,8 +474,8 @@ func TestTemplate_Match(t *testing.T) {
 			}
 
 			for _, wantPair := range c.wantValues {
-				var v, found = values.Get(wantPair.key)
-				if !found || v != wantPair.value {
+				var vi, vf = values.Get(wantPair.key)
+				if vi < 0 || vf != wantPair.value {
 					t.Fatalf(
 						"Template.Match() values = %v, want %v",
 						values,
@@ -814,7 +814,7 @@ func TestTemplate_String(t *testing.T) {
 	}
 }
 
-func Test_templateNameAndContent(t *testing.T) {
+func TestTemplate_templateNameAndContent(t *testing.T) {
 	var cases = []struct {
 		name            string
 		tmplStr         string
@@ -900,7 +900,7 @@ func Test_templateNameAndContent(t *testing.T) {
 	}
 }
 
-func Test_staticSlice(t *testing.T) {
+func TestTemplate_staticSlice(t *testing.T) {
 	var cases = []struct {
 		tmplStr         string
 		wantStaticStr   string
@@ -947,7 +947,7 @@ func Test_staticSlice(t *testing.T) {
 	}
 }
 
-func Test_dynamicSlice(t *testing.T) {
+func TestTemplate_dynamicSlice(t *testing.T) {
 	var cases = []struct {
 		tmplStr         string
 		wantValueName   string
@@ -1039,11 +1039,11 @@ func Test_dynamicSlice(t *testing.T) {
 	}
 }
 
-func Test_appendDynamicSliceTo(t *testing.T) {
+func TestTemplate_appendDynamicSliceTo(t *testing.T) {
 	var (
 		tss           []_TemplateSlice
 		wildCardIdx   = -1
-		valuePatterns = make(map[string]*_ValuePattern)
+		valuePatterns = make(_ValuePatterns, 0, 1)
 	)
 
 	var cases = []struct {
@@ -1305,10 +1305,11 @@ func Test_appendDynamicSliceTo(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			var err error
-			tss, wildCardIdx, err = appendDynamicSliceTo(
+			tss, valuePatterns, wildCardIdx, err = appendDynamicSliceTo(
 				tss,
 				c.vName, c.pattern,
-				valuePatterns, wildCardIdx,
+				valuePatterns,
+				wildCardIdx,
 			)
 
 			if (err != nil) != c.wantErr {
@@ -1321,17 +1322,26 @@ func Test_appendDynamicSliceTo(t *testing.T) {
 				return
 			}
 
-			var tmpl = Template{slices: tss, wildCardIdx: wildCardIdx}
+			if err != nil {
+				return
+			}
+
+			var tmpl = Template{
+				slices:      tss,
+				wildCardIdx: wildCardIdx,
+			}
+
 			var wantTmpl = Template{
 				slices:      c.wantTss,
 				wildCardIdx: c.wantWildCardIdx,
 			}
 
-			if !reflect.DeepEqual(tss, c.wantTss) {
+			var tmplStr, wantTmplStr = tmpl.String(), wantTmpl.String()
+			if tmplStr != wantTmplStr {
 				t.Fatalf(
-					"appendDynamicSliceTo() tss = %s, want %s",
-					tmpl.String(),
-					wantTmpl.String(),
+					"appendDynamicSliceTo() tmplStr = %s, wantTmplStr %s",
+					tmplStr,
+					wantTmplStr,
 				)
 			}
 
@@ -1346,7 +1356,7 @@ func Test_appendDynamicSliceTo(t *testing.T) {
 	}
 }
 
-func Test_parse(t *testing.T) {
+func TestTemplate_parse(t *testing.T) {
 	var cases = []struct {
 		name            string
 		tmplStr         string
@@ -1537,7 +1547,7 @@ func Test_parse(t *testing.T) {
 	}
 }
 
-func TestTryToParse(t *testing.T) {
+func TestTemplate_TryToParse(t *testing.T) {
 	var cases = []struct {
 		name    string
 		tmplStr string
@@ -1732,7 +1742,7 @@ func TestTryToParse(t *testing.T) {
 	}
 }
 
-func TestParse(t *testing.T) {
+func TestTemplate_Parse(t *testing.T) {
 	var cases = []struct {
 		name    string
 		tmplStr string

@@ -17,26 +17,29 @@ func setHandlers(t *testing.T, h *Host) {
 			c context.Context,
 			w http.ResponseWriter, r *http.Request,
 		) {
-			var hValues, ok = r.Context().Value(URLValuesKey).(URLValues)
-			if ok && hValues != nil {
-				var gotValue bool
-				for _, pair := range hValues {
-					if pair.value == "sub" {
-						gotValue = true
-					} else {
-						gotValue = false
-						break
+			var hasValue, ok = c.Value(SharedDataKey).(bool)
+			if ok && hasValue {
+				var hValues, ok = c.Value(URLValuesKey).(URLValues)
+				if ok && hValues != nil {
+					var gotValue bool
+					for _, pair := range hValues {
+						if pair.value == "sub" {
+							gotValue = true
+						} else {
+							gotValue = false
+							break
+						}
 					}
-				}
 
-				if !gotValue {
-					http.Error(
-						w,
-						http.StatusText(http.StatusInternalServerError),
-						http.StatusInternalServerError,
-					)
+					if !gotValue {
+						http.Error(
+							w,
+							http.StatusText(http.StatusInternalServerError),
+							http.StatusInternalServerError,
+						)
 
-					return
+						return
+					}
 				}
 			}
 
@@ -64,13 +67,14 @@ func requestHandlerHosts(t *testing.T) []*Host {
 
 	var hosts []*Host
 	hosts = append(hosts, NewDormantHost("example.com"))
-	hosts = append(
-		hosts,
-		NewDormantHostUsingConfig(
-			"{sub:[a-zA-Z]{3}}.example.com",
-			Config{SubtreeHandler: true},
-		),
+
+	var host = NewDormantHostUsingConfig(
+		"{sub:[a-zA-Z]{3}}.example.com",
+		Config{SubtreeHandler: true},
 	)
+
+	host.SetSharedData(true)
+	hosts = append(hosts, host)
 
 	hosts = append(hosts, NewDormantHost("https://example.com"))
 
@@ -79,13 +83,13 @@ func requestHandlerHosts(t *testing.T) []*Host {
 		NewDormantHostUsingConfig("https://example.com/", Config{SubtreeHandler: true}),
 	)
 
-	hosts = append(
-		hosts,
-		NewDormantHostUsingConfig(
-			"https://{sub1:[a-zA-Z]{3}}.{sub2:[a-zA-Z]{3}}.example.com",
-			Config{RedirectInsecureRequest: true},
-		),
+	host = NewDormantHostUsingConfig(
+		"https://{sub1:[a-zA-Z]{3}}.{sub2:[a-zA-Z]{3}}.example.com",
+		Config{RedirectInsecureRequest: true},
 	)
+
+	host.SetSharedData(true)
+	hosts = append(hosts, host)
 
 	hosts = append(
 		hosts,

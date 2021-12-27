@@ -38,7 +38,7 @@ func (ro *Router) parent() _Parent {
 }
 
 // -------------------------
-// 73 612 16 76
+
 // _Resource uses the URL template to find an existing host or resource, or to
 // create a new one. If the URL template contains a host or prefix path segments
 // that doesn't exist, the method creates it too.
@@ -514,7 +514,7 @@ func (ro *Router) WrapURLHandlerOf(
 }
 
 // -------------------------
-// #45lrbmovk2
+
 // hostWithTemplate returns the host with the template if it exists, otherwise
 // it returns nil. The template's name and content must be the same as the name
 // and content of the host's template. If the templates are similar but have
@@ -1565,6 +1565,9 @@ func (ro *Router) passRequest(
 		host = r.Host
 	}
 
+	var rd *_RoutingData
+	c, rd = contextWithRoutingData(c, r.URL, nil)
+
 	if host != "" {
 		if strings.LastIndexByte(host, ':') >= 0 {
 			var h, _, err = net.SplitHostPort(host)
@@ -1574,62 +1577,37 @@ func (ro *Router) passRequest(
 		}
 
 		if h := ro.staticHosts[host]; h != nil {
-			var err error
-			c, _, err = contextWithRoutingData(c, r.URL, h.derived)
-			if err != nil {
-				http.Error(
-					w,
-					http.StatusText(http.StatusInternalServerError),
-					http.StatusInternalServerError,
-				)
-
-				return
-			}
-
+			rd._r = h.derived
 			h.segmentHandler.ServeHTTP(c, w, r)
+			putContextInThePool(c)
 			return
 		}
 
 		for _, ph := range ro.patternHosts {
-			if matches, values := ph.Template().Match(host, nil); matches {
-				var rd *_RoutingData
-				var err error
-				c, rd, err = contextWithRoutingData(c, r.URL, ph.derived)
-				if err != nil {
-					http.Error(
-						w,
-						http.StatusText(http.StatusInternalServerError),
-						http.StatusInternalServerError,
-					)
+			var matched bool
+			matched, rd.urlValues = ph.Template().Match(
+				host,
+				rd.urlValues,
+			)
 
-					return
-				}
-
-				rd.urlValues = values
+			if matched {
+				rd._r = ph.derived
 				ph.segmentHandler.ServeHTTP(c, w, r)
+				putContextInThePool(c)
 				return
 			}
 		}
 	}
 
 	if ro.r != nil && r.URL.Path != "" {
-		var rd *_RoutingData
-		var err error
-		c, rd, err = contextWithRoutingData(c, r.URL, ro.r.derived)
-		if err != nil {
-			http.Error(
-				w,
-				http.StatusText(http.StatusInternalServerError),
-				http.StatusInternalServerError,
-			)
-
-			return
-		}
-
 		rd.nextPathSegment() // Returns '/'.
+
+		rd._r = ro.r.derived
 		ro.r.segmentHandler.ServeHTTP(c, w, r)
+		putContextInThePool(c)
 		return
 	}
 
 	notFoundResourceHandler.ServeHTTP(c, w, r)
+	putContextInThePool(c)
 }
