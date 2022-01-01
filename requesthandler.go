@@ -46,6 +46,28 @@ func (hf HandlerFunc) ServeHTTP(
 	hf(c, w, r)
 }
 
+// Hr converts an http.Handler to a Handler.
+func Hr(h http.Handler) Handler {
+	return HandlerFunc(
+		func(c context.Context, w http.ResponseWriter, r *http.Request) {
+			r = r.WithContext(c)
+			h.ServeHTTP(w, r)
+		},
+	)
+}
+
+// HrFn converts an http.HandlerFunc to a HandlerFunc.
+func HrFn(hf http.HandlerFunc) HandlerFunc {
+	return HandlerFunc(
+		func(c context.Context, w http.ResponseWriter, r *http.Request) {
+			r = r.WithContext(c)
+			hf(w, r)
+		},
+	)
+}
+
+// -------------------------
+
 // Impl is used to accept any type that has methods to handle HTTP requests.
 // Methods must have the signature of the HandlerFunc and start with the
 // 'Handle' prefix. The remaining part of any such method's name is considered
@@ -447,7 +469,7 @@ func (rhb *_RequestHandlerBase) ServeHTTP(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
-	rhb.handleRequest(nil, w, r)
+	rhb.handleRequest(r.Context(), w, r)
 }
 
 // --------------------------------------------------

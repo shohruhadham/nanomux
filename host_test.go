@@ -763,52 +763,48 @@ func TestHostBase_ServeHTTP(t *testing.T) {
 		})
 	}
 
-	var customMethodMw = func(next Handler) Handler {
-		return HandlerFunc(
-			func(
-				c context.Context,
-				w http.ResponseWriter,
-				r *http.Request,
-			) {
-				var strb strings.Builder
-				strb.WriteString("middleware ")
-				strb.WriteString(r.Method)
+	var customMethodMw = func(next Handler) HandlerFunc {
+		return func(
+			c context.Context,
+			w http.ResponseWriter,
+			r *http.Request,
+		) {
+			var strb strings.Builder
+			strb.WriteString("middleware ")
+			strb.WriteString(r.Method)
+			strb.WriteByte(' ')
+			strb.WriteString(r.URL.String())
+
+			var extra, ok = c.Value(RemainingPathKey).(string)
+			if ok && extra != "" {
 				strb.WriteByte(' ')
-				strb.WriteString(r.URL.String())
+				strb.WriteString(extra)
+			}
 
-				var extra, ok = c.Value(RemainingPathKey).(string)
-				if ok && extra != "" {
-					strb.WriteByte(' ')
-					strb.WriteString(extra)
-				}
-
-				w.Write([]byte(strb.String()))
-			},
-		)
+			w.Write([]byte(strb.String()))
+		}
 	}
 
-	var notAlloweddMethodsMw = func(next Handler) Handler {
-		return HandlerFunc(
-			func(
-				c context.Context,
-				w http.ResponseWriter,
-				r *http.Request,
-			) {
-				var strb strings.Builder
-				strb.WriteString("middleware of the not allowed ")
-				strb.WriteString(r.Method)
+	var notAlloweddMethodsMw = func(next Handler) HandlerFunc {
+		return func(
+			c context.Context,
+			w http.ResponseWriter,
+			r *http.Request,
+		) {
+			var strb strings.Builder
+			strb.WriteString("middleware of the not allowed ")
+			strb.WriteString(r.Method)
+			strb.WriteByte(' ')
+			strb.WriteString(r.URL.String())
+
+			var extra, ok = c.Value(RemainingPathKey).(string)
+			if ok && extra != "" {
 				strb.WriteByte(' ')
-				strb.WriteString(r.URL.String())
+				strb.WriteString(extra)
+			}
 
-				var extra, ok = c.Value(RemainingPathKey).(string)
-				if ok && extra != "" {
-					strb.WriteByte(' ')
-					strb.WriteString(extra)
-				}
-
-				w.Write([]byte(strb.String()))
-			},
-		)
+			w.Write([]byte(strb.String()))
+		}
 	}
 
 	var ro = NewRouter()
