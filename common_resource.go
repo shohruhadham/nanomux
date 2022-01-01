@@ -261,7 +261,7 @@ func (cfs _ConfigFlags) asConfig() Config {
 type _Resource interface {
 	Name() string
 	Template() *Template
-	URL(URLValues) (*url.URL, error)
+	URL(HostPathValues) (*url.URL, error)
 
 	Router() *Router
 
@@ -416,7 +416,7 @@ func (rb *_ResourceBase) Template() *Template {
 }
 
 // URL returns the resource's URL with values applied to it.
-func (rb *_ResourceBase) URL(values URLValues) (*url.URL, error) {
+func (rb *_ResourceBase) URL(values HostPathValues) (*url.URL, error) {
 	var url, err = resourceURL(rb.derived, values)
 	if err != nil {
 		return nil, newError("<- %w", err)
@@ -2266,7 +2266,11 @@ func (rb *_ResourceBase) passRequestToChildResource(
 
 		for _, pr := range rb.patternResources {
 			var matched bool
-			matched, rd.urlValues = pr.Template().Match(ps, rd.urlValues)
+			matched, rd.hostPathValues = pr.Template().Match(
+				ps,
+				rd.hostPathValues,
+			)
+
 			if matched {
 				rd._r = pr.derived
 				pr.segmentHandler.ServeHTTP(c, w, r)
@@ -2277,9 +2281,9 @@ func (rb *_ResourceBase) passRequestToChildResource(
 		}
 
 		if rb.wildcardResource != nil {
-			_, rd.urlValues = rb.wildcardResource.Template().Match(
+			_, rd.hostPathValues = rb.wildcardResource.Template().Match(
 				ps,
-				rd.urlValues,
+				rd.hostPathValues,
 			)
 
 			rd._r = rb.wildcardResource.derived

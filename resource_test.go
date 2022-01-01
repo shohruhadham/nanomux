@@ -104,14 +104,14 @@ func TestResourceBase_URL(t *testing.T) {
 	var cases = []struct {
 		name      string
 		rb        _Resource
-		urlValues URLValues
+		urlValues HostPathValues
 		want      *url.URL
 		wantErr   bool
 	}{
 		{
 			"host",
 			h,
-			URLValues{{"info", "forecast"}},
+			HostPathValues{{"info", "forecast"}},
 			&url.URL{
 				Scheme: "https",
 				Host:   "forecast.example.com",
@@ -121,7 +121,7 @@ func TestResourceBase_URL(t *testing.T) {
 		{
 			"host resource",
 			r1,
-			URLValues{
+			HostPathValues{
 				{"info", "forecast"},
 				{"country", "Norway"},
 			},
@@ -135,7 +135,7 @@ func TestResourceBase_URL(t *testing.T) {
 		{
 			"host resource resource",
 			r2,
-			URLValues{
+			HostPathValues{
 				{"info", "forecast"},
 				{"country", "Norway"},
 				{"city", "Oslo"},
@@ -150,7 +150,7 @@ func TestResourceBase_URL(t *testing.T) {
 		{
 			"resource",
 			r3,
-			URLValues{{"info", "statistics"}},
+			HostPathValues{{"info", "statistics"}},
 			&url.URL{
 				Scheme: "http",
 				Path:   "/statistics",
@@ -160,7 +160,7 @@ func TestResourceBase_URL(t *testing.T) {
 		{
 			"resource resource",
 			r4,
-			URLValues{{"info", "statistics"}},
+			HostPathValues{{"info", "statistics"}},
 			&url.URL{
 				Scheme: "http",
 				Path:   "/statistics/population",
@@ -170,7 +170,7 @@ func TestResourceBase_URL(t *testing.T) {
 		{
 			"resource resource resource",
 			r5,
-			URLValues{
+			HostPathValues{
 				{"info", "statistics"},
 				{"country", "Norway"},
 			},
@@ -4493,7 +4493,7 @@ func addRequestHandlerSubresources(t *testing.T, r _Resource, i, limit int) {
 		func(c context.Context, w http.ResponseWriter, r *http.Request) {
 			var hasValue, ok = c.Value(SharedDataKey).(bool)
 			if ok && hasValue {
-				var urlValues, ok = c.Value(URLValuesKey).(URLValues)
+				var urlValues, ok = c.Value(HostPathValuesKey).(HostPathValues)
 				if ok && urlValues != nil {
 					var gotValue bool
 					for _, pair := range urlValues {

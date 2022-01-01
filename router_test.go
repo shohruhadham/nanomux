@@ -4328,6 +4328,40 @@ func TestRouter_ServeHTTP(t *testing.T) {
 	}
 }
 
+// --------------------------------------------------
+
+func TestMwFn(t *testing.T) {
+	var strb strings.Builder
+	var h = func(context.Context, http.ResponseWriter, *http.Request) {
+		strb.WriteByte('a')
+	}
+
+	var mw = func(next http.Handler) http.Handler {
+		return http.HandlerFunc(
+			func(w http.ResponseWriter, r *http.Request) {
+				strb.WriteByte('b')
+				next.ServeHTTP(w, r)
+			},
+		)
+	}
+
+	var mwf = MwFn(mw)
+	h = mwf(HandlerFunc(h))
+
+	var w = httptest.NewRecorder()
+	var r = httptest.NewRequest("GET", "/", nil)
+
+	h(r.Context(), w, r)
+	if gotStr := strb.String(); gotStr != "ba" {
+		t.Fatalf(
+			"MwFn failed to convert middleware to the MiddlewareFunc, gotStr = %q, want \"ba\"",
+			gotStr,
+		)
+	}
+}
+
+// --------------------------------------------------
+
 func getStaticRouter() (*Router, *http.Request, error) {
 	var (
 		ro   = NewRouter()

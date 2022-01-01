@@ -1585,9 +1585,9 @@ func (ro *Router) passRequest(
 
 		for _, ph := range ro.patternHosts {
 			var matched bool
-			matched, rd.urlValues = ph.Template().Match(
+			matched, rd.hostPathValues = ph.Template().Match(
 				host,
-				rd.urlValues,
+				rd.hostPathValues,
 			)
 
 			if matched {

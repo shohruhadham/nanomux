@@ -333,7 +333,11 @@ func (hb *Host) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		var matched bool
-		matched, rd.urlValues = hb.Template().Match(host, rd.urlValues)
+		matched, rd.hostPathValues = hb.Template().Match(
+			host,
+			rd.hostPathValues,
+		)
+
 		if matched {
 			hb.segmentHandler.ServeHTTP(c, w, r)
 			putContextInThePool(c)
