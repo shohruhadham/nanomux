@@ -103,7 +103,7 @@ func TestResourceBase_URL(t *testing.T) {
 
 	var cases = []struct {
 		name      string
-		rb        _Resource
+		rb        _Responder
 		urlValues HostPathValues
 		want      *url.URL
 		wantErr   bool
@@ -758,7 +758,7 @@ func TestResourceBase_validateURL(t *testing.T) {
 
 	var cases = []struct {
 		name                    string
-		r                       _Resource
+		r                       _Responder
 		hTmplStr, pathTmplStr   string
 		wantRemainingPsTmplStrs string
 		wantErr                 bool
@@ -1392,7 +1392,7 @@ func TestResourceBase_pathSegmentResources(t *testing.T) {
 	var r2 = NewDormantResource("r-1")
 	r1.registerResource(r2)
 
-	var oldLast _Resource
+	var oldLast _Responder
 	pathTmplStrs += "/"
 	oldLast, newFirst, newLast, tslash, err = parent.pathSegmentResources(
 		pathTmplStrs,
@@ -4483,7 +4483,7 @@ func TestResourceBase_requestHandlerBase(t *testing.T) {
 	}
 }
 
-func addRequestHandlerSubresources(t *testing.T, r _Resource, i, limit int) {
+func addRequestHandlerSubresources(t *testing.T, r _Responder, i, limit int) {
 	t.Helper()
 
 	var rr *Resource
@@ -4491,7 +4491,7 @@ func addRequestHandlerSubresources(t *testing.T, r _Resource, i, limit int) {
 
 	if err = r.SetHandlerFor("get post custom", HandlerFunc(
 		func(c context.Context, w http.ResponseWriter, r *http.Request) {
-			var hasValue, ok = c.Value(SharedDataKey).(bool)
+			var hasValue, ok = c.Value(ResponderSharedDataKey).(bool)
 			if ok && hasValue {
 				var urlValues, ok = c.Value(HostPathValuesKey).(HostPathValues)
 				if ok && urlValues != nil {
@@ -4683,7 +4683,7 @@ func addRequestHandlerSubresources(t *testing.T, r _Resource, i, limit int) {
 
 type _RequestRoutingCase struct {
 	name           string // sr00, pr00, wr0
-	_resource      _Resource
+	_resource      _Responder
 	reqMethod      string
 	reqURLStr      string
 	expectRedirect bool
@@ -4695,7 +4695,7 @@ func checkRequestRouting(
 	t *testing.T,
 	c *_RequestRoutingCase,
 	result *http.Response,
-	resource _Resource,
+	resource _Responder,
 ) {
 	t.Helper()
 

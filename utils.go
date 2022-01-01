@@ -296,15 +296,15 @@ func splitPathSegments(path string) (
 	return pss, false, psi.pathHasTrailingSlash(), nil
 }
 
-// resourceURL returns the resource's URL with the URL values applied.
-func resourceURL(r _Resource, hpVs HostPathValues) (*url.URL, error) {
+// responderURL returns the responder's URL with the URL values applied.
+func responderURL(_r _Responder, hpVs HostPathValues) (*url.URL, error) {
 	var (
 		host string
 		pss  []string
 	)
 
 loop:
-	for p := _Parent(r); p != nil; p = p.parent() {
+	for p := _Parent(_r); p != nil; p = p.parent() {
 		switch p := p.(type) {
 		case *Resource:
 			if p.IsRoot() {
@@ -346,7 +346,7 @@ loop:
 		strb.WriteString(pss[i])
 	}
 
-	switch rr := r.(type) {
+	switch rr := _r.(type) {
 	case *Resource:
 		if rr.IsSubtreeHandler() && !rr.IsRoot() {
 			strb.WriteByte('/')
@@ -358,7 +358,7 @@ loop:
 	}
 
 	var scheme = "http"
-	if r.IsSecure() {
+	if _r.IsSecure() {
 		scheme = "https"
 	}
 
@@ -385,7 +385,7 @@ type _RoutingData struct {
 	handled       bool
 
 	hostPathValues HostPathValues
-	_r             _Resource
+	_r             _Responder
 }
 
 // -------------------------
@@ -395,7 +395,7 @@ type _RoutingData struct {
 func contextWithRoutingData(
 	c context.Context,
 	url *url.URL,
-	_r _Resource,
+	_r _Responder,
 ) (context.Context, *_RoutingData) {
 	var _c = getContextFromThePool(c, url, _r)
 	var tmpPath = url.Path
@@ -596,8 +596,8 @@ const (
 	routingDataKey _ContextValueKey = iota
 	hostPathValuesKey
 	remainingPathKey
-	sharedDataKey
-	resourceKey
+	responderSharedDataKey
+	responderKey
 	implKey
 )
 
@@ -612,13 +612,13 @@ var (
 	// below it there is no resource that can match the next path segment.
 	RemainingPathKey interface{} = remainingPathKey
 
-	// SharedDataKey can be used to retrieve the shared data of the host or
-	// resource that is handling the request.
-	SharedDataKey interface{} = sharedDataKey
+	// ResponderSharedDataKey can be used to retrieve the shared data of the
+	// host or resource that is currently handling the request.
+	ResponderSharedDataKey interface{} = responderSharedDataKey
 
-	// ResourceKey can be used to retrieve a reference to the host or resource
-	// that is handling the request.
-	ResourceKey interface{} = resourceKey
+	// ResponderKey can be used to retrieve the host or resource that is
+	// currently handling the request.
+	ResponderKey interface{} = responderKey
 
 	// ImplKey can be used to retrieve the implementation of the host or
 	// resource. If the host or resource wasn't created with the Impl or the
@@ -655,9 +655,9 @@ func (c *_Context) Value(key interface{}) interface{} {
 			return c.rd.hostPathValues
 		case remainingPathKey:
 			return c.rd.remainingPath()
-		case sharedDataKey:
+		case responderSharedDataKey:
 			return c.rd._r.SharedData()
-		case resourceKey:
+		case responderKey:
 			return c.rd._r
 		case implKey:
 			return c.rd._r.Implementation()
@@ -699,7 +699,7 @@ func putContextInThePool(c context.Context) {
 func getContextFromThePool(
 	c context.Context,
 	url *url.URL,
-	_r _Resource,
+	_r _Responder,
 ) *_Context {
 	var _c = contextPool.Get().(*_Context)
 	_c.original = c
@@ -730,14 +730,14 @@ func newError(description string, args ...interface{}) error {
 
 // traverseAndCall traverses all the _Resources in the passed _Resource trees
 // and calls the f on each _Resource.
-func traverseAndCall(rs []_Resource, f func(_Resource) error) error {
+func traverseAndCall(rs []_Responder, f func(_Responder) error) error {
 	type node struct {
-		rs   []_Resource
+		rs   []_Responder
 		next *node
 	}
 
 	var (
-		crs, irs []_Resource
+		crs, irs []_Responder
 		lcrs     int
 		err      error
 	)

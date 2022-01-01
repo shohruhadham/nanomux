@@ -45,7 +45,7 @@ func MwFn(mw func(http.Handler) http.Handler) MiddlewareFunc {
 // with middlewares in their passed order.
 func wrapEveryHandlerOf(
 	methods string,
-	rs []_Resource,
+	_rs []_Responder,
 	mwfs ...MiddlewareFunc,
 ) error {
 	var ms = toUpperSplitByCommaSpace(methods)
@@ -54,8 +54,8 @@ func wrapEveryHandlerOf(
 	}
 
 	var err = traverseAndCall(
-		rs,
-		func(_r _Resource) error {
+		_rs,
+		func(_r _Responder) error {
 			if _r.canHandleRequest() {
 				var rhb = _r.requestHandlerBase()
 				for _, m := range ms {

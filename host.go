@@ -15,7 +15,7 @@ import (
 
 // Host represents the host as a resource.
 type Host struct {
-	_ResourceBase
+	_ResponderBase
 }
 
 // createDummyHost creates an unconfigured and dormant host.
