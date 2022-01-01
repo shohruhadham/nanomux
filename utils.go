@@ -596,9 +596,11 @@ const (
 	routingDataKey _ContextValueKey = iota
 	hostPathValuesKey
 	remainingPathKey
-	responderSharedDataKey
 	responderKey
-	implKey
+	responderSharedDataKey
+	responderImplKey
+	hostKey
+	currentResourceKey
 )
 
 var (
@@ -616,14 +618,19 @@ var (
 	// host or resource that is currently handling the request.
 	ResponderSharedDataKey interface{} = responderSharedDataKey
 
-	// ResponderKey can be used to retrieve the host or resource that is
-	// currently handling the request.
-	ResponderKey interface{} = responderKey
-
-	// ImplKey can be used to retrieve the implementation of the host or
-	// resource. If the host or resource wasn't created with the Impl or the
+	// ResponderImplKey can be used to retrieve the implementation of the host
+	// or resource. If the host or resource wasn't created with the Impl or the
 	// Impl wasn't set, the returned value will be nil.
-	ImplKey interface{} = implKey
+	ResponderImplKey interface{} = responderImplKey
+
+	// HostKey can be used to retrieve the responder *Host of the request's URL.
+	// If there is no responder *Host, nil is returned.
+	HostKey interface{} = hostKey
+
+	// CurrentResourceKey can be used to retrieve the current *Resource that is
+	// handling the request. If the request is being handled by a host, nil is
+	// returned. In that case, the HostKey must be used.
+	CurrentResourceKey interface{} = currentResourceKey
 )
 
 // -------------------------
@@ -655,18 +662,79 @@ func (c *_Context) Value(key interface{}) interface{} {
 			return c.rd.hostPathValues
 		case remainingPathKey:
 			return c.rd.remainingPath()
-		case responderSharedDataKey:
-			return c.rd._r.SharedData()
 		case responderKey:
 			return c.rd._r
-		case implKey:
+		case responderSharedDataKey:
+			return c.rd._r.SharedData()
+		case responderImplKey:
 			return c.rd._r.Implementation()
+		case hostKey:
+			switch _r := c.rd._r.(type) {
+			case *Host:
+				return _r
+			case *Resource:
+				return _r.Host()
+			default:
+				return nil // TODO: Consider panic.
+			}
+		case currentResourceKey:
+			switch _r := c.rd._r.(type) {
+			case *Host:
+				return nil
+			case *Resource:
+				return _r
+			default:
+				return nil // TODO: Consider panic.
+			}
 		default:
 			return nil
 		}
 	}
 
 	return c.original.Value(key)
+}
+
+// -------------------------
+
+// GetHostPathValues returns the HostPathValues of the request's URL from the
+// context that was passed to the handler.
+func GetHostPathValues(c context.Context) HostPathValues {
+	var hpVs, _ = c.Value(HostPathValuesKey).(HostPathValues)
+	return hpVs
+}
+
+// GetRemainingPath returns the remaining path of the request's URL that's below
+// the current responder's segment.
+func GetRemainingPath(c context.Context) string {
+	var remainingPath, _ = c.Value(RemainingPathKey).(string)
+	return remainingPath
+}
+
+// GetResponderSharedData returns the shared data of the host or resource that
+// is currently handling the request.
+func GetResponderSharedData(c context.Context) interface{} {
+	return c.Value(ResponderSharedDataKey)
+}
+
+// GetResponderImpl returns the implementation of the host or resource that
+// is currently handling the request.
+func GetResponderImpl(c context.Context) Impl {
+	return c.Value(ResponderImplKey)
+}
+
+// GetHost returns the responder *Host of the request's URL. If there is no
+// responder *Host, nil is returned.
+func GetHost(c context.Context) *Host {
+	var h, _ = c.Value(HostKey).(*Host)
+	return h
+}
+
+// GetCurrentResource returns the current *Resource that is handling the
+// request. If the request is being handled by a host, nil is returned. In that
+// case, GetHost must be used.
+func GetCurrentResource(c context.Context) *Resource {
+	var r, _ = c.Value(CurrentResourceKey).(*Resource)
+	return r
 }
 
 // -------------------------
