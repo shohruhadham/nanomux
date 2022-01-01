@@ -969,29 +969,25 @@ func TestRouter_WrapURLSegmentHandler(t *testing.T) {
 
 	var strb strings.Builder
 	var mwfs = []MiddlewareFunc{
-		func(handler Handler) Handler {
-			return HandlerFunc(
-				func(
-					c context.Context,
-					w http.ResponseWriter,
-					r *http.Request,
-				) {
-					strb.WriteByte('b')
-					handler.ServeHTTP(c, w, r)
-				},
-			)
+		func(handler Handler) HandlerFunc {
+			return func(
+				c context.Context,
+				w http.ResponseWriter,
+				r *http.Request,
+			) {
+				strb.WriteByte('b')
+				handler.ServeHTTP(c, w, r)
+			}
 		},
-		func(handler Handler) Handler {
-			return HandlerFunc(
-				func(
-					c context.Context,
-					w http.ResponseWriter,
-					r *http.Request,
-				) {
-					strb.WriteByte('a')
-					handler.ServeHTTP(c, w, r)
-				},
-			)
+		func(handler Handler) HandlerFunc {
+			return func(
+				c context.Context,
+				w http.ResponseWriter,
+				r *http.Request,
+			) {
+				strb.WriteByte('a')
+				handler.ServeHTTP(c, w, r)
+			}
 		},
 	}
 
@@ -1092,29 +1088,25 @@ func TestRouter_WrapURLRequestHandler(t *testing.T) {
 
 	var strb strings.Builder
 	var mwfs = []MiddlewareFunc{
-		func(handler Handler) Handler {
-			return HandlerFunc(
-				func(
-					c context.Context,
-					w http.ResponseWriter,
-					r *http.Request,
-				) {
-					strb.WriteByte('b')
-					handler.ServeHTTP(c, w, r)
-				},
-			)
+		func(handler Handler) HandlerFunc {
+			return func(
+				c context.Context,
+				w http.ResponseWriter,
+				r *http.Request,
+			) {
+				strb.WriteByte('b')
+				handler.ServeHTTP(c, w, r)
+			}
 		},
-		func(handler Handler) Handler {
-			return HandlerFunc(
-				func(
-					c context.Context,
-					w http.ResponseWriter,
-					r *http.Request,
-				) {
-					strb.WriteByte('a')
-					handler.ServeHTTP(c, w, r)
-				},
-			)
+		func(handler Handler) HandlerFunc {
+			return func(
+				c context.Context,
+				w http.ResponseWriter,
+				r *http.Request,
+			) {
+				strb.WriteByte('a')
+				handler.ServeHTTP(c, w, r)
+			}
 		},
 	}
 
@@ -1225,29 +1217,25 @@ func TestRouter_WrapURLHandlerOf(t *testing.T) {
 		)
 
 		mwfs = []MiddlewareFunc{
-			func(h Handler) Handler {
-				return HandlerFunc(
-					func(
-						c context.Context,
-						w http.ResponseWriter,
-						r *http.Request,
-					) {
-						strb.WriteByte('2')
-						h.ServeHTTP(c, w, r)
-					},
-				)
+			func(h Handler) HandlerFunc {
+				return func(
+					c context.Context,
+					w http.ResponseWriter,
+					r *http.Request,
+				) {
+					strb.WriteByte('2')
+					h.ServeHTTP(c, w, r)
+				}
 			},
-			func(h Handler) Handler {
-				return HandlerFunc(
-					func(
-						c context.Context,
-						w http.ResponseWriter,
-						r *http.Request,
-					) {
-						strb.WriteByte('3')
-						h.ServeHTTP(c, w, r)
-					},
-				)
+			func(h Handler) HandlerFunc {
+				return func(
+					c context.Context,
+					w http.ResponseWriter,
+					r *http.Request,
+				) {
+					strb.WriteByte('3')
+					h.ServeHTTP(c, w, r)
+				}
 			},
 		}
 	)
@@ -3193,29 +3181,25 @@ func TestRouter_WrapWith(t *testing.T) {
 
 	var err = ro.WrapSegmentHandler(
 		[]MiddlewareFunc{
-			func(next Handler) Handler {
-				return HandlerFunc(
-					func(
-						c context.Context,
-						w http.ResponseWriter,
-						r *http.Request,
-					) {
-						strb.WriteByte('B')
-						next.ServeHTTP(c, w, r)
-					},
-				)
+			func(next Handler) HandlerFunc {
+				return func(
+					c context.Context,
+					w http.ResponseWriter,
+					r *http.Request,
+				) {
+					strb.WriteByte('B')
+					next.ServeHTTP(c, w, r)
+				}
 			},
-			func(next Handler) Handler {
-				return HandlerFunc(
-					func(
-						c context.Context,
-						w http.ResponseWriter,
-						r *http.Request,
-					) {
-						strb.WriteByte('C')
-						next.ServeHTTP(c, w, r)
-					},
-				)
+			func(next Handler) HandlerFunc {
+				return func(
+					c context.Context,
+					w http.ResponseWriter,
+					r *http.Request,
+				) {
+					strb.WriteByte('C')
+					next.ServeHTTP(c, w, r)
+				}
 			},
 		}...,
 	)
@@ -3233,17 +3217,15 @@ func TestRouter_WrapWith(t *testing.T) {
 
 	err = ro.WrapSegmentHandler(
 		[]MiddlewareFunc{
-			func(next Handler) Handler {
-				return HandlerFunc(
-					func(
-						c context.Context,
-						w http.ResponseWriter,
-						r *http.Request,
-					) {
-						strb.WriteByte('D')
-						next.ServeHTTP(c, w, r)
-					},
-				)
+			func(next Handler) HandlerFunc {
+				return func(
+					c context.Context,
+					w http.ResponseWriter,
+					r *http.Request,
+				) {
+					strb.WriteByte('D')
+					next.ServeHTTP(c, w, r)
+				}
 			},
 		}...,
 	)
@@ -3406,29 +3388,25 @@ func TestRouter_WrapAllSegmentHandlers(t *testing.T) {
 
 	var strb = strings.Builder{}
 	var mwfs = []MiddlewareFunc{
-		func(handler Handler) Handler {
-			return HandlerFunc(
-				func(
-					c context.Context,
-					w http.ResponseWriter,
-					r *http.Request,
-				) {
-					strb.WriteByte('B')
-					handler.ServeHTTP(c, w, r)
-				},
-			)
+		func(handler Handler) HandlerFunc {
+			return func(
+				c context.Context,
+				w http.ResponseWriter,
+				r *http.Request,
+			) {
+				strb.WriteByte('B')
+				handler.ServeHTTP(c, w, r)
+			}
 		},
-		func(handler Handler) Handler {
-			return HandlerFunc(
-				func(
-					c context.Context,
-					w http.ResponseWriter,
-					r *http.Request,
-				) {
-					strb.WriteByte('A')
-					handler.ServeHTTP(c, w, r)
-				},
-			)
+		func(handler Handler) HandlerFunc {
+			return func(
+				c context.Context,
+				w http.ResponseWriter,
+				r *http.Request,
+			) {
+				strb.WriteByte('A')
+				handler.ServeHTTP(c, w, r)
+			}
 		},
 	}
 
@@ -3562,29 +3540,25 @@ func TestRouter_WrapAllRequestHandlers(t *testing.T) {
 
 	var strb = strings.Builder{}
 	var mwfs = []MiddlewareFunc{
-		func(handler Handler) Handler {
-			return HandlerFunc(
-				func(
-					c context.Context,
-					w http.ResponseWriter,
-					r *http.Request,
-				) {
-					strb.WriteByte('B')
-					handler.ServeHTTP(c, w, r)
-				},
-			)
+		func(handler Handler) HandlerFunc {
+			return func(
+				c context.Context,
+				w http.ResponseWriter,
+				r *http.Request,
+			) {
+				strb.WriteByte('B')
+				handler.ServeHTTP(c, w, r)
+			}
 		},
-		func(handler Handler) Handler {
-			return HandlerFunc(
-				func(
-					c context.Context,
-					w http.ResponseWriter,
-					r *http.Request,
-				) {
-					strb.WriteByte('A')
-					handler.ServeHTTP(c, w, r)
-				},
-			)
+		func(handler Handler) HandlerFunc {
+			return func(
+				c context.Context,
+				w http.ResponseWriter,
+				r *http.Request,
+			) {
+				strb.WriteByte('A')
+				handler.ServeHTTP(c, w, r)
+			}
 		},
 	}
 
@@ -3686,29 +3660,25 @@ func TestRouter_WrapAllHandlersOf(t *testing.T) {
 
 	var strb = strings.Builder{}
 	var mwfs = []MiddlewareFunc{
-		func(handler Handler) Handler {
-			return HandlerFunc(
-				func(
-					c context.Context,
-					w http.ResponseWriter,
-					r *http.Request,
-				) {
-					strb.WriteByte('B')
-					handler.ServeHTTP(c, w, r)
-				},
-			)
+		func(handler Handler) HandlerFunc {
+			return func(
+				c context.Context,
+				w http.ResponseWriter,
+				r *http.Request,
+			) {
+				strb.WriteByte('B')
+				handler.ServeHTTP(c, w, r)
+			}
 		},
-		func(handler Handler) Handler {
-			return HandlerFunc(
-				func(
-					c context.Context,
-					w http.ResponseWriter,
-					r *http.Request,
-				) {
-					strb.WriteByte('A')
-					handler.ServeHTTP(c, w, r)
-				},
-			)
+		func(handler Handler) HandlerFunc {
+			return func(
+				c context.Context,
+				w http.ResponseWriter,
+				r *http.Request,
+			) {
+				strb.WriteByte('A')
+				handler.ServeHTTP(c, w, r)
+			}
 		},
 	}
 
@@ -4334,17 +4304,15 @@ func TestRouter_ServeHTTP(t *testing.T) {
 	}
 
 	err = WrapHandlerOfNotFoundResource(
-		func(next Handler) Handler {
-			return HandlerFunc(
-				func(
-					c context.Context,
-					w http.ResponseWriter,
-					r *http.Request,
-				) {
-					strb.Reset()
-					strb.WriteString("middleware of not found resource")
-				},
-			)
+		func(next Handler) HandlerFunc {
+			return func(
+				c context.Context,
+				w http.ResponseWriter,
+				r *http.Request,
+			) {
+				strb.Reset()
+				strb.WriteString("middleware of not found resource")
+			}
 		},
 	)
 

@@ -367,7 +367,8 @@ loop:
 
 // --------------------------------------------------
 
-// type URLValues map[string]string
+// URLValues is a slice of the host and path segment values.
+// It does not include query values.
 type URLValues = TemplateValues
 
 // --------------------------------------------------
@@ -601,8 +602,8 @@ const (
 )
 
 var (
-	// URLValuesKey can be used to retrieve the path values from the request's
-	// context.
+	// URLValuesKey can be used to retrieve the host and path values from
+	// the context.
 	URLValuesKey interface{} = urlValuesKey
 
 	// RemainingPathKey can be used to get the remaining path of the
@@ -627,7 +628,7 @@ var (
 
 // -------------------------
 
-// _Context is used as a request's context.
+// _Context is passed to request handlers.
 type _Context struct {
 	original context.Context
 	rd       _RoutingData
