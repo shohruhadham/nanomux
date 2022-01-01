@@ -38,7 +38,7 @@ func TestRouter__Resource(t *testing.T) {
 	var cases = []struct {
 		name    string
 		urlTmpl string
-		wantR   _Resource
+		wantR   _Responder
 		wantErr bool
 	}{
 		{"h0 #1", "http://example.com", h0, false},
@@ -135,7 +135,7 @@ func TestRouter__Resource(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			var _r, err = ro._Resource(c.urlTmpl)
+			var _r, err = ro._Responder(c.urlTmpl)
 			if (err != nil) != c.wantErr {
 				t.Fatalf(
 					"Router.resource() err = %v, wantErr = %t",
@@ -172,7 +172,7 @@ func TestRouter_registered_Resource(t *testing.T) {
 	var cases = []struct {
 		name     string
 		urlTmpl  string
-		wantR    _Resource
+		wantR    _Responder
 		wantHost bool
 		wantErr  bool
 	}{
@@ -219,7 +219,7 @@ func TestRouter_registered_Resource(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			var _r, _rIsHost, err = ro.registered_Resource(c.urlTmpl)
+			var _r, _rIsHost, err = ro.registered_Responder(c.urlTmpl)
 			if (err != nil) != c.wantErr {
 				t.Fatalf(
 					"Router.registeredResource() err = %v, wantErr = %t",
@@ -284,11 +284,11 @@ func TestRouter_ConfigureURL(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			var _r _Resource
+			var _r _Responder
 			var err error
 
 			if !c.wantErr {
-				_r, err = ro._Resource(c.url)
+				_r, err = ro._Responder(c.url)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -365,7 +365,7 @@ func TestRouter_URLConfig(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			var err error
 			if !c.wantErr {
-				_, err = ro._Resource(c.url)
+				_, err = ro._Responder(c.url)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -510,8 +510,8 @@ func TestRouter_SetImplementationAt(t *testing.T) {
 			}
 
 			if c.urlToCheck != "" {
-				var _r _Resource
-				_r, _, err = ro.registered_Resource(c.urlToCheck)
+				var _r _Responder
+				_r, _, err = ro.registered_Responder(c.urlToCheck)
 				if err != nil {
 					return
 				}
@@ -693,8 +693,8 @@ func TestRouter_SetURLHandlerFor(t *testing.T) {
 			}
 
 			if c.urlToCheck != "" {
-				var _r _Resource
-				_r, _, err = ro.registered_Resource(c.urlToCheck)
+				var _r _Responder
+				_r, _, err = ro.registered_Responder(c.urlToCheck)
 				if err != nil {
 					return
 				}
@@ -820,8 +820,8 @@ func TestRouter_SetURLHandlerFuncFor(t *testing.T) {
 			}
 
 			if c.urlToCheck != "" {
-				var _r _Resource
-				_r, _, err = ro.registered_Resource(c.urlToCheck)
+				var _r _Responder
+				_r, _, err = ro.registered_Responder(c.urlToCheck)
 				if err != nil {
 					return
 				}
@@ -1048,7 +1048,7 @@ func TestRouter_WrapURLSegmentHandler(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			var err error
 			if !c.wantErr {
-				_, err = ro._Resource(c.url)
+				_, err = ro._Responder(c.url)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -3283,7 +3283,7 @@ func TestRouter_ConfigureALL(t *testing.T) {
 	var err error
 	var lc = len(cases)
 	for i := 0; i < lc; i++ {
-		_, err = ro._Resource(cases[i].url)
+		_, err = ro._Responder(cases[i].url)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -3300,8 +3300,8 @@ func TestRouter_ConfigureALL(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			var _r _Resource
-			_r, _, err = ro.registered_Resource(c.urlToCheck)
+			var _r _Responder
+			_r, _, err = ro.registered_Responder(c.urlToCheck)
 			var _rConfig = _r.Config()
 			if _rConfig != config {
 				t.Fatalf("Router.ConfigureAll() config = %v, want = %v",
@@ -3380,7 +3380,7 @@ func TestRouter_WrapAllSegmentHandlers(t *testing.T) {
 
 	var err error
 	for _, c := range cases {
-		_, err = ro._Resource(c.urlTmpl)
+		_, err = ro._Responder(c.urlTmpl)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -3746,7 +3746,7 @@ func TestRouter_WrapAllHandlersOf(t *testing.T) {
 func TestRouter__Resources(t *testing.T) {
 	var (
 		ro  = NewRouter()
-		rs  = make([]_Resource, 4)
+		rs  = make([]_Responder, 4)
 		err error
 	)
 

@@ -17,7 +17,7 @@ func setHandlers(t *testing.T, h *Host) {
 			c context.Context,
 			w http.ResponseWriter, r *http.Request,
 		) {
-			var hasValue, ok = c.Value(SharedDataKey).(bool)
+			var hasValue, ok = c.Value(ResponderSharedDataKey).(bool)
 			if ok && hasValue {
 				var hValues, ok = c.Value(HostPathValuesKey).(HostPathValues)
 				if ok && hValues != nil {

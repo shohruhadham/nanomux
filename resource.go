@@ -13,7 +13,7 @@ import (
 
 // Resource represents the path segment resource.
 type Resource struct {
-	_ResourceBase
+	_ResponderBase
 	urlt *URLTmpl
 }
 
