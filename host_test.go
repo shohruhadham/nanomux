@@ -19,7 +19,7 @@ func setHandlers(t *testing.T, h *Host) {
 		) {
 			var hasValue, ok = c.Value(SharedDataKey).(bool)
 			if ok && hasValue {
-				var hValues, ok = c.Value(URLValuesKey).(URLValues)
+				var hValues, ok = c.Value(HostPathValuesKey).(HostPathValues)
 				if ok && hValues != nil {
 					var gotValue bool
 					for _, pair := range hValues {

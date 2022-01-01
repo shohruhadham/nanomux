@@ -31,11 +31,7 @@ func MwFn(mw func(http.Handler) http.Handler) MiddlewareFunc {
 
 		h = mw(h)
 
-		return func(
-			c context.Context,
-			w http.ResponseWriter,
-			r *http.Request,
-		) {
+		return func(c context.Context, w http.ResponseWriter, r *http.Request) {
 			r = r.WithContext(c)
 			h.ServeHTTP(w, r)
 		}

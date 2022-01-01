@@ -520,7 +520,7 @@ func (rb *Resource) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if len(ps) > 0 {
 		var matched bool
-		matched, rd.urlValues = rb.tmpl.Match(ps, rd.urlValues)
+		matched, rd.hostPathValues = rb.tmpl.Match(ps, rd.hostPathValues)
 		if matched {
 			rb.segmentHandler.ServeHTTP(c, w, r)
 			putContextInThePool(c)

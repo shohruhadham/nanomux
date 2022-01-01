@@ -297,7 +297,7 @@ func splitPathSegments(path string) (
 }
 
 // resourceURL returns the resource's URL with the URL values applied.
-func resourceURL(r _Resource, urlVs URLValues) (*url.URL, error) {
+func resourceURL(r _Resource, hpVs HostPathValues) (*url.URL, error) {
 	var (
 		host string
 		pss  []string
@@ -318,7 +318,7 @@ loop:
 				continue
 			}
 
-			var ps, err = tmpl.Apply(urlVs, false)
+			var ps, err = tmpl.Apply(hpVs, false)
 			if err != nil {
 				return nil, newError("%w", err)
 			}
@@ -330,7 +330,7 @@ loop:
 				host = tmpl.Content()
 			} else {
 				var err error
-				host, err = tmpl.Apply(urlVs, false)
+				host, err = tmpl.Apply(hpVs, false)
 				if err != nil {
 					return nil, newError("%w", err)
 				}
@@ -367,9 +367,9 @@ loop:
 
 // --------------------------------------------------
 
-// URLValues is a slice of the host and path segment values.
+// HostPathValues is a slice of the host and path segment values.
 // It does not include query values.
-type URLValues = TemplateValues
+type HostPathValues = TemplateValues
 
 // --------------------------------------------------
 
@@ -384,8 +384,8 @@ type _RoutingData struct {
 	subtreeExists bool
 	handled       bool
 
-	urlValues URLValues
-	_r        _Resource
+	hostPathValues HostPathValues
+	_r             _Resource
 }
 
 // -------------------------
@@ -594,7 +594,7 @@ type _ContextValueKey uint8
 
 const (
 	routingDataKey _ContextValueKey = iota
-	urlValuesKey
+	hostPathValuesKey
 	remainingPathKey
 	sharedDataKey
 	resourceKey
@@ -602,9 +602,9 @@ const (
 )
 
 var (
-	// URLValuesKey can be used to retrieve the host and path values from
+	// HostPathValuesKey can be used to retrieve the host and path values from
 	// the context.
-	URLValuesKey interface{} = urlValuesKey
+	HostPathValuesKey interface{} = hostPathValuesKey
 
 	// RemainingPathKey can be used to get the remaining path of the
 	// request's URL below the host or resource. The remaining path is
@@ -651,8 +651,8 @@ func (c *_Context) Value(key interface{}) interface{} {
 		switch key {
 		case routingDataKey:
 			return &c.rd
-		case urlValuesKey:
-			return c.rd.urlValues
+		case hostPathValuesKey:
+			return c.rd.hostPathValues
 		case remainingPathKey:
 			return c.rd.remainingPath()
 		case sharedDataKey:
@@ -686,8 +686,8 @@ func putContextInThePool(c context.Context) {
 		_c.rd.subtreeExists = false
 		_c.rd.handled = false
 
-		if _c.rd.urlValues != nil {
-			_c.rd.urlValues = _c.rd.urlValues[:0]
+		if _c.rd.hostPathValues != nil {
+			_c.rd.hostPathValues = _c.rd.hostPathValues[:0]
 		}
 
 		// Other fields will be set at retrieval.
