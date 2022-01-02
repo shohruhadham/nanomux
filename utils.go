@@ -373,10 +373,10 @@ type HostPathValues = TemplateValues
 
 // --------------------------------------------------
 
-// _RoutingData is created for each request when the host template contains a
+// Args is created for each request when the host template contains a
 // pattern or when the request's URL contains path segments. It's kept in the
 // request's context.
-type _RoutingData struct {
+type Args struct {
 	url                   *url.URL
 	cleanPath             string
 	currentPathSegmentIdx int
@@ -390,14 +390,10 @@ type _RoutingData struct {
 
 // -------------------------
 
-// contextWithRoutingData returns a context with _RoutingData that keeps the
+// getArgs returns a context with _RoutingData that keeps the
 // passed URL and the _Resource.
-func contextWithRoutingData(
-	c context.Context,
-	url *url.URL,
-	_r _Responder,
-) (context.Context, *_RoutingData) {
-	var _c = getContextFromThePool(c, url, _r)
+func getArgs(url *url.URL, _r _Responder) *Args {
+	var args = getArgsFromThePool(url, _r)
 	var tmpPath = url.Path
 
 	// The escaped path may have a slash "/", which is a part of the path
@@ -427,16 +423,16 @@ func contextWithRoutingData(
 		}
 
 		if len(cleanPath) != len(tmpPath) {
-			_c.rd.cleanPath = cleanPath
+			args.cleanPath = cleanPath
 		}
 	}
 
-	return _c, &_c.rd
+	return args
 }
 
 // -------------------------
 
-func (rd *_RoutingData) pathIsRoot() bool {
+func (rd *Args) pathIsRoot() bool {
 	if rd.cleanPath != "" {
 		return rd.cleanPath == "/"
 	}
@@ -449,7 +445,7 @@ func (rd *_RoutingData) pathIsRoot() bool {
 }
 
 // pathLen returns the length of the path that rd is using.
-func (rd *_RoutingData) pathLen() int {
+func (rd *Args) pathLen() int {
 	var lpath = len(rd.cleanPath)
 	if lpath == 0 {
 		lpath = len(rd.url.RawPath)
@@ -461,9 +457,9 @@ func (rd *_RoutingData) pathLen() int {
 	return lpath
 }
 
-// remainingPath returns the escaped remaining path of the request's URL below
+// RemainingPath returns the escaped remaining path of the request's URL below
 // the resource that is using the routing data.
-func (rd *_RoutingData) remainingPath() string {
+func (rd *Args) RemainingPath() string {
 	if rd.reachedTheLastPathSegment() {
 		return ""
 	}
@@ -514,7 +510,7 @@ func (rd *_RoutingData) remainingPath() string {
 
 // nextPathSegment returns the unescaped next path segment of the request's URL
 // below the resource that is using the routing data.
-func (rd *_RoutingData) nextPathSegment() (string, error) {
+func (rd *Args) nextPathSegment() (string, error) {
 	var lpath = rd.pathLen()
 	if rd.currentPathSegmentIdx == lpath {
 		return "", nil
@@ -572,12 +568,12 @@ func (rd *_RoutingData) nextPathSegment() (string, error) {
 
 // reachedTheLastPathSegment returns true when the resource that is using the
 // routing data is the last resource in the request's URL.
-func (rd *_RoutingData) reachedTheLastPathSegment() bool {
+func (rd *Args) reachedTheLastPathSegment() bool {
 	return rd.currentPathSegmentIdx == rd.pathLen()
 }
 
 // pathHasTrailingSlash returns true if the request's URL has a trailing slash.
-func (rd *_RoutingData) pathHasTrailingSlash() bool {
+func (rd *Args) pathHasTrailingSlash() bool {
 	if lpath := len(rd.cleanPath); lpath > 0 {
 		return rd.cleanPath != "/" && rd.cleanPath[lpath-1] == '/'
 	} else if lpath = len(rd.url.RawPath); lpath > 0 {
@@ -586,6 +582,18 @@ func (rd *_RoutingData) pathHasTrailingSlash() bool {
 
 	return rd.url.Path != "" && rd.url.Path != "/" &&
 		rd.url.Path[len(rd.url.Path)-1] == '/'
+}
+
+func (args *Args) HostPathValues() HostPathValues {
+	return args.hostPathValues
+}
+
+func (args *Args) ResponderSharedData() interface{} {
+	if args._r == nil {
+		return nil
+	}
+
+	return args._r.SharedData()
 }
 
 // --------------------------------------------------
@@ -638,7 +646,7 @@ var (
 // _Context is passed to request handlers.
 type _Context struct {
 	parent context.Context
-	rd     _RoutingData
+	rd     Args
 }
 
 func (c *_Context) Deadline() (deadline time.Time, ok bool) {
@@ -669,7 +677,7 @@ func (c *_Context) Value(key interface{}) interface{} {
 				return c.rd.url.Path
 			}
 
-			return c.rd.remainingPath()
+			return c.rd.RemainingPath()
 		case responderKey:
 			return c.rd._r
 		case responderSharedDataKey:
@@ -755,42 +763,34 @@ func GetCurrentResource(c context.Context) *Resource {
 
 // -------------------------
 
-var contextPool = sync.Pool{
+var argsPool = sync.Pool{
 	New: func() interface{} {
-		return &_Context{}
+		return &Args{}
 	},
 }
 
-func putContextInThePool(c context.Context) {
-	var _c, ok = c.(*_Context)
-	if ok {
-		_c.rd.cleanPath = ""
-		_c.rd.currentPathSegmentIdx = 0
+func putArgsInThePool(args *Args) {
+	args.cleanPath = ""
+	args.currentPathSegmentIdx = 0
 
-		_c.rd.subtreeExists = false
-		_c.rd.handled = false
+	args.subtreeExists = false
+	args.handled = false
 
-		if _c.rd.hostPathValues != nil {
-			_c.rd.hostPathValues = _c.rd.hostPathValues[:0]
-		}
-
-		// Other fields will be set at retrieval.
-
-		contextPool.Put(_c)
+	if args.hostPathValues != nil {
+		args.hostPathValues = args.hostPathValues[:0]
 	}
+
+	// Other fields will be set at retrieval.
+
+	argsPool.Put(args)
 }
 
-func getContextFromThePool(
-	c context.Context,
-	url *url.URL,
-	_r _Responder,
-) *_Context {
-	var _c = contextPool.Get().(*_Context)
-	_c.parent = c
-	_c.rd.url = url
-	_c.rd._r = _r
+func getArgsFromThePool(url *url.URL, _r _Responder) *Args {
+	var args = argsPool.Get().(*Args)
+	args.url = url
+	args._r = _r
 
-	return _c
+	return args
 }
 
 // --------------------------------------------------

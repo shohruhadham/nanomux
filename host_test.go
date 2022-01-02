@@ -4,7 +4,6 @@
 package nanomux
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -13,14 +12,11 @@ import (
 
 func setHandlers(t *testing.T, h *Host) {
 	if err := h.SetHandlerFor("get post custom", HandlerFunc(
-		func(
-			c context.Context,
-			w http.ResponseWriter, r *http.Request,
-		) {
-			var hasValue, ok = c.Value(ResponderSharedDataKey).(bool)
+		func(w http.ResponseWriter, r *http.Request, args *Args) {
+			var hasValue, ok = args.ResponderSharedData().(bool)
 			if ok && hasValue {
-				var hValues, ok = c.Value(HostPathValuesKey).(HostPathValues)
-				if ok && hValues != nil {
+				var hValues = args.HostPathValues()
+				if hValues != nil {
 					var gotValue bool
 					for _, pair := range hValues {
 						if pair.value == "sub" {
@@ -48,8 +44,7 @@ func setHandlers(t *testing.T, h *Host) {
 			strb.WriteByte(' ')
 			strb.WriteString(r.URL.String())
 
-			var rp string
-			rp, ok = r.Context().Value(RemainingPathKey).(string)
+			var rp string = args.RemainingPath()
 			if ok && rp != "" {
 				strb.WriteByte(' ')
 				strb.WriteString(rp)
@@ -765,9 +760,9 @@ func TestHostBase_ServeHTTP(t *testing.T) {
 
 	var customMethodMw = func(next Handler) HandlerFunc {
 		return func(
-			c context.Context,
 			w http.ResponseWriter,
 			r *http.Request,
+			args *Args,
 		) {
 			var strb strings.Builder
 			strb.WriteString("middleware ")
@@ -775,8 +770,8 @@ func TestHostBase_ServeHTTP(t *testing.T) {
 			strb.WriteByte(' ')
 			strb.WriteString(r.URL.String())
 
-			var extra, ok = c.Value(RemainingPathKey).(string)
-			if ok && extra != "" {
+			var extra = args.RemainingPath()
+			if extra != "" {
 				strb.WriteByte(' ')
 				strb.WriteString(extra)
 			}
@@ -787,9 +782,9 @@ func TestHostBase_ServeHTTP(t *testing.T) {
 
 	var notAlloweddMethodsMw = func(next Handler) HandlerFunc {
 		return func(
-			c context.Context,
 			w http.ResponseWriter,
 			r *http.Request,
+			args *Args,
 		) {
 			var strb strings.Builder
 			strb.WriteString("middleware of the not allowed ")
@@ -797,8 +792,8 @@ func TestHostBase_ServeHTTP(t *testing.T) {
 			strb.WriteByte(' ')
 			strb.WriteString(r.URL.String())
 
-			var extra, ok = c.Value(RemainingPathKey).(string)
-			if ok && extra != "" {
+			var extra = args.RemainingPath()
+			if extra != "" {
 				strb.WriteByte(' ')
 				strb.WriteString(extra)
 			}
