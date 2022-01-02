@@ -20,12 +20,12 @@ type Router struct {
 	patternHosts []*Host
 	r            *Resource
 
-	segmentHandler Handler
+	segmentHandler HandlerFunc
 }
 
 func NewRouter() *Router {
 	var ro = &Router{}
-	ro.segmentHandler = HandlerFunc(ro.passRequest)
+	ro.segmentHandler = ro.passRequest
 	return ro
 }
 
@@ -1550,7 +1550,9 @@ func (ro *Router) _Resources() []_Responder {
 // -------------------------
 
 func (ro *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	ro.segmentHandler.ServeHTTP(r.Context(), w, r)
+	var c, _ = contextWithRoutingData(r.Context(), r.URL, nil)
+	ro.segmentHandler(c, w, r)
+	putContextInThePool(c)
 }
 
 // passRequest is the segment handler of the router. It passes the request
@@ -1565,8 +1567,7 @@ func (ro *Router) passRequest(
 		host = r.Host
 	}
 
-	var rd *_RoutingData
-	c, rd = contextWithRoutingData(c, r.URL, nil)
+	var rd = c.Value(routingDataKey).(*_RoutingData)
 
 	if host != "" {
 		if strings.LastIndexByte(host, ':') >= 0 {
@@ -1578,8 +1579,7 @@ func (ro *Router) passRequest(
 
 		if h := ro.staticHosts[host]; h != nil {
 			rd._r = h.derived
-			h.segmentHandler.ServeHTTP(c, w, r)
-			putContextInThePool(c)
+			h.segmentHandler(c, w, r)
 			return
 		}
 
@@ -1592,8 +1592,7 @@ func (ro *Router) passRequest(
 
 			if matched {
 				rd._r = ph.derived
-				ph.segmentHandler.ServeHTTP(c, w, r)
-				putContextInThePool(c)
+				ph.segmentHandler(c, w, r)
 				return
 			}
 		}
@@ -1603,11 +1602,9 @@ func (ro *Router) passRequest(
 		rd.nextPathSegment() // Returns '/'.
 
 		rd._r = ro.r.derived
-		ro.r.segmentHandler.ServeHTTP(c, w, r)
-		putContextInThePool(c)
+		ro.r.segmentHandler(c, w, r)
 		return
 	}
 
 	notFoundResourceHandler.ServeHTTP(c, w, r)
-	putContextInThePool(c)
 }

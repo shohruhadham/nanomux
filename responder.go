@@ -395,8 +395,8 @@ type _ResponderBase struct {
 	wildcardResource *Resource
 
 	*_RequestHandlerBase
-	segmentHandler Handler
-	requestHandler Handler
+	segmentHandler HandlerFunc
+	requestHandler HandlerFunc
 
 	cfs        _ConfigFlags
 	sharedData interface{}
@@ -2258,7 +2258,7 @@ func (rb *_ResponderBase) passRequestToChildResource(
 	if len(ps) > 0 {
 		if sr := rb.staticResources[ps]; sr != nil {
 			rd._r = sr.derived
-			sr.segmentHandler.ServeHTTP(c, w, r)
+			sr.segmentHandler(c, w, r)
 
 			rd.currentPathSegmentIdx = currentPathSegmentIdx
 			return rd.handled
@@ -2273,7 +2273,7 @@ func (rb *_ResponderBase) passRequestToChildResource(
 
 			if matched {
 				rd._r = pr.derived
-				pr.segmentHandler.ServeHTTP(c, w, r)
+				pr.segmentHandler(c, w, r)
 
 				rd.currentPathSegmentIdx = currentPathSegmentIdx
 				return rd.handled
@@ -2287,7 +2287,7 @@ func (rb *_ResponderBase) passRequestToChildResource(
 			)
 
 			rd._r = rb.wildcardResource.derived
-			rb.wildcardResource.segmentHandler.ServeHTTP(c, w, r)
+			rb.wildcardResource.segmentHandler(c, w, r)
 
 			rd.currentPathSegmentIdx = currentPathSegmentIdx
 			return rd.handled

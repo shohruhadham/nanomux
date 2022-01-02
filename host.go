@@ -87,7 +87,7 @@ func createHost(
 
 	h.derived = h
 	h.tmpl = tmpl
-	h.segmentHandler = HandlerFunc(h.handleOrPassRequest)
+	h.segmentHandler = h.handleOrPassRequest
 	return h, nil
 }
 
@@ -449,5 +449,5 @@ func (hb *Host) handleOrPassRequest(
 		return
 	}
 
-	hb.requestHandler.ServeHTTP(c, w, r)
+	hb.requestHandler(c, w, r)
 }
