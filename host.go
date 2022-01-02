@@ -4,7 +4,6 @@
 package nanomux
 
 import (
-	"context"
 	"net"
 	"net/http"
 	"net/url"
@@ -323,7 +322,7 @@ func (hb *Host) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		host = r.Host
 	}
 
-	var c, rd = contextWithRoutingData(r.Context(), r.URL, hb.derived)
+	var args = getArgs(r.URL, hb.derived)
 	if host != "" {
 		if strings.LastIndexByte(host, ':') >= 0 {
 			var h, _, err = net.SplitHostPort(host)
@@ -333,20 +332,20 @@ func (hb *Host) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		var matched bool
-		matched, rd.hostPathValues = hb.Template().Match(
+		matched, args.hostPathValues = hb.Template().Match(
 			host,
-			rd.hostPathValues,
+			args.hostPathValues,
 		)
 
 		if matched {
-			hb.segmentHandler.ServeHTTP(c, w, r)
-			putContextInThePool(c)
+			hb.segmentHandler.ServeHTTP(w, r, args)
+			putArgsInThePool(args)
 			return
 		}
 	}
 
-	notFoundResourceHandler.ServeHTTP(c, w, r)
-	putContextInThePool(c)
+	notFoundResourceHandler.ServeHTTP(w, r, args)
+	putArgsInThePool(args)
 }
 
 // handleOrPassRequest is the segment handler of the host. It handles the
@@ -368,40 +367,39 @@ func (hb *Host) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // handler, the request is handled by the host itself, otherwise a "404 Not
 // Found" status code is returned.
 func (hb *Host) handleOrPassRequest(
-	c context.Context,
 	w http.ResponseWriter,
 	r *http.Request,
+	args *Args,
 ) {
-	var rd = c.Value(routingDataKey).(*_RoutingData)
-	var lpath = rd.pathLen()
+	var lpath = args.pathLen()
 	if lpath > 1 {
 		if hb.IsSubtreeHandler() {
-			rd.subtreeExists = true
+			args.subtreeExists = true
 		}
 
-		rd.nextPathSegment() // First call returns '/'.
-		if hb.passRequestToChildResource(c, w, r, rd) {
+		args.nextPathSegment() // First call returns '/'.
+		if hb.passRequestToChildResource(w, r, args) {
 			return
 		}
 
 		// Here the host must be set again because it may have been changed.
-		rd._r = hb.derived
+		args._r = hb.derived
 
 		if !hb.IsSubtreeHandler() {
-			notFoundResourceHandler.ServeHTTP(c, w, r)
+			notFoundResourceHandler.ServeHTTP(w, r, args)
 			return
 		}
 	}
 
 	if !hb.canHandleRequest() {
-		notFoundResourceHandler.ServeHTTP(c, w, r)
+		notFoundResourceHandler.ServeHTTP(w, r, args)
 		return
 	}
 
 	var newURL *url.URL
 	if r.TLS == nil && hb.IsSecure() {
 		if !hb.RedirectsInsecureRequest() {
-			notFoundResourceHandler.ServeHTTP(c, w, r)
+			notFoundResourceHandler.ServeHTTP(w, r, args)
 			return
 		}
 
@@ -410,18 +408,18 @@ func (hb *Host) handleOrPassRequest(
 	}
 
 	// Following checks unclean paths, like '////'.
-	if len(rd.cleanPath) > 0 && !hb.IsLenientOnUncleanPath() {
+	if len(args.cleanPath) > 0 && !hb.IsLenientOnUncleanPath() {
 		if newURL == nil {
 			newURL = cloneRequestURL(r)
 		}
 
-		newURL.Path = rd.cleanPath
+		newURL.Path = args.cleanPath
 	}
 
 	if lpath < 2 && !hb.IsLenientOnTrailingSlash() {
-		if hb.HasTrailingSlash() && !rd.pathIsRoot() {
+		if hb.HasTrailingSlash() && !args.pathIsRoot() {
 			if hb.IsStrictOnTrailingSlash() {
-				notFoundResourceHandler.ServeHTTP(c, w, r)
+				notFoundResourceHandler.ServeHTTP(w, r, args)
 				return
 			}
 
@@ -430,9 +428,9 @@ func (hb *Host) handleOrPassRequest(
 			}
 
 			newURL.Path += "/"
-		} else if !hb.HasTrailingSlash() && rd.pathIsRoot() {
+		} else if !hb.HasTrailingSlash() && args.pathIsRoot() {
 			if hb.IsStrictOnTrailingSlash() {
-				notFoundResourceHandler.ServeHTTP(c, w, r)
+				notFoundResourceHandler.ServeHTTP(w, r, args)
 				return
 			}
 
@@ -445,9 +443,9 @@ func (hb *Host) handleOrPassRequest(
 	}
 
 	if newURL != nil {
-		permanentRedirect(c, w, r, newURL.String(), permanentRedirectCode)
+		permanentRedirect(w, r, newURL.String(), permanentRedirectCode, args)
 		return
 	}
 
-	hb.requestHandler(c, w, r)
+	hb.requestHandler(w, r, args)
 }

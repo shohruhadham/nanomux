@@ -4,7 +4,6 @@
 package nanomux
 
 import (
-	"context"
 	"errors"
 	"net"
 	"net/http"
@@ -1550,24 +1549,22 @@ func (ro *Router) _Resources() []_Responder {
 // -------------------------
 
 func (ro *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	var c, _ = contextWithRoutingData(r.Context(), r.URL, nil)
-	ro.segmentHandler(c, w, r)
-	putContextInThePool(c)
+	var args = getArgs(r.URL, nil)
+	ro.segmentHandler(w, r, args)
+	putArgsInThePool(args)
 }
 
 // passRequest is the segment handler of the router. It passes the request
 // to the first matching host or the root resource if there is no matching host.
 func (ro *Router) passRequest(
-	c context.Context,
 	w http.ResponseWriter,
 	r *http.Request,
+	args *Args,
 ) {
 	var host = r.URL.Host
 	if host == "" {
 		host = r.Host
 	}
-
-	var rd = c.Value(routingDataKey).(*_RoutingData)
 
 	if host != "" {
 		if strings.LastIndexByte(host, ':') >= 0 {
@@ -1578,33 +1575,33 @@ func (ro *Router) passRequest(
 		}
 
 		if h := ro.staticHosts[host]; h != nil {
-			rd._r = h.derived
-			h.segmentHandler(c, w, r)
+			args._r = h.derived
+			h.segmentHandler(w, r, args)
 			return
 		}
 
 		for _, ph := range ro.patternHosts {
 			var matched bool
-			matched, rd.hostPathValues = ph.Template().Match(
+			matched, args.hostPathValues = ph.Template().Match(
 				host,
-				rd.hostPathValues,
+				args.hostPathValues,
 			)
 
 			if matched {
-				rd._r = ph.derived
-				ph.segmentHandler(c, w, r)
+				args._r = ph.derived
+				ph.segmentHandler(w, r, args)
 				return
 			}
 		}
 	}
 
 	if ro.r != nil && r.URL.Path != "" {
-		rd.nextPathSegment() // Returns '/'.
+		args.nextPathSegment() // Returns '/'.
 
-		rd._r = ro.r.derived
-		ro.r.segmentHandler(c, w, r)
+		args._r = ro.r.derived
+		ro.r.segmentHandler(w, r, args)
 		return
 	}
 
-	notFoundResourceHandler.ServeHTTP(c, w, r)
+	notFoundResourceHandler.ServeHTTP(w, r, args)
 }

@@ -4,7 +4,6 @@
 package nanomux
 
 import (
-	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -569,11 +568,7 @@ func TestResourceBase_canHandleRequest(t *testing.T) {
 	}
 
 	r.SetHandlerFor("GET", HandlerFunc(
-		func(
-			c context.Context,
-			w http.ResponseWriter,
-			r *http.Request,
-		) {
+		func(w http.ResponseWriter, r *http.Request, args *Args) {
 			w.Write([]byte(http.StatusText(http.StatusOK)))
 		},
 	))
@@ -1537,7 +1532,7 @@ func TestResourceBase_registerResourceUnder(t *testing.T) {
 	var static = NewDormantResource("static")
 	err = static.SetHandlerFor(
 		"get",
-		HandlerFunc(func(context.Context, http.ResponseWriter, *http.Request) {}),
+		HandlerFunc(func(http.ResponseWriter, *http.Request, *Args) {}),
 	)
 
 	if err != nil {
@@ -1708,7 +1703,7 @@ func TestResourceBase_keepResourceOrItsSubresources(t *testing.T) {
 	}
 
 	var handler = HandlerFunc(
-		func(context.Context, http.ResponseWriter, *http.Request) {},
+		func(http.ResponseWriter, *http.Request, *Args) {},
 	)
 
 	static3.SetHandlerFor("GET", handler)
@@ -2673,7 +2668,7 @@ func TestResourceBase_Implementation(t *testing.T) {
 
 func TestResourceBase_SetHandlerFor(t *testing.T) {
 	var r = NewDormantResource("resource")
-	var handler = func(context.Context, http.ResponseWriter, *http.Request) {}
+	var handler = func(http.ResponseWriter, *http.Request, *Args) {}
 
 	var err = r.SetHandlerFor("get", HandlerFunc(handler))
 	if err != nil {
@@ -2745,7 +2740,7 @@ func TestResourceBase_SetHandlerFor(t *testing.T) {
 
 func TestResourceBase_SetHandlerFuncFor(t *testing.T) {
 	var r = NewDormantResource("resource")
-	var handler = func(context.Context, http.ResponseWriter, *http.Request) {}
+	var handler = func(http.ResponseWriter, *http.Request, *Args) {}
 
 	var err = r.SetHandlerFuncFor("get", handler)
 	if err != nil {
@@ -2819,7 +2814,7 @@ func TestResourceBase_HandlerOf(t *testing.T) {
 	var strb strings.Builder
 	var r = NewDormantResource("resource")
 	var err = r.SetHandlerFor("get", HandlerFunc(
-		func(context.Context, http.ResponseWriter, *http.Request) {
+		func(http.ResponseWriter, *http.Request, *Args) {
 			strb.WriteString("get")
 		},
 	))
@@ -2829,7 +2824,7 @@ func TestResourceBase_HandlerOf(t *testing.T) {
 	}
 
 	err = r.SetHandlerFor("put post", HandlerFunc(
-		func(context.Context, http.ResponseWriter, *http.Request) {
+		func(http.ResponseWriter, *http.Request, *Args) {
 			strb.WriteString("put post")
 		},
 	))
@@ -2839,7 +2834,7 @@ func TestResourceBase_HandlerOf(t *testing.T) {
 	}
 
 	err = r.SetHandlerFor("custom", HandlerFunc(
-		func(context.Context, http.ResponseWriter, *http.Request) {
+		func(http.ResponseWriter, *http.Request, *Args) {
 			strb.WriteString("custom")
 		},
 	))
@@ -2849,7 +2844,7 @@ func TestResourceBase_HandlerOf(t *testing.T) {
 	}
 
 	err = r.SetHandlerFor("!", HandlerFunc(
-		func(context.Context, http.ResponseWriter, *http.Request) {
+		func(http.ResponseWriter, *http.Request, *Args) {
 			strb.WriteString("!")
 		},
 	))
@@ -2910,28 +2905,22 @@ func TestResourceBase_WrapSegmentHandler(t *testing.T) {
 	)
 
 	r.segmentHandler = HandlerFunc(
-		func(context.Context, http.ResponseWriter, *http.Request) {
+		func(http.ResponseWriter, *http.Request, *Args) {
 			strb.WriteByte('A')
 		},
 	)
 
 	var err = r.WrapSegmentHandler(
 		func(next Handler) HandlerFunc {
-			return func(
-				c context.Context,
-				w http.ResponseWriter, r *http.Request) {
+			return func(w http.ResponseWriter, r *http.Request, args *Args) {
 				strb.WriteByte('B')
-				next.ServeHTTP(c, w, r)
+				next.ServeHTTP(w, r, args)
 			}
 		},
 		func(next Handler) HandlerFunc {
-			return func(
-				c context.Context,
-				w http.ResponseWriter,
-				r *http.Request,
-			) {
+			return func(w http.ResponseWriter, r *http.Request, args *Args) {
 				strb.WriteByte('C')
-				next.ServeHTTP(c, w, r)
+				next.ServeHTTP(w, r, args)
 			}
 		},
 	)
@@ -2949,13 +2938,9 @@ func TestResourceBase_WrapSegmentHandler(t *testing.T) {
 
 	err = r.WrapSegmentHandler(
 		func(next Handler) HandlerFunc {
-			return func(
-				c context.Context,
-				w http.ResponseWriter,
-				r *http.Request,
-			) {
+			return func(w http.ResponseWriter, r *http.Request, args *Args) {
 				strb.WriteByte('D')
-				next.ServeHTTP(c, w, r)
+				next.ServeHTTP(w, r, args)
 			}
 		},
 	)
@@ -2979,7 +2964,7 @@ func TestResourceBase_WrapRequestHandler(t *testing.T) {
 
 	var err = r.SetHandlerFuncFor(
 		"get",
-		func(context.Context, http.ResponseWriter, *http.Request) {
+		func(http.ResponseWriter, *http.Request, *Args) {
 			strb.WriteByte('A')
 		},
 	)
@@ -2991,22 +2976,22 @@ func TestResourceBase_WrapRequestHandler(t *testing.T) {
 	err = r.WrapRequestHandler(
 		func(next Handler) HandlerFunc {
 			return func(
-				c context.Context,
 				w http.ResponseWriter,
 				r *http.Request,
+				args *Args,
 			) {
 				strb.WriteByte('B')
-				next.ServeHTTP(c, w, r)
+				next.ServeHTTP(w, r, args)
 			}
 		},
 		func(next Handler) HandlerFunc {
 			return func(
-				c context.Context,
 				w http.ResponseWriter,
 				r *http.Request,
+				args *Args,
 			) {
 				strb.WriteByte('C')
-				next.ServeHTTP(c, w, r)
+				next.ServeHTTP(w, r, args)
 			}
 		},
 	)
@@ -3017,7 +3002,7 @@ func TestResourceBase_WrapRequestHandler(t *testing.T) {
 
 	var w = httptest.NewRecorder()
 	var req = httptest.NewRequest("GET", "/static", nil)
-	r.requestHandler.ServeHTTP(nil, w, req)
+	r.requestHandler.ServeHTTP(w, req, nil)
 	if strb.String() != "CBA" {
 		t.Fatalf(
 			"ResourceBase.WrapRequestHandler() failed to wrap resource's request handler",
@@ -3027,12 +3012,12 @@ func TestResourceBase_WrapRequestHandler(t *testing.T) {
 	err = r.WrapRequestHandler(
 		func(next Handler) HandlerFunc {
 			return func(
-				c context.Context,
 				w http.ResponseWriter,
 				r *http.Request,
+				args *Args,
 			) {
 				strb.WriteByte('D')
-				next.ServeHTTP(c, w, r)
+				next.ServeHTTP(w, r, args)
 			}
 		},
 	)
@@ -3042,7 +3027,7 @@ func TestResourceBase_WrapRequestHandler(t *testing.T) {
 	}
 
 	strb.Reset()
-	r.requestHandler.ServeHTTP(req.Context(), w, req)
+	r.requestHandler.ServeHTTP(w, req, nil)
 	if strb.String() != "DCBA" {
 		t.Fatalf(
 			"ResourceBase.WrapRequestHandler() failed to wrap resource's request handler",
@@ -3057,7 +3042,7 @@ func TestResourceBase_WrapHandlerOf(t *testing.T) {
 	if err := r.SetHandlerFor(
 		"get post put",
 		HandlerFunc(
-			func(context.Context, http.ResponseWriter, *http.Request) {
+			func(http.ResponseWriter, *http.Request, *Args) {
 				strb.WriteByte('A')
 			},
 		),
@@ -3068,7 +3053,7 @@ func TestResourceBase_WrapHandlerOf(t *testing.T) {
 	if err := r.SetHandlerFor(
 		"!",
 		HandlerFunc(
-			func(context.Context, http.ResponseWriter, *http.Request) {
+			func(http.ResponseWriter, *http.Request, *Args) {
 				strb.WriteByte('A')
 			},
 		),
@@ -3079,22 +3064,22 @@ func TestResourceBase_WrapHandlerOf(t *testing.T) {
 	var mwfs = []MiddlewareFunc{
 		func(next Handler) HandlerFunc {
 			return func(
-				c context.Context,
 				w http.ResponseWriter,
 				r *http.Request,
+				args *Args,
 			) {
 				strb.WriteByte('B')
-				next.ServeHTTP(c, w, r)
+				next.ServeHTTP(w, r, args)
 			}
 		},
 		func(next Handler) HandlerFunc {
 			return func(
-				c context.Context,
 				w http.ResponseWriter,
 				r *http.Request,
+				args *Args,
 			) {
 				strb.WriteByte('C')
-				next.ServeHTTP(c, w, r)
+				next.ServeHTTP(w, r, args)
 			}
 		},
 	}
@@ -3383,7 +3368,7 @@ func TestResourceBase_ImplementationAt(t *testing.T) {
 func TestResourceBase_SetPathHandlerFor(t *testing.T) {
 	var root = NewDormantResource("/")
 	var h = HandlerFunc(
-		func(context.Context, http.ResponseWriter, *http.Request) {},
+		func(http.ResponseWriter, *http.Request, *Args) {},
 	)
 
 	var ms = toUpperSplitByCommaSpace(rhTypeHTTPMethods)
@@ -3453,7 +3438,7 @@ func TestResourceBase_SetPathHandlerFor(t *testing.T) {
 
 func TestResourceBase_SetPathHandlerFuncFor(t *testing.T) {
 	var root = NewDormantResource("/")
-	var h = func(context.Context, http.ResponseWriter, *http.Request) {}
+	var h = func(http.ResponseWriter, *http.Request, *Args) {}
 	var ms = toUpperSplitByCommaSpace(rhTypeHTTPMethods)
 	ms = append(ms, "OPTIONS")
 
@@ -3521,9 +3506,7 @@ func TestResourceBase_SetPathHandlerFuncFor(t *testing.T) {
 
 func TestResourceBase_PathHandlerOf(t *testing.T) {
 	var root = NewDormantResource("/")
-	var h = HandlerFunc(
-		func(context.Context, http.ResponseWriter, *http.Request) {},
-	)
+	var h = HandlerFunc(func(http.ResponseWriter, *http.Request, *Args) {})
 
 	var ms = toUpperSplitByCommaSpace(rhTypeHTTPMethods)
 	ms = append(ms, "OPTIONS")
@@ -3596,22 +3579,22 @@ func TestResourceBase_WrapPathSegmentHandler(t *testing.T) {
 	var mwfs = []MiddlewareFunc{
 		func(handler Handler) HandlerFunc {
 			return func(
-				c context.Context,
 				w http.ResponseWriter,
 				r *http.Request,
+				args *Args,
 			) {
 				strb.WriteByte('b')
-				handler.ServeHTTP(c, w, r)
+				handler.ServeHTTP(w, r, args)
 			}
 		},
 		func(handler Handler) HandlerFunc {
 			return func(
-				c context.Context,
 				w http.ResponseWriter,
 				r *http.Request,
+				args *Args,
 			) {
 				strb.WriteByte('a')
-				handler.ServeHTTP(c, w, r)
+				handler.ServeHTTP(w, r, args)
 			}
 		},
 	}
@@ -3678,22 +3661,22 @@ func TestResourceBase_WrapPathRequestHandler(t *testing.T) {
 	var mwfs = []MiddlewareFunc{
 		func(handler Handler) HandlerFunc {
 			return func(
-				c context.Context,
 				w http.ResponseWriter,
 				r *http.Request,
+				args *Args,
 			) {
 				strb.WriteByte('b')
-				handler.ServeHTTP(c, w, r)
+				handler.ServeHTTP(w, r, args)
 			}
 		},
 		func(handler Handler) HandlerFunc {
 			return func(
-				c context.Context,
 				w http.ResponseWriter,
 				r *http.Request,
+				args *Args,
 			) {
 				strb.WriteByte('a')
-				handler.ServeHTTP(c, w, r)
+				handler.ServeHTTP(w, r, args)
 			}
 		},
 	}
@@ -3720,12 +3703,7 @@ func TestResourceBase_WrapPathRequestHandler(t *testing.T) {
 				err = root.SetPathHandlerFuncFor(
 					"get",
 					c.path,
-					func(
-						context.Context,
-						http.ResponseWriter,
-						*http.Request,
-					) {
-					},
+					func(http.ResponseWriter, *http.Request, *Args) {},
 				)
 
 				if err != nil {
@@ -3775,29 +3753,29 @@ func TestResourceBase_WrapPathRequestHandler(t *testing.T) {
 func TestResourceBasse_WrapPathHandlerOf(t *testing.T) {
 	var root = NewDormantResource("/")
 	var h = HandlerFunc(
-		func(context.Context, http.ResponseWriter, *http.Request) {},
+		func(http.ResponseWriter, *http.Request, *Args) {},
 	)
 
 	var strb strings.Builder
 	var mwfs = []MiddlewareFunc{
 		func(handler Handler) HandlerFunc {
 			return func(
-				c context.Context,
 				w http.ResponseWriter,
 				r *http.Request,
+				args *Args,
 			) {
 				strb.WriteByte('b')
-				handler.ServeHTTP(c, w, r)
+				handler.ServeHTTP(w, r, args)
 			}
 		},
 		func(handler Handler) HandlerFunc {
 			return func(
-				c context.Context,
 				w http.ResponseWriter,
 				r *http.Request,
+				args *Args,
 			) {
 				strb.WriteByte('a')
-				handler.ServeHTTP(c, w, r)
+				handler.ServeHTTP(w, r, args)
 			}
 		},
 	}
@@ -4034,22 +4012,22 @@ func TestResourceBase_WrapSubtreeSegmentHandlers(t *testing.T) {
 	var mwfs = []MiddlewareFunc{
 		func(handler Handler) HandlerFunc {
 			return func(
-				c context.Context,
 				w http.ResponseWriter,
 				r *http.Request,
+				args *Args,
 			) {
 				strb.WriteByte('B')
-				handler.ServeHTTP(c, w, r)
+				handler.ServeHTTP(w, r, args)
 			}
 		},
 		func(handler Handler) HandlerFunc {
 			return func(
-				c context.Context,
 				w http.ResponseWriter,
 				r *http.Request,
+				args *Args,
 			) {
 				strb.WriteByte('A')
-				handler.ServeHTTP(c, w, r)
+				handler.ServeHTTP(w, r, args)
 			}
 		},
 	}
@@ -4141,7 +4119,7 @@ func TestResourceBase_WrapSubtreeRequestHandlers(t *testing.T) {
 			err = root.SetPathHandlerFuncFor(
 				"get",
 				c.urlTmpl,
-				func(context.Context, http.ResponseWriter, *http.Request) {},
+				func(http.ResponseWriter, *http.Request, *Args) {},
 			)
 
 			if err != nil {
@@ -4154,22 +4132,22 @@ func TestResourceBase_WrapSubtreeRequestHandlers(t *testing.T) {
 	var mwfs = []MiddlewareFunc{
 		func(handler Handler) HandlerFunc {
 			return func(
-				c context.Context,
 				w http.ResponseWriter,
 				r *http.Request,
+				args *Args,
 			) {
 				strb.WriteByte('B')
-				handler.ServeHTTP(c, w, r)
+				handler.ServeHTTP(w, r, args)
 			}
 		},
 		func(handler Handler) HandlerFunc {
 			return func(
-				c context.Context,
 				w http.ResponseWriter,
 				r *http.Request,
+				args *Args,
 			) {
 				strb.WriteByte('A')
-				handler.ServeHTTP(c, w, r)
+				handler.ServeHTTP(w, r, args)
 			}
 		},
 	}
@@ -4262,7 +4240,7 @@ func TestResourceBase_WrapSubtreeHandlersOf(t *testing.T) {
 		}
 
 		err = r.SetHandlerFor("!", HandlerFunc(
-			func(context.Context, http.ResponseWriter, *http.Request) {},
+			func(http.ResponseWriter, *http.Request, *Args) {},
 		))
 
 		if err != nil {
@@ -4274,22 +4252,22 @@ func TestResourceBase_WrapSubtreeHandlersOf(t *testing.T) {
 	var mwfs = []MiddlewareFunc{
 		func(handler Handler) HandlerFunc {
 			return func(
-				c context.Context,
 				w http.ResponseWriter,
 				r *http.Request,
+				args *Args,
 			) {
 				strb.WriteByte('B')
-				handler.ServeHTTP(c, w, r)
+				handler.ServeHTTP(w, r, args)
 			}
 		},
 		func(handler Handler) HandlerFunc {
 			return func(
-				c context.Context,
 				w http.ResponseWriter,
 				r *http.Request,
+				args *Args,
 			) {
 				strb.WriteByte('A')
-				handler.ServeHTTP(c, w, r)
+				handler.ServeHTTP(w, r, args)
 			}
 		},
 	}
@@ -4490,13 +4468,13 @@ func addRequestHandlerSubresources(t *testing.T, r _Responder, i, limit int) {
 	var err error
 
 	if err = r.SetHandlerFor("get post custom", HandlerFunc(
-		func(c context.Context, w http.ResponseWriter, r *http.Request) {
-			var hasValue, ok = c.Value(ResponderSharedDataKey).(bool)
+		func(w http.ResponseWriter, r *http.Request, args *Args) {
+			var hasValue, ok = args.ResponderSharedData().(bool)
 			if ok && hasValue {
-				var urlValues, ok = c.Value(HostPathValuesKey).(HostPathValues)
-				if ok && urlValues != nil {
+				var hpValues = args.HostPathValues()
+				if hpValues != nil {
 					var gotValue bool
-					for _, pair := range urlValues {
+					for _, pair := range hpValues {
 						if pair.value == "1" {
 							gotValue = true
 							break
@@ -4520,9 +4498,8 @@ func addRequestHandlerSubresources(t *testing.T, r _Responder, i, limit int) {
 			strb.WriteByte(' ')
 			strb.WriteString(r.URL.String())
 
-			var rp string
-			rp, ok = c.Value(RemainingPathKey).(string)
-			if ok && rp != "" {
+			var rp = args.RemainingPath()
+			if rp != "" {
 				strb.WriteByte(' ')
 				strb.WriteString(rp)
 			}
@@ -7397,9 +7374,9 @@ func TestResourceBase_ServeHTTP(t *testing.T) {
 		"custom",
 		func(next Handler) HandlerFunc {
 			return func(
-				c context.Context,
 				w http.ResponseWriter,
 				r *http.Request,
+				args *Args,
 			) {
 				var strb strings.Builder
 				strb.WriteString("middleware ")
@@ -7407,7 +7384,7 @@ func TestResourceBase_ServeHTTP(t *testing.T) {
 				strb.WriteByte(' ')
 				strb.WriteString(r.URL.String())
 
-				var extra = c.Value(RemainingPathKey).(string)
+				var extra = args.RemainingPath()
 				if extra != "" {
 					strb.WriteByte(' ')
 					strb.WriteString(extra)
@@ -7422,9 +7399,9 @@ func TestResourceBase_ServeHTTP(t *testing.T) {
 		"!",
 		func(next Handler) HandlerFunc {
 			return func(
-				c context.Context,
 				w http.ResponseWriter,
 				r *http.Request,
+				args *Args,
 			) {
 				var strb strings.Builder
 				strb.WriteString("middleware of the not allowed ")
@@ -7432,7 +7409,7 @@ func TestResourceBase_ServeHTTP(t *testing.T) {
 				strb.WriteByte(' ')
 				strb.WriteString(r.URL.String())
 
-				var extra = c.Value(RemainingPathKey).(string)
+				var extra = args.RemainingPath()
 				if extra != "" {
 					strb.WriteByte(' ')
 					strb.WriteString(extra)

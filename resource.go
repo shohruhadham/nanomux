@@ -4,7 +4,6 @@
 package nanomux
 
 import (
-	"context"
 	"net/http"
 	"net/url"
 )
@@ -498,15 +497,15 @@ func (rb *Resource) IsRoot() bool {
 // HTTP request handler when the resource's template matches the request's first
 // path segment.
 func (rb *Resource) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	var c, rd = contextWithRoutingData(r.Context(), r.URL, rb.derived)
-	rd.nextPathSegment() // First call returns '/'.
+	var args = getArgs(r.URL, rb.derived)
+	args.nextPathSegment() // First call returns '/'.
 	if rb.tmpl == rootTmpl {
-		rb.segmentHandler.ServeHTTP(c, w, r)
-		putContextInThePool(c)
+		rb.segmentHandler.ServeHTTP(w, r, args)
+		putArgsInThePool(args)
 		return
 	}
 
-	var ps, err = rd.nextPathSegment()
+	var ps, err = args.nextPathSegment()
 	if err != nil {
 		http.Error(
 			w,
@@ -514,22 +513,22 @@ func (rb *Resource) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			http.StatusBadRequest,
 		)
 
-		putContextInThePool(c)
+		putArgsInThePool(args)
 		return
 	}
 
 	if len(ps) > 0 {
 		var matched bool
-		matched, rd.hostPathValues = rb.tmpl.Match(ps, rd.hostPathValues)
+		matched, args.hostPathValues = rb.tmpl.Match(ps, args.hostPathValues)
 		if matched {
-			rb.segmentHandler.ServeHTTP(c, w, r)
-			putContextInThePool(c)
+			rb.segmentHandler.ServeHTTP(w, r, args)
+			putArgsInThePool(args)
 			return
 		}
 	}
 
-	notFoundResourceHandler.ServeHTTP(c, w, r)
-	putContextInThePool(c)
+	notFoundResourceHandler.ServeHTTP(w, r, args)
+	putArgsInThePool(args)
 }
 
 // handleOrPassRequest is the segment handler of the resource. It handles
@@ -550,24 +549,23 @@ func (rb *Resource) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // and the resource was configured as a subtree handler, the request is handled
 // by the resource itself, otherwise a "404 Not Found" status code is returned.
 func (rb *Resource) handleOrPassRequest(
-	c context.Context,
 	w http.ResponseWriter,
 	r *http.Request,
+	args *Args,
 ) {
-	var rd = c.Value(routingDataKey).(*_RoutingData)
 	if rb.IsSubtreeHandler() {
 		// If there is no resource in the hierarchy below that matches the
 		// request's path, this resource handles the request.
 		// subtreeExists indicates this to the resources below in the hierarchy,
 		// so the notFoundResourceHandler is not called.
-		rd.subtreeExists = true
+		args.subtreeExists = true
 	}
 
 	var lastSegment = true
-	if !rd.reachedTheLastPathSegment() {
+	if !args.reachedTheLastPathSegment() {
 		lastSegment = false
 
-		if rb.passRequestToChildResource(c, w, r, rd) {
+		if rb.passRequestToChildResource(w, r, args) {
 			return
 		}
 
@@ -575,23 +573,23 @@ func (rb *Resource) handleOrPassRequest(
 			return
 		}
 
-		rd._r = rb.derived
+		args._r = rb.derived
 	}
 
 	if !rb.canHandleRequest() {
 		// If rb is a subtree handler that cannot handle a request, this
 		// prevents other subtree handlers above the hierarchy from handling
 		// the request.
-		notFoundResourceHandler.ServeHTTP(c, w, r)
-		rd.handled = true
+		notFoundResourceHandler.ServeHTTP(w, r, args)
+		args.handled = true
 		return
 	}
 
 	var newURL *url.URL
 	if r.TLS == nil && rb.IsSecure() {
 		if !rb.RedirectsInsecureRequest() {
-			notFoundResourceHandler.ServeHTTP(c, w, r)
-			rd.handled = true
+			notFoundResourceHandler.ServeHTTP(w, r, args)
+			args.handled = true
 			return
 		}
 
@@ -599,19 +597,19 @@ func (rb *Resource) handleOrPassRequest(
 		newURL.Scheme = "https"
 	}
 
-	if len(rd.cleanPath) > 0 && !rb.IsLenientOnUncleanPath() {
+	if len(args.cleanPath) > 0 && !rb.IsLenientOnUncleanPath() {
 		if newURL == nil {
 			newURL = cloneRequestURL(r)
 		}
 
-		newURL.Path = rd.cleanPath
+		newURL.Path = args.cleanPath
 	}
 
 	if lastSegment && !rb.IsLenientOnTrailingSlash() {
-		if rb.HasTrailingSlash() && !rd.pathHasTrailingSlash() {
+		if rb.HasTrailingSlash() && !args.pathHasTrailingSlash() {
 			if rb.IsStrictOnTrailingSlash() {
-				notFoundResourceHandler.ServeHTTP(c, w, r)
-				rd.handled = true
+				notFoundResourceHandler.ServeHTTP(w, r, args)
+				args.handled = true
 				return
 			}
 
@@ -620,10 +618,10 @@ func (rb *Resource) handleOrPassRequest(
 			}
 
 			newURL.Path += "/"
-		} else if !rb.HasTrailingSlash() && rd.pathHasTrailingSlash() {
+		} else if !rb.HasTrailingSlash() && args.pathHasTrailingSlash() {
 			if rb.IsStrictOnTrailingSlash() {
-				notFoundResourceHandler.ServeHTTP(c, w, r)
-				rd.handled = true
+				notFoundResourceHandler.ServeHTTP(w, r, args)
+				args.handled = true
 				return
 			}
 
@@ -636,12 +634,12 @@ func (rb *Resource) handleOrPassRequest(
 	}
 
 	if newURL != nil {
-		permanentRedirect(c, w, r, newURL.String(), permanentRedirectCode)
-		rd.handled = true
+		permanentRedirect(w, r, newURL.String(), permanentRedirectCode, args)
+		args.handled = true
 		return
 	}
 
 	// At this point, the request may have been modified by subresources.
-	rb.requestHandler(c, w, r)
-	rd.handled = true
+	rb.requestHandler(w, r, args)
+	args.handled = true
 }

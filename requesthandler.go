@@ -4,7 +4,6 @@
 package nanomux
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"reflect"
@@ -29,42 +28,38 @@ var ErrConflictingStatusCode = fmt.Errorf("conflicting status code")
 // --------------------------------------------------
 
 type Handler interface {
-	ServeHTTP(c context.Context, w http.ResponseWriter, r *http.Request)
+	ServeHTTP(w http.ResponseWriter, r *http.Request, args *Args)
 }
 
-type HandlerFunc func(
-	c context.Context,
-	w http.ResponseWriter,
-	r *http.Request,
-)
+type HandlerFunc func(w http.ResponseWriter, r *http.Request, args *Args)
 
 func (hf HandlerFunc) ServeHTTP(
-	c context.Context,
 	w http.ResponseWriter,
 	r *http.Request,
+	args *Args,
 ) {
-	hf(c, w, r)
+	hf(w, r, args)
 }
 
 // Hr converts an http.Handler to a Handler.
-func Hr(h http.Handler) Handler {
-	return HandlerFunc(
-		func(c context.Context, w http.ResponseWriter, r *http.Request) {
-			r = r.WithContext(c)
-			h.ServeHTTP(w, r)
-		},
-	)
-}
+// func Hr(h http.Handler) Handler {
+// 	return HandlerFunc(
+// 		func(c context.Context, w http.ResponseWriter, r *http.Request) {
+// 			r = r.WithContext(c)
+// 			h.ServeHTTP(w, r)
+// 		},
+// 	)
+// }
 
 // HrFn converts an http.HandlerFunc to a HandlerFunc.
-func HrFn(hf http.HandlerFunc) HandlerFunc {
-	return HandlerFunc(
-		func(c context.Context, w http.ResponseWriter, r *http.Request) {
-			r = r.WithContext(c)
-			hf(w, r)
-		},
-	)
-}
+// func HrFn(hf http.HandlerFunc) HandlerFunc {
+// 	return HandlerFunc(
+// 		func(c context.Context, w http.ResponseWriter, r *http.Request) {
+// 			r = r.WithContext(c)
+// 			hf(w, r)
+// 		},
+// 	)
+// }
 
 // -------------------------
 
@@ -178,10 +173,7 @@ type _RequestHandlerBase struct {
 
 // detectHTTPMethodHandlersOf detects the HTTP method handlers of the
 // Impl's underlying value.
-func detectHTTPMethodHandlersOf(impl Impl) (
-	*_RequestHandlerBase,
-	error,
-) {
+func detectHTTPMethodHandlersOf(impl Impl) (*_RequestHandlerBase, error) {
 	// hmns keeps the HTTP methods' names and their corresponding handlers'
 	// names.
 	var hmns = make(map[string]string)
@@ -203,7 +195,7 @@ func detectHTTPMethodHandlersOf(impl Impl) (
 	var v reflect.Value = reflect.ValueOf(impl)
 	var handlerFuncType = reflect.TypeOf(
 		// Signature of the HandlerFunc.
-		func(context.Context, http.ResponseWriter, *http.Request) {},
+		func(http.ResponseWriter, *http.Request, *Args) {},
 	)
 
 	for hm, n := range hmns {
@@ -218,17 +210,17 @@ func detectHTTPMethodHandlersOf(impl Impl) (
 		}
 
 		var hf, ok = m.Interface().(func(
-			context.Context,
 			http.ResponseWriter,
 			*http.Request,
+			*Args,
 		))
 
 		if !ok {
-			return nil, fmt.Errorf("error")
+			return nil, newError("failed to get the handler method")
 		}
 
 		if hm == "NOTALLOWEDMETHOD" {
-			notAllowedMethodsHandler = HandlerFunc(hf)
+			notAllowedMethodsHandler = hf
 		} else {
 			handlers.set(hm, HandlerFunc(hf))
 		}
@@ -397,32 +389,32 @@ func (rhb *_RequestHandlerBase) wrapHandlerOf(
 // -------------------------
 
 func (rhb *_RequestHandlerBase) handleRequest(
-	c context.Context,
 	w http.ResponseWriter,
 	r *http.Request,
+	args *Args,
 ) {
 	if rhb == nil || len(rhb.mhPairs) == 0 {
-		notFoundResourceHandler.ServeHTTP(c, w, r)
+		notFoundResourceHandler.ServeHTTP(w, r, args)
 		return
 	}
 
 	if _, handler := rhb.mhPairs.get(r.Method); handler != nil {
-		handler.ServeHTTP(c, w, r)
+		handler.ServeHTTP(w, r, args)
 		return
 	}
 
 	if rhb.notAllowedHTTPMethodsHandler != nil {
-		rhb.notAllowedHTTPMethodsHandler.ServeHTTP(c, w, r)
+		rhb.notAllowedHTTPMethodsHandler.ServeHTTP(w, r, args)
 		return
 	}
 
-	rhb.handleNotAllowedHTTPMethods(c, w, r)
+	rhb.handleNotAllowedHTTPMethods(w, r, args)
 }
 
 func (rhb *_RequestHandlerBase) handleOptionsHTTPMethod(
-	_ context.Context,
 	w http.ResponseWriter,
 	r *http.Request,
+	_ *Args,
 ) {
 	for _, mhp := range rhb.mhPairs {
 		w.Header().Add("Allow", mhp.method)
@@ -432,9 +424,9 @@ func (rhb *_RequestHandlerBase) handleOptionsHTTPMethod(
 }
 
 func (rhb *_RequestHandlerBase) handleNotAllowedHTTPMethods(
-	_ context.Context,
 	w http.ResponseWriter,
 	r *http.Request,
+	_ *Args,
 ) {
 	for _, mhp := range rhb.mhPairs {
 		w.Header().Add("Allow", mhp.method)
@@ -469,7 +461,9 @@ func (rhb *_RequestHandlerBase) ServeHTTP(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
-	rhb.handleRequest(r.Context(), w, r)
+	var args = getArgs(r.URL, nil)
+	rhb.handleRequest(w, r, args)
+	putArgsInThePool(args)
 }
 
 // --------------------------------------------------
@@ -493,19 +487,19 @@ func PermanentRedirectCode() int {
 // -------------------------
 
 type RedirectHandlerFunc func(
-	c context.Context,
 	w http.ResponseWriter,
 	r *http.Request,
 	url string,
 	code int,
+	args *Args,
 )
 
 var permanentRedirect = func(
-	_ context.Context,
 	w http.ResponseWriter,
 	r *http.Request,
 	url string,
 	code int,
+	_ *Args,
 ) {
 	http.Redirect(w, r, url, code)
 }
@@ -537,7 +531,7 @@ func WrapPermanentRedirectHandlerFunc(
 // --------------------------------------------------
 
 var notFoundResourceHandler Handler = HandlerFunc(
-	func(_ context.Context, w http.ResponseWriter, _ *http.Request) {
+	func(w http.ResponseWriter, _ *http.Request, _ *Args) {
 		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 	},
 )

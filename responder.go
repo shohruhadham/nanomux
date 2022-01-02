@@ -4,7 +4,6 @@
 package nanomux
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -2236,13 +2235,12 @@ func (rb *_ResponderBase) requestHandlerBase() *_RequestHandlerBase {
 // passRequestToChildResource passes the request that was made to a resource
 // below in the hierarchy.
 func (rb *_ResponderBase) passRequestToChildResource(
-	c context.Context,
 	w http.ResponseWriter,
 	r *http.Request,
-	rd *_RoutingData,
+	args *Args,
 ) bool {
-	var currentPathSegmentIdx = rd.currentPathSegmentIdx
-	var ps, err = rd.nextPathSegment()
+	var currentPathSegmentIdx = args.currentPathSegmentIdx
+	var ps, err = args.nextPathSegment()
 	if err != nil {
 		http.Error(
 			w,
@@ -2250,57 +2248,57 @@ func (rb *_ResponderBase) passRequestToChildResource(
 			http.StatusBadRequest,
 		)
 
-		rd.handled = true
-		rd.currentPathSegmentIdx = currentPathSegmentIdx
-		return rd.handled
+		args.handled = true
+		args.currentPathSegmentIdx = currentPathSegmentIdx
+		return args.handled
 	}
 
 	if len(ps) > 0 {
 		if sr := rb.staticResources[ps]; sr != nil {
-			rd._r = sr.derived
-			sr.segmentHandler(c, w, r)
+			args._r = sr.derived
+			sr.segmentHandler(w, r, args)
 
-			rd.currentPathSegmentIdx = currentPathSegmentIdx
-			return rd.handled
+			args.currentPathSegmentIdx = currentPathSegmentIdx
+			return args.handled
 		}
 
 		for _, pr := range rb.patternResources {
 			var matched bool
-			matched, rd.hostPathValues = pr.Template().Match(
+			matched, args.hostPathValues = pr.Template().Match(
 				ps,
-				rd.hostPathValues,
+				args.hostPathValues,
 			)
 
 			if matched {
-				rd._r = pr.derived
-				pr.segmentHandler(c, w, r)
+				args._r = pr.derived
+				pr.segmentHandler(w, r, args)
 
-				rd.currentPathSegmentIdx = currentPathSegmentIdx
-				return rd.handled
+				args.currentPathSegmentIdx = currentPathSegmentIdx
+				return args.handled
 			}
 		}
 
 		if rb.wildcardResource != nil {
-			_, rd.hostPathValues = rb.wildcardResource.Template().Match(
+			_, args.hostPathValues = rb.wildcardResource.Template().Match(
 				ps,
-				rd.hostPathValues,
+				args.hostPathValues,
 			)
 
-			rd._r = rb.wildcardResource.derived
-			rb.wildcardResource.segmentHandler(c, w, r)
+			args._r = rb.wildcardResource.derived
+			rb.wildcardResource.segmentHandler(w, r, args)
 
-			rd.currentPathSegmentIdx = currentPathSegmentIdx
-			return rd.handled
+			args.currentPathSegmentIdx = currentPathSegmentIdx
+			return args.handled
 		}
 	}
 
-	if rd.subtreeExists {
-		rd.currentPathSegmentIdx = currentPathSegmentIdx
+	if args.subtreeExists {
+		args.currentPathSegmentIdx = currentPathSegmentIdx
 		return false
 	}
 
-	notFoundResourceHandler.ServeHTTP(c, w, r)
-	rd.handled = true
-	rd.currentPathSegmentIdx = currentPathSegmentIdx
+	notFoundResourceHandler.ServeHTTP(w, r, args)
+	args.handled = true
+	args.currentPathSegmentIdx = currentPathSegmentIdx
 	return true
 }
