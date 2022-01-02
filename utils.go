@@ -637,20 +637,20 @@ var (
 
 // _Context is passed to request handlers.
 type _Context struct {
-	original context.Context
-	rd       _RoutingData
+	parent context.Context
+	rd     _RoutingData
 }
 
 func (c *_Context) Deadline() (deadline time.Time, ok bool) {
-	return c.original.Deadline()
+	return c.parent.Deadline()
 }
 
 func (c *_Context) Done() <-chan struct{} {
-	return c.original.Done()
+	return c.parent.Done()
 }
 
 func (c *_Context) Err() error {
-	return c.original.Err()
+	return c.parent.Err()
 }
 
 func (c *_Context) Value(key interface{}) interface{} {
@@ -661,12 +661,28 @@ func (c *_Context) Value(key interface{}) interface{} {
 		case hostPathValuesKey:
 			return c.rd.hostPathValues
 		case remainingPathKey:
+			if c.rd._r == nil {
+				if c.rd.cleanPath != "" {
+					return c.rd.cleanPath
+				}
+
+				return c.rd.url.Path
+			}
+
 			return c.rd.remainingPath()
 		case responderKey:
 			return c.rd._r
 		case responderSharedDataKey:
+			if c.rd._r == nil {
+				return nil
+			}
+
 			return c.rd._r.SharedData()
 		case responderImplKey:
+			if c.rd._r == nil {
+				return nil
+			}
+
 			return c.rd._r.Implementation()
 		case hostKey:
 			switch _r := c.rd._r.(type) {
@@ -675,7 +691,7 @@ func (c *_Context) Value(key interface{}) interface{} {
 			case *Resource:
 				return _r.Host()
 			default:
-				return nil // TODO: Consider panic.
+				return nil
 			}
 		case currentResourceKey:
 			switch _r := c.rd._r.(type) {
@@ -684,14 +700,14 @@ func (c *_Context) Value(key interface{}) interface{} {
 			case *Resource:
 				return _r
 			default:
-				return nil // TODO: Consider panic.
+				return nil
 			}
 		default:
 			return nil
 		}
 	}
 
-	return c.original.Value(key)
+	return c.parent.Value(key)
 }
 
 // -------------------------
@@ -770,7 +786,7 @@ func getContextFromThePool(
 	_r _Responder,
 ) *_Context {
 	var _c = contextPool.Get().(*_Context)
-	_c.original = c
+	_c.parent = c
 	_c.rd.url = url
 	_c.rd._r = _r
 

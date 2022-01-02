@@ -92,7 +92,7 @@ func createResource(
 
 	r.derived = r
 	r.tmpl = tmpl
-	r.segmentHandler = HandlerFunc(r.handleOrPassRequest)
+	r.segmentHandler = r.handleOrPassRequest
 	return r, nil
 }
 
@@ -642,6 +642,6 @@ func (rb *Resource) handleOrPassRequest(
 	}
 
 	// At this point, the request may have been modified by subresources.
-	rb.requestHandler.ServeHTTP(c, w, r)
+	rb.requestHandler(c, w, r)
 	rd.handled = true
 }
