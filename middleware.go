@@ -4,8 +4,10 @@
 package nanomux
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"net/http"
 )
 
 // --------------------------------------------------
@@ -19,22 +21,24 @@ type MiddlewareFunc func(next Handler) HandlerFunc
 
 // MwFn converts the middleware that takes an http.Handler and returns an
 // http.Handler to the MiddlewareFunc.
-// func MwFn(mw func(http.Handler) http.Handler) MiddlewareFunc {
-// 	return func(next Handler) HandlerFunc {
-// 		var h http.Handler = http.HandlerFunc(
-// 			func(w http.ResponseWriter, r *http.Request) {
-// 				next.ServeHTTP(r.Context(), w, r)
-// 			},
-// 		)
+func MwFn(mw func(http.Handler) http.Handler) MiddlewareFunc {
+	return func(next Handler) HandlerFunc {
+		var h http.Handler = http.HandlerFunc(
+			func(w http.ResponseWriter, r *http.Request) {
+				var args = r.Context().Value(ArgsKey).(*Args)
+				next.ServeHTTP(w, r, args)
+			},
+		)
 
-// 		h = mw(h)
+		h = mw(h)
 
-// 		return func(c context.Context, w http.ResponseWriter, r *http.Request) {
-// 			r = r.WithContext(c)
-// 			h.ServeHTTP(w, r)
-// 		}
-// 	}
-// }
+		return func(w http.ResponseWriter, r *http.Request, args *Args) {
+			var c = context.WithValue(r.Context(), ArgsKey, args)
+			r = r.WithContext(c)
+			h.ServeHTTP(w, r)
+		}
+	}
+}
 
 // --------------------------------------------------
 
