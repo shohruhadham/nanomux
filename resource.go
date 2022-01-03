@@ -19,7 +19,7 @@ type Resource struct {
 // createDummyResource creates an unconfigured and dormant resource.
 func createDummyResource(tmpl *Template) (*Resource, error) {
 	if tmpl == nil {
-		return nil, newError("%w", ErrNilArgument)
+		return nil, newErr("%w", ErrNilArgument)
 	}
 
 	var rb = &Resource{}
@@ -38,13 +38,13 @@ func createResource(
 ) (*Resource, error) {
 	var hTmplStr, pTmplStr, rTmplStr, secure, tslash, err = splitURL(tmplStr)
 	if err != nil {
-		return nil, newError("%w", err)
+		return nil, newErr("%w", err)
 	}
 
 	var tmpl *Template
 	if rTmplStr == "/" {
 		if hTmplStr != "" {
-			return nil, newError("%w", ErrNonRouterParent)
+			return nil, newErr("%w", ErrNonRouterParent)
 		}
 
 		tmpl = rootTmpl
@@ -53,7 +53,7 @@ func createResource(
 	if tmpl == nil {
 		tmpl, err = TryToParse(rTmplStr)
 		if err != nil {
-			return nil, newError("%w", err)
+			return nil, newErr("%w", err)
 		}
 	}
 
@@ -61,7 +61,7 @@ func createResource(
 	if config != nil {
 		config.Secure, config.TrailingSlash = secure, tslash
 		if config.RedirectInsecureRequest && !secure {
-			return nil, newError("%w", ErrConflictingSecurity)
+			return nil, newErr("%w", ErrConflictingSecurity)
 		}
 
 		var tcfs = config.asFlags()
@@ -71,14 +71,14 @@ func createResource(
 	var r = &Resource{}
 	err = r.configCompatibility(secure, tslash, cfs)
 	if err != nil {
-		return nil, newError("%w", err)
+		return nil, newErr("%w", err)
 	}
 
 	if impl != nil {
 		var rhb *_RequestHandlerBase
 		rhb, err = detectHTTPMethodHandlersOf(impl)
 		if err != nil {
-			return nil, newError("%w", err)
+			return nil, newErr("%w", err)
 		}
 
 		r.impl = impl
@@ -114,7 +114,7 @@ func createResource(
 func CreateDormantResource(urlTmplStr string) (*Resource, error) {
 	var r, err = createResource(urlTmplStr, nil, nil)
 	if err != nil {
-		return nil, newError("<- %w", err)
+		return nil, newErr("%w", err)
 	}
 
 	return r, nil
@@ -145,7 +145,7 @@ func CreateDormantResourceUsingConfig(
 ) (*Resource, error) {
 	var r, err = createResource(urlTmplStr, nil, &config)
 	if err != nil {
-		return nil, newError("<- %w", err)
+		return nil, newErr("%w", err)
 	}
 
 	return r, nil
@@ -195,12 +195,12 @@ func CreateDormantResourceUsingConfig(
 // the resource must be placed under the registering resource.
 func CreateResource(urlTmplStr string, impl Impl) (*Resource, error) {
 	if impl == nil {
-		return nil, newError("%w", ErrNilArgument)
+		return nil, newErr("%w", ErrNilArgument)
 	}
 
 	var r, err = createResource(urlTmplStr, impl, nil)
 	if err != nil {
-		return nil, newError("<- %w", err)
+		return nil, newErr("%w", err)
 	}
 
 	return r, nil
@@ -255,12 +255,12 @@ func CreateResourceUsingConfig(
 	config Config,
 ) (*Resource, error) {
 	if impl == nil {
-		return nil, newError("%w", ErrNilArgument)
+		return nil, newErr("%w", ErrNilArgument)
 	}
 
 	var r, err = createResource(urlTmplStr, impl, &config)
 	if err != nil {
-		return nil, newError("<- %w", err)
+		return nil, newErr("%w", err)
 	}
 
 	return r, nil
@@ -290,7 +290,7 @@ func CreateResourceUsingConfig(
 func NewDormantResource(urlTmplStr string) *Resource {
 	var r, err = CreateDormantResource(urlTmplStr)
 	if err != nil {
-		panic(newError("<- %w", err))
+		panic(newErr("%w", err))
 	}
 
 	return r
@@ -320,7 +320,7 @@ func NewDormantResource(urlTmplStr string) *Resource {
 func NewDormantResourceUsingConfig(urlTmplStr string, config Config) *Resource {
 	var r, err = CreateDormantResourceUsingConfig(urlTmplStr, config)
 	if err != nil {
-		panic(newError("<- %w", err))
+		panic(newErr("%w", err))
 	}
 
 	return r
@@ -372,7 +372,7 @@ func NewDormantResourceUsingConfig(urlTmplStr string, config Config) *Resource {
 func NewResource(urlTmplStr string, impl Impl) *Resource {
 	var rb, err = CreateResource(urlTmplStr, impl)
 	if err != nil {
-		panic(newError("<- %w", err))
+		panic(newErr("%w", err))
 	}
 
 	return rb
@@ -431,7 +431,7 @@ func NewResourceUsingConfig(
 ) *Resource {
 	var rb, err = CreateResourceUsingConfig(urlTmplStr, impl, config)
 	if err != nil {
-		panic(newError("<- %w", err))
+		panic(newErr("%w", err))
 	}
 
 	return rb
@@ -441,7 +441,7 @@ func NewResourceUsingConfig(
 func newDummyResource(tmpl *Template) *Resource {
 	var r, err = createDummyResource(tmpl)
 	if err != nil {
-		panic(newError("<- %w", err))
+		panic(newErr("%w", err))
 	}
 
 	return r

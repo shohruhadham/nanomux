@@ -219,7 +219,8 @@ func detectHTTPMethodHandlersOf(impl Impl) (*_RequestHandlerBase, error) {
 		))
 
 		if !ok {
-			return nil, newError("failed to get the handler method")
+			// This should never happen.
+			return nil, newErr("failed to get the handler method")
 		}
 
 		if hm == "NOTALLOWEDMETHOD" {
@@ -258,23 +259,23 @@ func (rhb *_RequestHandlerBase) setHandlerFor(
 	h Handler,
 ) error {
 	if h == nil {
-		return newError("%w", ErrNilArgument)
+		return newErr("%w", ErrNilArgument)
 	}
 
 	// If the h is a HandlerFunc it passes the above check.
 	if hf, ok := h.(HandlerFunc); ok && hf == nil {
-		return newError("%w", ErrNilArgument)
+		return newErr("%w", ErrNilArgument)
 	}
 
 	var ms = toUpperSplitByCommaSpace(methods)
 	var lms = len(ms)
 	if lms == 0 {
-		return newError("%w", ErrNoMethod)
+		return newErr("%w", ErrNoMethod)
 	}
 
 	if lms == 1 && ms[0] == "!" {
 		if len(rhb.mhPairs) == 0 {
-			return newError("%w", ErrNoHandlerExists)
+			return newErr("%w", ErrNoHandlerExists)
 		}
 
 		rhb.notAllowedHTTPMethodsHandler = h
@@ -328,17 +329,17 @@ func (rhb *_RequestHandlerBase) wrapHandlerOf(
 	mwfs ...MiddlewareFunc,
 ) error {
 	if len(mwfs) == 0 {
-		return newError("%w", ErrNoMiddleware)
+		return newErr("%w", ErrNoMiddleware)
 	}
 
 	if len(rhb.mhPairs) == 0 {
-		return newError("%w", ErrNoHandlerExists)
+		return newErr("%w", ErrNoHandlerExists)
 	}
 
 	var ms = toUpperSplitByCommaSpace(methods)
 	var lms = len(ms)
 	if lms == 0 {
-		return newError("%w", ErrNoMethod)
+		return newErr("%w", ErrNoMethod)
 	}
 
 	if lms == 1 {
@@ -346,7 +347,7 @@ func (rhb *_RequestHandlerBase) wrapHandlerOf(
 			rhb.notAllowedHTTPMethodsHandler = rhb.handlerOf("!")
 			for i, mwf := range mwfs {
 				if mwf == nil {
-					return newError("%w at index %d", ErrNoMiddleware, i)
+					return newErr("%w at index %d", ErrNoMiddleware, i)
 				}
 
 				rhb.notAllowedHTTPMethodsHandler = mwf(
@@ -359,7 +360,7 @@ func (rhb *_RequestHandlerBase) wrapHandlerOf(
 			for _, mhp := range rhb.mhPairs {
 				for i, mwf := range mwfs {
 					if mwf == nil {
-						return newError("%w at index %d", ErrNoMiddleware, i)
+						return newErr("%w at index %d", ErrNoMiddleware, i)
 					}
 
 					mhp.handler = mwf(mhp.handler)
@@ -375,14 +376,14 @@ func (rhb *_RequestHandlerBase) wrapHandlerOf(
 		if _, h := rhb.mhPairs.get(m); h != nil {
 			for i, mwf := range mwfs {
 				if mwf == nil {
-					return newError("%w at index %d", ErrNoMiddleware, i)
+					return newErr("%w at index %d", ErrNoMiddleware, i)
 				}
 
 				h = mwf(h)
 				rhb.mhPairs.set(m, h)
 			}
 		} else {
-			return newError("%w for the method %q", ErrNoHandlerExists, m)
+			return newErr("%w for the method %q", ErrNoHandlerExists, m)
 		}
 	}
 
@@ -476,7 +477,7 @@ var permanentRedirectCode = http.StatusPermanentRedirect
 func SetPermanentRedirectCode(code int) error {
 	if code != http.StatusMovedPermanently &&
 		code != http.StatusPermanentRedirect {
-		return newError("%w", ErrConflictingStatusCode)
+		return newErr("%w", ErrConflictingStatusCode)
 	}
 
 	permanentRedirectCode = code
@@ -509,7 +510,7 @@ var permanentRedirect = func(
 
 func SetPermanentRedirectHandlerFunc(fn RedirectHandlerFunc) error {
 	if fn == nil {
-		return newError("%w", ErrNilArgument)
+		return newErr("%w", ErrNilArgument)
 	}
 
 	permanentRedirect = fn
@@ -524,7 +525,7 @@ func WrapPermanentRedirectHandlerFunc(
 	mwf func(RedirectHandlerFunc) RedirectHandlerFunc,
 ) error {
 	if mwf == nil {
-		return newError("%w", ErrNilArgument)
+		return newErr("%w", ErrNilArgument)
 	}
 
 	permanentRedirect = mwf(permanentRedirect)
@@ -541,7 +542,7 @@ var notFoundResourceHandler Handler = HandlerFunc(
 
 func SetHandlerForNotFoundResource(handler Handler) error {
 	if handler == nil {
-		return newError("%w", ErrNilArgument)
+		return newErr("%w", ErrNilArgument)
 	}
 
 	notFoundResourceHandler = handler
@@ -554,7 +555,7 @@ func HandlerOfNotFoundResource() Handler {
 
 func WrapHandlerOfNotFoundResource(mwf MiddlewareFunc) error {
 	if mwf == nil {
-		return newError("%w", ErrNilArgument)
+		return newErr("%w", ErrNilArgument)
 	}
 
 	notFoundResourceHandler = mwf(notFoundResourceHandler)

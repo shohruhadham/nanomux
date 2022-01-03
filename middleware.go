@@ -52,7 +52,7 @@ func wrapEveryHandlerOf(
 ) error {
 	var ms = toUpperSplitByCommaSpace(methods)
 	if len(ms) == 0 {
-		return newError("<- %w", ErrNoMethod)
+		return newErr("%w", ErrNoMethod)
 	}
 
 	var err = traverseAndCall(
@@ -81,7 +81,7 @@ func wrapEveryHandlerOf(
 	)
 
 	if err != nil {
-		return newError("<- %w", err)
+		return newErr("%w", err)
 	}
 
 	return nil

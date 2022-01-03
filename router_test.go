@@ -4414,7 +4414,7 @@ func getStaticRouter() (*Router, *http.Request, error) {
 
 		err = ro.SetImplementationAt(urls[i], impl)
 		if err != nil {
-			return nil, nil, newError("%w at url %q", err, urls[i])
+			return nil, nil, newErr("%w at url %q", err, urls[i])
 		}
 	}
 
@@ -4483,7 +4483,7 @@ func getPatternRouter() (*Router, *http.Request, error) {
 
 		err = ro.SetImplementationAt(urls[i], impl)
 		if err != nil {
-			return nil, nil, newError("%w at url %q", err, urls[i])
+			return nil, nil, newErr("%w at url %q", err, urls[i])
 		}
 	}
 
@@ -4513,7 +4513,7 @@ func getWildcardRouter() (*Router, *http.Request, error) {
 
 	err = ro.SetImplementationAt(url, impl)
 	if err != nil {
-		return nil, nil, newError("%w at url %q", err, url)
+		return nil, nil, newErr("%w at url %q", err, url)
 	}
 
 	url = "https://hostA.exampleA.com/resourceB/resourceC/resourceD/resourceE"
@@ -4594,7 +4594,7 @@ func getRouter() (ro *Router, err error) {
 
 		err = ro.SetImplementationAt(urls[i], impl)
 		if err != nil {
-			err = newError("%w at url %q", err, urls[i])
+			err = newErr("%w at url %q", err, urls[i])
 			return
 		}
 	}
@@ -4613,7 +4613,7 @@ func getRouter() (ro *Router, err error) {
 
 	err = ro.SetImplementationAt(url, impl)
 	if err != nil {
-		err = newError("%w at url %q", err, url)
+		err = newErr("%w at url %q", err, url)
 		return
 	}
 
