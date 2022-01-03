@@ -53,7 +53,7 @@ func (ro *Router) parent() _Parent {
 func (ro *Router) _Responder(urlTmplStr string) (_Responder, error) {
 	var hTmplStr, pTmplStr, secure, tslash, err = splitHostAndPath(urlTmplStr)
 	if err != nil {
-		return nil, newError("<- %w", err)
+		return nil, newErr("%w", err)
 	}
 
 	var _r _Responder
@@ -61,7 +61,7 @@ func (ro *Router) _Responder(urlTmplStr string) (_Responder, error) {
 	if hTmplStr != "" {
 		_r, newHost, _, _, err = ro.host(hTmplStr)
 		if err != nil {
-			return nil, newError("<- %w", err)
+			return nil, newErr("%w", err)
 		}
 	}
 
@@ -78,17 +78,17 @@ func (ro *Router) _Responder(urlTmplStr string) (_Responder, error) {
 			var newFirst, newLast *Resource
 			_r, newFirst, newLast, _, err = _r.pathSegmentResources(pTmplStr)
 			if err != nil {
-				return nil, newError("<- %w", err)
+				return nil, newErr("%w", err)
 			}
 
 			if newFirst != nil {
 				err = newLast.configCompatibility(secure, tslash, nil)
 				if err != nil {
-					return nil, newError("<- %w", err)
+					return nil, newErr("%w", err)
 				}
 
 				if r := _r.ChildResourceNamed(newFirst.Name()); r != nil {
-					return nil, newError("<- %w", ErrDuplicateNameAmongSiblings)
+					return nil, newErr("%w", ErrDuplicateNameAmongSiblings)
 				}
 
 				_r.registerResource(newFirst)
@@ -97,7 +97,7 @@ func (ro *Router) _Responder(urlTmplStr string) (_Responder, error) {
 					// reference to a newly created host.
 					err = ro.registerHost(_r.(*Host))
 					if err != nil {
-						return nil, newError("<- %w", err)
+						return nil, newErr("%w", err)
 					}
 				}
 
@@ -108,17 +108,17 @@ func (ro *Router) _Responder(urlTmplStr string) (_Responder, error) {
 
 	err = _r.configCompatibility(secure, tslash, nil)
 	if err != nil {
-		return nil, newError("<- %w", err)
+		return nil, newErr("%w", err)
 	}
 
 	if newHost {
 		if h := ro.HostNamed(_r.Name()); h != nil {
-			return nil, newError("<- %w", ErrDuplicateNameAmongSiblings)
+			return nil, newErr("%w", ErrDuplicateNameAmongSiblings)
 		}
 
 		err = ro.registerHost(_r.(*Host))
 		if err != nil {
-			return nil, newError("<- %w", err)
+			return nil, newErr("%w", err)
 		}
 	}
 
@@ -131,17 +131,17 @@ func (ro *Router) registeredHost(
 ) (*Host, *Template, error) {
 	var tmpl, err = TryToParse(hTmplStr)
 	if err != nil {
-		return nil, nil, newError("<- %w", err)
+		return nil, nil, newErr("%w", err)
 	}
 
 	if tmpl.IsWildcard() {
-		return nil, nil, newError("%w", ErrWildcardHostTemplate)
+		return nil, nil, newErr("%w", ErrWildcardHostTemplate)
 	}
 
 	var h *Host
 	h, err = ro.hostWithTemplate(tmpl)
 	if err != nil {
-		return nil, nil, newError("<- %w", err)
+		return nil, nil, newErr("%w", err)
 	}
 
 	return h, tmpl, nil
@@ -164,13 +164,13 @@ func (ro *Router) registered_Responder(urlTmplStr string) (
 
 	hTmplStr, pTmplStr, secure, tslash, err = splitHostAndPath(urlTmplStr)
 	if err != nil {
-		return nil, false, newError("<- %w", err)
+		return nil, false, newErr("%w", err)
 	}
 
 	if hTmplStr != "" {
 		_r, _, err = ro.registeredHost(hTmplStr)
 		if err != nil {
-			return nil, false, newError("<- %w", err)
+			return nil, false, newErr("%w", err)
 		}
 
 		host = pTmplStr == ""
@@ -195,7 +195,7 @@ func (ro *Router) registered_Responder(urlTmplStr string) (
 		if pTmplStr != "/" {
 			_r, _, err = _r.registeredResource(pTmplStr)
 			if err != nil {
-				return nil, false, newError("<- %w", err)
+				return nil, false, newErr("%w", err)
 			}
 		}
 	}
@@ -217,7 +217,7 @@ func (ro *Router) registered_Responder(urlTmplStr string) (
 	if validPtr {
 		err = _r.configCompatibility(secure, tslash, nil)
 		if err != nil {
-			return nil, false, newError("<- %w", err)
+			return nil, false, newErr("%w", err)
 		}
 	} else {
 		return nil, host, nil
@@ -237,11 +237,11 @@ func (ro *Router) registered_Responder(urlTmplStr string) (
 func (ro *Router) ConfigureURL(urlTmplStr string, config Config) error {
 	var _r, _, err = ro.registered_Responder(urlTmplStr)
 	if err != nil {
-		return newError("<- %w", err)
+		return newErr("%w", err)
 	}
 
 	if _r == nil {
-		return newError("%w", ErrNonExistentResource)
+		return newErr("%w", ErrNonExistentResource)
 	}
 
 	_r.Configure(config)
@@ -256,11 +256,11 @@ func (ro *Router) ConfigureURL(urlTmplStr string, config Config) error {
 func (ro *Router) URLConfig(urlTmplStr string) (Config, error) {
 	var _r, _, err = ro.registered_Responder(urlTmplStr)
 	if err != nil {
-		return Config{}, newError("<- %w", err)
+		return Config{}, newErr("%w", err)
 	}
 
 	if _r == nil {
-		return Config{}, newError("%w", ErrNonExistentResource)
+		return Config{}, newErr("%w", ErrNonExistentResource)
 	}
 
 	return _r.Config(), nil
@@ -278,12 +278,12 @@ func (ro *Router) URLConfig(urlTmplStr string) (Config, error) {
 func (ro *Router) SetImplementationAt(urlTmplStr string, impl Impl) error {
 	var _r, err = ro._Responder(urlTmplStr)
 	if err != nil {
-		return newError("<- %w", err)
+		return newErr("%w", err)
 	}
 
 	err = _r.SetImplementation(impl)
 	if err != nil {
-		return newError("<- %w", err)
+		return newErr("%w", err)
 	}
 
 	return nil
@@ -299,7 +299,7 @@ func (ro *Router) SetImplementationAt(urlTmplStr string, impl Impl) error {
 func (ro *Router) ImplementationAt(urlTmplStr string) (Impl, error) {
 	var _r, _, err = ro.registered_Responder(urlTmplStr)
 	if err != nil {
-		return nil, newError("<- %w", err)
+		return nil, newErr("%w", err)
 	}
 
 	if _r != nil {
@@ -329,12 +329,12 @@ func (ro *Router) SetURLHandlerFor(
 ) error {
 	var _r, err = ro._Responder(urlTmplStr)
 	if err != nil {
-		return newError("<- %w", err)
+		return newErr("%w", err)
 	}
 
 	err = _r.SetHandlerFor(methods, handler)
 	if err != nil {
-		return newError("<- %w", err)
+		return newErr("%w", err)
 	}
 
 	return nil
@@ -359,7 +359,7 @@ func (ro *Router) SetURLHandlerFuncFor(
 	handlerFunc HandlerFunc,
 ) error {
 	if err := ro.SetURLHandlerFor(methods, urlTmplStr, handlerFunc); err != nil {
-		return newError("<- %w", err)
+		return newErr("%w", err)
 	}
 
 	return nil
@@ -381,7 +381,7 @@ func (ro *Router) URLHandlerOf(method string, urlTmplStr string) (
 ) {
 	var _r, _, err = ro.registered_Responder(urlTmplStr)
 	if err != nil {
-		return nil, newError("<- %w", err)
+		return nil, newErr("%w", err)
 	}
 
 	if _r != nil {
@@ -411,12 +411,12 @@ func (ro *Router) WrapURLSegmentHandler(
 ) error {
 	var r, rIsHost, err = ro.registered_Responder(urlTmplStr)
 	if err != nil {
-		return newError("<- %w", err)
+		return newErr("%w", err)
 	}
 
 	if r != nil {
 		if err = r.WrapSegmentHandler(middlewares...); err != nil {
-			return newError("<- %w", err)
+			return newErr("%w", err)
 		}
 
 		return nil
@@ -428,7 +428,7 @@ func (ro *Router) WrapURLSegmentHandler(
 		err = ErrNonExistentResource
 	}
 
-	return newError("%w %q", err, urlTmplStr)
+	return newErr("%w %q", err, urlTmplStr)
 }
 
 // WrapURLRequestHandler wraps the request handler of the host or resource.
@@ -449,12 +449,12 @@ func (ro *Router) WrapURLRequestHandler(
 ) error {
 	var r, rIsHost, err = ro.registered_Responder(urlTmplStr)
 	if err != nil {
-		return newError("<- %w", err)
+		return newErr("%w", err)
 	}
 
 	if r != nil {
 		if err = r.WrapRequestHandler(mwfs...); err != nil {
-			return newError("<- %w", err)
+			return newErr("%w", err)
 		}
 
 		return nil
@@ -466,7 +466,7 @@ func (ro *Router) WrapURLRequestHandler(
 		err = ErrNonExistentResource
 	}
 
-	return newError("%w %q", err, urlTmplStr)
+	return newErr("%w %q", err, urlTmplStr)
 }
 
 // WrapURLHandlerOf wraps the handlers of the HTTP methods of the host or
@@ -492,12 +492,12 @@ func (ro *Router) WrapURLHandlerOf(
 ) error {
 	var r, rIsHost, err = ro.registered_Responder(urlTmplStr)
 	if err != nil {
-		return newError("<- %w", err)
+		return newErr("%w", err)
 	}
 
 	if r != nil {
 		if err = r.WrapHandlerOf(methods, middlewares...); err != nil {
-			return newError("<- %w", err)
+			return newErr("%w", err)
 		}
 
 		return nil
@@ -509,7 +509,7 @@ func (ro *Router) WrapURLHandlerOf(
 		err = ErrNonExistentResource
 	}
 
-	return newError("%w %q", err, urlTmplStr)
+	return newErr("%w %q", err, urlTmplStr)
 }
 
 // -------------------------
@@ -528,7 +528,7 @@ func (ro *Router) hostWithTemplate(tmpl *Template) (*Host, error) {
 			}
 
 			if stmpl.Name() != tmpl.Name() {
-				return nil, newError("<- %w", ErrDifferentNames)
+				return nil, newErr("%w", ErrDifferentNames)
 			}
 
 			return h, nil
@@ -544,7 +544,7 @@ func (ro *Router) hostWithTemplate(tmpl *Template) (*Host, error) {
 			case DifferentValueNames:
 				fallthrough
 			case DifferentNames:
-				return nil, newError("<- %w", sim.Err())
+				return nil, newErr("%w", sim.Err())
 			case TheSame:
 				return ph, nil
 			}
@@ -574,12 +574,12 @@ func (ro *Router) replaceHost(oldH, newH *Host) error {
 
 	var err = newH.setParent(ro)
 	if err != nil {
-		return newError("<- %w", err)
+		return newErr("%w", err)
 	}
 
 	err = oldH.setParent(nil)
 	if err != nil {
-		return newError("<- %w", err)
+		return newErr("%w", err)
 	}
 
 	return nil
@@ -600,7 +600,7 @@ func (ro *Router) registerHost(h *Host) error {
 
 	var err = h.setParent(ro)
 	if err != nil {
-		return newError("<- %w", err)
+		return newErr("%w", err)
 	}
 
 	return nil
@@ -618,7 +618,7 @@ func (ro *Router) host(hostTmplStr string) (
 ) {
 	hostTmplStr, secure, tslash, err = getHost(hostTmplStr)
 	if err != nil {
-		err = newError("<- %w", err)
+		err = newErr("%w", err)
 		return
 	}
 
@@ -626,14 +626,14 @@ func (ro *Router) host(hostTmplStr string) (
 	h, tmpl, err = ro.registeredHost(hostTmplStr)
 	if err != nil {
 		secure, tslash = false, false
-		err = newError("<- %w", err)
+		err = newErr("%w", err)
 		return
 	}
 
 	if h == nil {
 		h, err = createDummyHost(tmpl)
 		if err != nil {
-			err = newError("%w", err)
+			err = newErr("%w", err)
 		}
 
 		newHost = true
@@ -654,21 +654,21 @@ func (ro *Router) host(hostTmplStr string) (
 func (ro *Router) Host(hostTmplStr string) (*Host, error) {
 	var h, newHost, secure, tslash, err = ro.host(hostTmplStr)
 	if err != nil {
-		return nil, newError("<- %w", err)
+		return nil, newErr("%w", err)
 	}
 
 	err = h.configCompatibility(secure, tslash, nil)
 	if err != nil {
-		return nil, newError("<- %w", err)
+		return nil, newErr("%w", err)
 	}
 
 	if newHost {
 		if ro.HostNamed(h.Name()) != nil {
-			return nil, newError("%w", ErrDuplicateNameAmongSiblings)
+			return nil, newErr("%w", ErrDuplicateNameAmongSiblings)
 		}
 		err = ro.registerHost(h)
 		if err != nil {
-			return nil, newError("<- %w", err)
+			return nil, newErr("%w", err)
 		}
 	}
 
@@ -691,27 +691,27 @@ func (ro *Router) HostUsingConfig(
 ) (*Host, error) {
 	var h, newHost, secure, tslash, err = ro.host(hTmplStr)
 	if err != nil {
-		return nil, newError("<- %w", err)
+		return nil, newErr("%w", err)
 	}
 
 	if config.RedirectInsecureRequest && !secure {
-		return nil, newError("%w", ErrConflictingSecurity)
+		return nil, newErr("%w", ErrConflictingSecurity)
 	}
 
 	var cfs = config.asFlags()
 	err = h.configCompatibility(secure, tslash, &cfs)
 	if err != nil {
-		return nil, newError("<- %w", err)
+		return nil, newErr("%w", err)
 	}
 
 	if newHost {
 		if ro.HostNamed(h.Name()) != nil {
-			return nil, newError("%w", ErrDuplicateNameAmongSiblings)
+			return nil, newErr("%w", ErrDuplicateNameAmongSiblings)
 		}
 
 		err = ro.registerHost(h)
 		if err != nil {
-			return nil, newError("<- %w", err)
+			return nil, newErr("%w", err)
 		}
 	}
 
@@ -727,26 +727,26 @@ func (ro *Router) HostUsingConfig(
 // the method returns an error.
 func (ro *Router) RegisterHost(h *Host) error {
 	if h == nil {
-		return newError("%w", ErrNilArgument)
+		return newErr("%w", ErrNilArgument)
 	}
 
 	if h.parent() != nil {
-		return newError("%w", ErrRegisteredHost)
+		return newErr("%w", ErrRegisteredHost)
 	}
 
 	var hwt, err = ro.hostWithTemplate(h.Template())
 	if err != nil {
-		return newError("<- %w", err)
+		return newErr("%w", err)
 	}
 
 	if hwt == nil {
 		if ro.HostNamed(h.Name()) != nil {
-			return newError("%w", ErrDuplicateNameAmongSiblings)
+			return newErr("%w", ErrDuplicateNameAmongSiblings)
 		}
 
 		err = ro.registerHost(h)
 		if err != nil {
-			return newError("<- %w", err)
+			return newErr("%w", err)
 		}
 
 		return nil
@@ -754,7 +754,7 @@ func (ro *Router) RegisterHost(h *Host) error {
 
 	if !h.canHandleRequest() {
 		if err = h.passChildResourcesTo(hwt); err != nil {
-			return newError("<- %w", err)
+			return newErr("%w", err)
 		}
 
 		return nil
@@ -762,14 +762,14 @@ func (ro *Router) RegisterHost(h *Host) error {
 
 	if !hwt.canHandleRequest() {
 		if err = hwt.passChildResourcesTo(h); err != nil {
-			return newError("<- %w", err)
+			return newErr("%w", err)
 		}
 
 		ro.replaceHost(hwt, h)
 		return nil
 	}
 
-	return newError("%w", ErrDuplicateHostTemplate)
+	return newErr("%w", ErrDuplicateHostTemplate)
 }
 
 // RegisteredHost returns an already registered host. The host template can
@@ -788,19 +788,19 @@ func (ro *Router) RegisteredHost(hTmplStr string) (*Host, error) {
 
 	hTmplStr, secure, tslash, err = getHost(hTmplStr)
 	if err != nil {
-		return nil, newError("<- %w", err)
+		return nil, newErr("%w", err)
 	}
 
 	var h *Host
 	h, _, err = ro.registeredHost(hTmplStr)
 	if err != nil {
-		return nil, newError("<- %w", err)
+		return nil, newErr("%w", err)
 	}
 
 	if h != nil {
 		err = h.configCompatibility(secure, tslash, nil)
 		if err != nil {
-			return nil, newError("<- %w", err)
+			return nil, newErr("%w", err)
 		}
 	}
 
@@ -898,11 +898,11 @@ func (ro *Router) initializeRootResource() {
 func (ro *Router) Resource(urlTmplStr string) (*Resource, error) {
 	var hTmplStr, pTmplStr, secure, tslash, err = splitHostAndPath(urlTmplStr)
 	if err != nil {
-		return nil, newError("<- %w", err)
+		return nil, newErr("%w", err)
 	}
 
 	if pTmplStr == "" {
-		return nil, newError("%w", ErrEmptyPathTemplate)
+		return nil, newErr("%w", ErrEmptyPathTemplate)
 	}
 
 	var _r _Responder
@@ -910,12 +910,12 @@ func (ro *Router) Resource(urlTmplStr string) (*Resource, error) {
 	if hTmplStr != "" {
 		if pTmplStr == "/" {
 			// Hosts have trailing slash but not a root resource.
-			return nil, newError("%w", ErrEmptyPathSegmentTemplate)
+			return nil, newErr("%w", ErrEmptyPathSegmentTemplate)
 		}
 
 		_r, newHost, _, _, err = ro.host(hTmplStr)
 		if err != nil {
-			return nil, newError("<- %w", err)
+			return nil, newErr("%w", err)
 		}
 	} else {
 		if ro.r == nil {
@@ -929,27 +929,27 @@ func (ro *Router) Resource(urlTmplStr string) (*Resource, error) {
 		var newFirst, newLast *Resource
 		_r, newFirst, newLast, _, err = _r.pathSegmentResources(pTmplStr)
 		if err != nil {
-			return nil, newError("<- %w", err)
+			return nil, newErr("%w", err)
 		}
 
 		if newFirst != nil {
 			err = newLast.configCompatibility(secure, tslash, nil)
 			if err != nil {
-				return nil, newError("<- %w", err)
+				return nil, newErr("%w", err)
 			}
 
 			if _r.ChildResourceNamed(newFirst.Name()) != nil {
-				return nil, newError("%w", ErrDuplicateNameAmongSiblings)
+				return nil, newErr("%w", ErrDuplicateNameAmongSiblings)
 			}
 
 			_r.registerResource(newFirst)
 			if newHost {
 				if ro.HostNamed(_r.Name()) != nil {
-					return nil, newError("%w", ErrDuplicateNameAmongSiblings)
+					return nil, newErr("%w", ErrDuplicateNameAmongSiblings)
 				}
 				err = ro.registerHost(_r.(*Host))
 				if err != nil {
-					return nil, newError("<- %w", err)
+					return nil, newErr("%w", err)
 				}
 			}
 
@@ -959,7 +959,7 @@ func (ro *Router) Resource(urlTmplStr string) (*Resource, error) {
 
 	err = _r.configCompatibility(secure, tslash, nil)
 	if err != nil {
-		return nil, newError("<- %w", err)
+		return nil, newErr("%w", err)
 	}
 
 	return _r.(*Resource), nil
@@ -989,27 +989,27 @@ func (ro *Router) ResourceUsingConfig(urlTmplStr string, config Config) (
 ) {
 	var hTmplStr, pTmplStr, secure, tslash, err = splitHostAndPath(urlTmplStr)
 	if err != nil {
-		return nil, newError("<- %w", err)
+		return nil, newErr("%w", err)
 	}
 
 	if pTmplStr == "" {
-		return nil, newError("%w", ErrEmptyPathTemplate)
+		return nil, newErr("%w", ErrEmptyPathTemplate)
 	}
 
 	if config.RedirectInsecureRequest && !secure {
-		return nil, newError("%w", ErrConflictingSecurity)
+		return nil, newErr("%w", ErrConflictingSecurity)
 	}
 
 	var _r _Responder
 	var newHost bool
 	if hTmplStr != "" {
 		if pTmplStr == "/" {
-			return nil, newError("%w", ErrEmptyPathSegmentTemplate)
+			return nil, newErr("%w", ErrEmptyPathSegmentTemplate)
 		}
 
 		_r, newHost, _, _, err = ro.host(hTmplStr)
 		if err != nil {
-			return nil, newError("<- %w", err)
+			return nil, newErr("%w", err)
 		}
 	} else {
 		if ro.r == nil {
@@ -1023,25 +1023,25 @@ func (ro *Router) ResourceUsingConfig(urlTmplStr string, config Config) (
 		var newFirst, newLast *Resource
 		_r, newFirst, newLast, _, err = _r.pathSegmentResources(pTmplStr)
 		if err != nil {
-			return nil, newError("<- %w", err)
+			return nil, newErr("%w", err)
 		}
 
 		if newFirst != nil {
 			var cfs = config.asFlags()
 			err = newLast.configCompatibility(secure, tslash, &cfs)
 			if err != nil {
-				return nil, newError("<- %w", err)
+				return nil, newErr("%w", err)
 			}
 
 			if _r.ChildResourceNamed(newFirst.Name()) != nil {
-				return nil, newError("%w", ErrDuplicateNameAmongSiblings)
+				return nil, newErr("%w", ErrDuplicateNameAmongSiblings)
 			}
 
 			_r.registerResource(newFirst)
 			if newHost {
 				err = ro.registerHost(_r.(*Host))
 				if err != nil {
-					return nil, newError("<- %w", err)
+					return nil, newErr("%w", err)
 				}
 			}
 
@@ -1052,7 +1052,7 @@ func (ro *Router) ResourceUsingConfig(urlTmplStr string, config Config) (
 	var cfs = config.asFlags()
 	err = _r.configCompatibility(secure, tslash, &cfs)
 	if err != nil {
-		return nil, newError("<- %w", err)
+		return nil, newErr("%w", err)
 	}
 
 	return _r.(*Resource), nil
@@ -1069,7 +1069,7 @@ func (ro *Router) ResourceUsingConfig(urlTmplStr string, config Config) (
 // error.
 func (ro *Router) registerNewRoot(r *Resource) error {
 	if r.parent() != nil {
-		return newError("%w", ErrRegisteredResource)
+		return newErr("%w", ErrRegisteredResource)
 	}
 
 	if ro.r == nil {
@@ -1080,7 +1080,7 @@ func (ro *Router) registerNewRoot(r *Resource) error {
 
 	if !r.canHandleRequest() {
 		if err := r.passChildResourcesTo(ro.r); err != nil {
-			return newError("<- %w", err)
+			return newErr("%w", err)
 		}
 
 		return nil
@@ -1088,7 +1088,7 @@ func (ro *Router) registerNewRoot(r *Resource) error {
 
 	if !ro.r.canHandleRequest() {
 		if err := ro.r.passChildResourcesTo(r); err != nil {
-			return newError("<- %w", err)
+			return newErr("%w", err)
 		}
 
 		ro.r = r
@@ -1096,7 +1096,7 @@ func (ro *Router) registerNewRoot(r *Resource) error {
 		return nil
 	}
 
-	return newError("%w", ErrDuplicateResourceTemplate)
+	return newErr("%w", ErrDuplicateResourceTemplate)
 }
 
 // RegisterResource registers the resource under the root resource if it doesn't
@@ -1116,11 +1116,11 @@ func (ro *Router) registerNewRoot(r *Resource) error {
 // also checked recursively.
 func (ro *Router) RegisterResource(r *Resource) error {
 	if r == nil {
-		return newError("%w", ErrNilArgument)
+		return newErr("%w", ErrNilArgument)
 	}
 
 	if r.parent() != nil {
-		return newError("%w", ErrRegisteredResource)
+		return newErr("%w", ErrRegisteredResource)
 	}
 
 	var (
@@ -1134,7 +1134,7 @@ func (ro *Router) RegisterResource(r *Resource) error {
 			var err error
 			_r, newHost, _, _, err = ro.host(urlt.Host)
 			if err != nil {
-				return newError("<- %w", err)
+				return newErr("%w", err)
 			}
 
 			// The following if statement should never be true.
@@ -1149,11 +1149,11 @@ func (ro *Router) RegisterResource(r *Resource) error {
 		if r.IsRoot() {
 			// The following if statement should never be true.
 			if urlt != nil && urlt.PrefixPath != "" {
-				return newError("%w", ErrNonRouterParent)
+				return newErr("%w", ErrNonRouterParent)
 			}
 
 			if err := ro.registerNewRoot(r); err != nil {
-				return newError("<- %w", err)
+				return newErr("%w", err)
 			}
 
 			return nil
@@ -1167,29 +1167,29 @@ func (ro *Router) RegisterResource(r *Resource) error {
 	}
 
 	if err := _r.validate(r.Template()); err != nil {
-		return newError("<- %w", err)
+		return newErr("%w", err)
 	}
 
 	if err := _r.checkChildResourceNamesAreUniqueInThePath(r); err != nil {
-		return newError("%w", err)
+		return newErr("%w", err)
 	}
 
 	if urlt != nil && urlt.PrefixPath != "" {
 		var err = _r.registerResourceUnder(urlt.PrefixPath, r)
 		if err != nil {
-			return newError("<- %w", err)
+			return newErr("%w", err)
 		}
 	} else {
 		var err = _r.keepResourceOrItsChildResources(r)
 		if err != nil {
-			return newError("<- %w", err)
+			return newErr("%w", err)
 		}
 	}
 
 	if newHost {
 		var err = ro.registerHost(_r.(*Host))
 		if err != nil {
-			return newError("<- %w", err)
+			return newErr("%w", err)
 		}
 	}
 
@@ -1213,11 +1213,11 @@ func (ro *Router) RegisterResource(r *Resource) error {
 // also checked recursively.
 func (ro *Router) RegisterResourceUnder(urlTmplStr string, r *Resource) error {
 	if r == nil {
-		return newError("%w", ErrNilArgument)
+		return newErr("%w", ErrNilArgument)
 	}
 
 	if r.parent() != nil {
-		return newError("%w", ErrRegisteredResource)
+		return newErr("%w", ErrRegisteredResource)
 	}
 
 	var (
@@ -1229,7 +1229,7 @@ func (ro *Router) RegisterResourceUnder(urlTmplStr string, r *Resource) error {
 	if urlTmplStr != "" {
 		hTmplStr, pTmplStr, secure, _, err = splitHostAndPath(urlTmplStr)
 		if err != nil {
-			return newError("<- %w", err)
+			return newErr("%w", err)
 		}
 	}
 
@@ -1241,15 +1241,15 @@ func (ro *Router) RegisterResourceUnder(urlTmplStr string, r *Resource) error {
 	if urlt != nil {
 		if urlt.Host != "" {
 			if hTmplStr == "" {
-				return newError("%w", ErrConflictingHost)
+				return newErr("%w", ErrConflictingHost)
 			}
 
 			if len(urlt.Host) != len(hTmplStr) {
-				return newError("%w", ErrConflictingHost)
+				return newErr("%w", ErrConflictingHost)
 			}
 
 			if urlt.Host != hTmplStr {
-				return newError("%w", ErrConflictingHost)
+				return newErr("%w", ErrConflictingHost)
 			}
 		}
 
@@ -1267,11 +1267,11 @@ func (ro *Router) RegisterResourceUnder(urlTmplStr string, r *Resource) error {
 			}
 
 			if lpTmplStr != len(urlt.PrefixPath) {
-				return newError("%w", ErrConflictingPath)
+				return newErr("%w", ErrConflictingPath)
 			}
 
 			if pTmplStr != urlt.PrefixPath {
-				return newError("%w", ErrConflictingPath)
+				return newErr("%w", ErrConflictingPath)
 			}
 		}
 	}
@@ -1281,7 +1281,7 @@ func (ro *Router) RegisterResourceUnder(urlTmplStr string, r *Resource) error {
 	if hTmplStr != "" {
 		_r, newHost, _, _, err = ro.host(hTmplStr)
 		if err != nil {
-			return newError("<- %w", err)
+			return newErr("%w", err)
 		}
 	}
 
@@ -1290,12 +1290,12 @@ func (ro *Router) RegisterResourceUnder(urlTmplStr string, r *Resource) error {
 		if r.IsRoot() {
 			if pTmplStr == "" {
 				if err := ro.registerNewRoot(r); err != nil {
-					return newError("<- %w", err)
+					return newErr("%w", err)
 				}
 
 				return nil
 			} else {
-				return newError("%w", ErrNonRouterParent)
+				return newErr("%w", ErrNonRouterParent)
 			}
 		}
 
@@ -1307,11 +1307,11 @@ func (ro *Router) RegisterResourceUnder(urlTmplStr string, r *Resource) error {
 	}
 
 	if err = _r.validate(r.Template()); err != nil {
-		return newError("<- %w", err)
+		return newErr("%w", err)
 	}
 
 	if err := r.checkChildResourceNamesAreUniqueInThePath(r); err != nil {
-		return newError("%w", err)
+		return newErr("%w", err)
 	}
 
 	if secure {
@@ -1321,19 +1321,19 @@ func (ro *Router) RegisterResourceUnder(urlTmplStr string, r *Resource) error {
 	if pTmplStr != "" && pTmplStr != "/" {
 		err = _r.registerResourceUnder(pTmplStr, r)
 		if err != nil {
-			return newError("<- %w", err)
+			return newErr("%w", err)
 		}
 	} else {
 		var err = _r.keepResourceOrItsChildResources(r)
 		if err != nil {
-			return newError("<- %w", err)
+			return newErr("%w", err)
 		}
 	}
 
 	if newHost {
 		var err = ro.registerHost(_r.(*Host))
 		if err != nil {
-			return newError("<- %w", err)
+			return newErr("%w", err)
 		}
 	}
 
@@ -1357,18 +1357,18 @@ func (ro *Router) RegisterResourceUnder(urlTmplStr string, r *Resource) error {
 func (ro *Router) RegisteredResource(urlTmplStr string) (*Resource, error) {
 	var hTmplStr, pTmplStr, secure, tslash, err = splitHostAndPath(urlTmplStr)
 	if err != nil {
-		return nil, newError("<- %w", err)
+		return nil, newErr("%w", err)
 	}
 
 	if pTmplStr == "" {
-		return nil, newError("%w", ErrEmptyPathTemplate)
+		return nil, newErr("%w", ErrEmptyPathTemplate)
 	}
 
 	var _r _Responder
 	if hTmplStr != "" {
 		_r, _, err = ro.registeredHost(hTmplStr)
 		if err != nil {
-			return nil, newError("<- %w", err)
+			return nil, newErr("%w", err)
 		}
 
 		// Extracting the underlying value before comparing it to nil.
@@ -1389,7 +1389,7 @@ func (ro *Router) RegisteredResource(urlTmplStr string) (*Resource, error) {
 	if pTmplStr != "/" {
 		_r, _, err = _r.registeredResource(pTmplStr)
 		if err != nil {
-			return nil, newError("<- %w", err)
+			return nil, newErr("%w", err)
 		}
 	}
 
@@ -1397,7 +1397,7 @@ func (ro *Router) RegisteredResource(urlTmplStr string) (*Resource, error) {
 	if r, ok := _r.(*Resource); ok && r != nil {
 		err = _r.configCompatibility(secure, tslash, nil)
 		if err != nil {
-			return nil, newError("<- %w", err)
+			return nil, newErr("%w", err)
 		}
 
 		return _r.(*Resource), nil
@@ -1422,12 +1422,12 @@ func (ro *Router) RootResource() *Resource {
 // passing the request to the matching host or the root resource.
 func (ro *Router) WrapSegmentHandler(mwfs ...MiddlewareFunc) error {
 	if len(mwfs) == 0 {
-		return newError("%w", ErrNoMiddleware)
+		return newErr("%w", ErrNoMiddleware)
 	}
 
 	for i, mw := range mwfs {
 		if mw == nil {
-			return newError("%w at index %d", ErrNoMiddleware, i)
+			return newErr("%w at index %d", ErrNoMiddleware, i)
 		}
 
 		ro.segmentHandler = mw(ro.segmentHandler)
@@ -1467,7 +1467,7 @@ func (ro *Router) WrapAllSegmentHandlers(mwfs ...MiddlewareFunc) error {
 	)
 
 	if err != nil {
-		return newError("<- %w", err)
+		return newErr("%w", err)
 	}
 
 	return nil
@@ -1498,7 +1498,7 @@ func (ro *Router) WrapAllRequestHandlers(mwfs ...MiddlewareFunc) error {
 	)
 
 	if err != nil {
-		return newError("<- %w", err)
+		return newErr("%w", err)
 	}
 
 	return nil
@@ -1520,7 +1520,7 @@ func (ro *Router) WrapAllHandlersOf(
 ) error {
 	var err = wrapEveryHandlerOf(methods, ro._Resources(), mwfs...)
 	if err != nil {
-		return newError("<- %w", err)
+		return newErr("%w", err)
 	}
 
 	return nil

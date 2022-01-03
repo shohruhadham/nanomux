@@ -418,7 +418,7 @@ func (rb *_ResponderBase) Template() *Template {
 func (rb *_ResponderBase) URL(values HostPathValues) (*url.URL, error) {
 	var url, err = responderURL(rb.derived, values)
 	if err != nil {
-		return nil, newError("<- %w", err)
+		return nil, newErr("%w", err)
 	}
 
 	return url, nil
@@ -449,14 +449,14 @@ func (rb *_ResponderBase) setParent(p _Parent) error {
 	if _, ok := rb.derived.(*Host); ok {
 		// Only a router can be set as a parent for a host.
 		if _, ok := p.(*Router); !ok {
-			return newError("%w", ErrNonRouterParent)
+			return newErr("%w", ErrNonRouterParent)
 		}
 	}
 
 	if rb.Template().Content() == "/" {
 		// Only a router can be set as a parent for a root.
 		if _, ok := p.(*Router); !ok {
-			return newError("%w", ErrNonRouterParent)
+			return newErr("%w", ErrNonRouterParent)
 		}
 	}
 
@@ -553,16 +553,16 @@ func (rb *_ResponderBase) configCompatibility(
 	var rbcfs = rb.configFlags()
 	if rbcfs.has(flagActive) {
 		if rbcfs.has(flagSecure) != secure {
-			return newError("%w", ErrConflictingSecurity)
+			return newErr("%w", ErrConflictingSecurity)
 		}
 
 		if !rbcfs.has(flagLeniencyOnTrailingSlash) && rbcfs.has(flagTrailingSlash) != tslash {
-			return newError("%w", ErrConflictingTrailingSlash)
+			return newErr("%w", ErrConflictingTrailingSlash)
 		}
 
 		if cfs != nil {
 			if !rbcfs.has(*cfs) {
-				return newError("%w", ErrConflictingConfig)
+				return newErr("%w", ErrConflictingConfig)
 			}
 		}
 	} else {
@@ -713,11 +713,11 @@ func (rb *_ResponderBase) checkChildResourceNamesAreUniqueInThePath(
 // for uniqueness above in the resource's hierarchy.
 func (rb *_ResponderBase) validate(tmpl *Template) error {
 	if tmpl == nil {
-		return newError("%w", ErrNilArgument)
+		return newErr("%w", ErrNilArgument)
 	}
 
 	if err := rb.checkNamesAreUniqueInThePath(tmpl); err != nil {
-		return newError("%w", err)
+		return newErr("%w", err)
 	}
 
 	return nil
@@ -736,20 +736,20 @@ func (rb *_ResponderBase) validateHostTmpl(tmplStr string) error {
 		}
 
 		if h == nil {
-			return newError("%w", ErrConflictingHost)
+			return newErr("%w", ErrConflictingHost)
 		}
 
 		var tmpl, err = TryToParse(tmplStr)
 		if err != nil {
-			return newError("<- %w", err)
+			return newErr("%w", err)
 		}
 
 		if tmpl.IsWildcard() {
-			return newError("%w", ErrWildcardHostTemplate)
+			return newErr("%w", ErrWildcardHostTemplate)
 		}
 
 		if err = h.Template().SimilarityWith(tmpl).Err(); err != nil {
-			return newError("<- %w", err)
+			return newErr("%w", err)
 		}
 	}
 
@@ -766,7 +766,7 @@ func (rb *_ResponderBase) validateURL(hostTmplStr string, pathTmplStr string) (
 ) {
 	var resources = rb.resourcesInThePath()
 	if err := resources[0].validateHostTmpl(hostTmplStr); err != nil {
-		return "", newError("<- %w", err)
+		return "", newErr("%w", err)
 	}
 
 	var lresources = len(resources)
@@ -785,18 +785,18 @@ func (rb *_ResponderBase) validateURL(hostTmplStr string, pathTmplStr string) (
 	for i := 0; i < lresources; i++ {
 		var ps = psi.nextSegment()
 		if ps == "" {
-			return "", newError("%w", ErrConflictingPath)
+			return "", newErr("%w", ErrConflictingPath)
 		}
 
 		var tmpl, err = TryToParse(ps)
 		if err != nil {
-			return "", newError("<- %w", err)
+			return "", newErr("%w", err)
 		}
 
 		var rtmpl = resources[i].Template()
 		var similarity = rtmpl.SimilarityWith(tmpl)
 		if similarity != TheSame {
-			return "", newError("%w %q", ErrConflictingPathSegment, ps)
+			return "", newErr("%w %q", ErrConflictingPathSegment, ps)
 		}
 	}
 
@@ -819,7 +819,7 @@ func (rb *_ResponderBase) resourceWithTemplate(tmpl *Template) (
 			}
 
 			if stmpl.Name() != tmpl.Name() {
-				return nil, newError("<- %w", ErrDifferentNames)
+				return nil, newErr("%w", ErrDifferentNames)
 			}
 
 			return r, nil
@@ -835,7 +835,7 @@ func (rb *_ResponderBase) resourceWithTemplate(tmpl *Template) (
 			case DifferentValueNames:
 				fallthrough
 			case DifferentNames:
-				return nil, newError("<- %w", sim.Err())
+				return nil, newErr("%w", sim.Err())
 			case TheSame:
 				return rb.wildcardResource, nil
 			}
@@ -851,7 +851,7 @@ func (rb *_ResponderBase) resourceWithTemplate(tmpl *Template) (
 			case DifferentValueNames:
 				fallthrough
 			case DifferentNames:
-				return nil, newError("<- %w", sim.Err())
+				return nil, newErr("%w", sim.Err())
 			case TheSame:
 				return pr, nil
 			}
@@ -911,7 +911,7 @@ func (rb *_ResponderBase) registeredResource(
 	}
 
 	if psi.remainingPath() != "" {
-		return nil, false, newError("%w", ErrEmptyPathSegmentTemplate)
+		return nil, false, newErr("%w", ErrEmptyPathSegmentTemplate)
 	}
 
 	return r, psi.pathHasTrailingSlash(), nil
@@ -922,20 +922,20 @@ func (rb *_ResponderBase) registeredResource(
 func (rb *_ResponderBase) passChildResourcesTo(r _Responder) error {
 	for _, rr := range rb.staticResources {
 		if err := r.keepResourceOrItsChildResources(rr); err != nil {
-			return newError("<- %w", err)
+			return newErr("%w", err)
 		}
 	}
 
 	for _, rr := range rb.patternResources {
 		if err := r.keepResourceOrItsChildResources(rr); err != nil {
-			return newError("<- %w", err)
+			return newErr("%w", err)
 		}
 	}
 
 	if rb.wildcardResource != nil {
 		err := r.keepResourceOrItsChildResources(rb.wildcardResource)
 		if err != nil {
-			return newError("<- %w", err)
+			return newErr("%w", err)
 		}
 	}
 
@@ -969,12 +969,12 @@ func (rb *_ResponderBase) replaceResource(oldR, newR *Resource) error {
 
 	var err = newR.setParent(rb.derived)
 	if err != nil {
-		return newError("<- %w", err)
+		return newErr("%w", err)
 	}
 
 	err = oldR.setParent(nil)
 	if err != nil {
-		return newError("<- %w", err)
+		return newErr("%w", err)
 	}
 
 	return nil
@@ -998,7 +998,7 @@ func (rb *_ResponderBase) registerResource(r *Resource) error {
 
 	var err = r.setParent(rb.derived)
 	if err != nil {
-		return newError("<- %w", err)
+		return newErr("%w", err)
 	}
 
 	return nil
@@ -1019,7 +1019,7 @@ func (rb *_ResponderBase) segmentResources(pathSegments []string) (
 		var tmpl *Template
 		tmpl, err = TryToParse(pathSegments[i])
 		if err != nil {
-			err = newError("path segment %s <- %w", pathSegments[i], err)
+			err = newErr("path segment %s %w", pathSegments[i], err)
 			return
 		}
 
@@ -1027,7 +1027,7 @@ func (rb *_ResponderBase) segmentResources(pathSegments []string) (
 		if newFirst == nil {
 			r, err = oldLast.resourceWithTemplate(tmpl)
 			if err != nil {
-				err = newError("path segment %s <- %w", pathSegments[i], err)
+				err = newErr("path segment %s %w", pathSegments[i], err)
 				return
 			}
 		}
@@ -1036,7 +1036,7 @@ func (rb *_ResponderBase) segmentResources(pathSegments []string) (
 			oldLast = r
 		} else {
 			if err = oldLast.validate(tmpl); err != nil {
-				err = newError("path segment %s <- %w", pathSegments[i], err)
+				err = newErr("path segment %s %w", pathSegments[i], err)
 				return
 			}
 
@@ -1044,12 +1044,12 @@ func (rb *_ResponderBase) segmentResources(pathSegments []string) (
 			if newLast != nil {
 				err = newLast.checkNamesAreUniqueInThePath(tmpl)
 				if err != nil {
-					err = newError("%w", err)
+					err = newErr("%w", err)
 					return
 				}
 
 				if err = newLast.registerResource(r); err != nil {
-					err = newError("<- %w", err)
+					err = newErr("%w", err)
 					return
 				}
 			} else {
@@ -1087,7 +1087,7 @@ func (rb *_ResponderBase) pathSegmentResources(pathTmplStr string) (
 			return
 		}
 
-		err = newError("%w", ErrNonRouterParent)
+		err = newErr("%w", ErrNonRouterParent)
 		return
 	}
 
@@ -1114,31 +1114,31 @@ func (rb *_ResponderBase) registerResourceUnder(
 
 	if newFirst != nil {
 		if err := newLast.checkChildResourceNamesAreUniqueInThePath(r); err != nil {
-			return newError("%w", err)
+			return newErr("%w", err)
 		}
 
 		if r := oldLast.ChildResourceNamed(newFirst.Name()); r != nil {
-			return newError("<- %w", ErrDuplicateNameAmongSiblings)
+			return newErr("%w", ErrDuplicateNameAmongSiblings)
 		}
 
 		if err = newLast.registerResource(r); err != nil {
-			return newError("<- %w", err)
+			return newErr("%w", err)
 		}
 
 		if err = oldLast.registerResource(newFirst); err != nil {
-			return newError("<- %w", err)
+			return newErr("%w", err)
 		}
 
 		return nil
 	}
 
 	if err := oldLast.checkChildResourceNamesAreUniqueInThePath(r); err != nil {
-		return newError("%w", err)
+		return newErr("%w", err)
 	}
 
 	err = oldLast.keepResourceOrItsChildResources(r)
 	if err != nil {
-		return newError("<- %w", err)
+		return newErr("%w", err)
 	}
 
 	return nil
@@ -1153,12 +1153,12 @@ func (rb *_ResponderBase) registerResourceUnder(
 func (rb *_ResponderBase) keepResourceOrItsChildResources(r *Resource) error {
 	var rwt, err = rb.resourceWithTemplate(r.Template())
 	if err != nil {
-		return newError("<- %w", err)
+		return newErr("%w", err)
 	}
 
 	if rwt == nil {
 		if err = rb.registerResource(r); err != nil {
-			return newError("<- %w", err)
+			return newErr("%w", err)
 		}
 
 		return nil
@@ -1173,13 +1173,13 @@ func (rb *_ResponderBase) keepResourceOrItsChildResources(r *Resource) error {
 	)
 
 	if err != nil {
-		return newError("<- %w", err)
+		return newErr("%w", err)
 	}
 
 	if !r.canHandleRequest() {
 		err = r.passChildResourcesTo(rwt)
 		if err != nil {
-			return newError("<- %w", err)
+			return newErr("%w", err)
 		}
 
 		return nil
@@ -1188,18 +1188,18 @@ func (rb *_ResponderBase) keepResourceOrItsChildResources(r *Resource) error {
 	if !rwt.canHandleRequest() {
 		err = rwt.passChildResourcesTo(r)
 		if err != nil {
-			return newError("<- %w", err)
+			return newErr("%w", err)
 		}
 
 		err = rb.replaceResource(rwt, r)
 		if err != nil {
-			return newError("<- %w", err)
+			return newErr("%w", err)
 		}
 
 		return nil
 	}
 
-	return newError(
+	return newErr(
 		"%w %s",
 		ErrDuplicateResourceTemplate,
 		rwt.Template().String(),
@@ -1228,15 +1228,15 @@ func (rb *_ResponderBase) Resource(path string) (*Resource, error) {
 
 	hTmplStr, path, secure, tslash, err = splitHostAndPath(path)
 	if err != nil {
-		return nil, newError("<- %w", err)
+		return nil, newErr("%w", err)
 	}
 
 	if hTmplStr != "" {
-		return nil, newError("%w", ErrNonRouterParent)
+		return nil, newErr("%w", ErrNonRouterParent)
 	}
 
 	if path == "" {
-		return nil, newError("%w", ErrEmptyPathTemplate)
+		return nil, newErr("%w", ErrEmptyPathTemplate)
 	}
 
 	if path[0] != '/' {
@@ -1247,21 +1247,21 @@ func (rb *_ResponderBase) Resource(path string) (*Resource, error) {
 	var newFirst, newLast *Resource
 	oldLast, newFirst, newLast, _, err = rb.pathSegmentResources(path)
 	if err != nil {
-		return nil, newError("<- %w", err)
+		return nil, newErr("%w", err)
 	}
 
 	if newFirst != nil {
 		err = newLast.configCompatibility(secure, tslash, nil)
 		if err != nil {
-			return nil, newError("<- %w", err)
+			return nil, newErr("%w", err)
 		}
 
 		if oldLast.ChildResourceNamed(newFirst.Name()) != nil {
-			return nil, newError("<- %w", ErrDuplicateNameAmongSiblings)
+			return nil, newErr("%w", ErrDuplicateNameAmongSiblings)
 		}
 
 		if err = oldLast.registerResource(newFirst); err != nil {
-			return nil, newError("<- %w", err)
+			return nil, newErr("%w", err)
 		}
 
 		return newLast, nil
@@ -1269,7 +1269,7 @@ func (rb *_ResponderBase) Resource(path string) (*Resource, error) {
 
 	err = oldLast.configCompatibility(secure, tslash, nil)
 	if err != nil {
-		return nil, newError("<- %w", err)
+		return nil, newErr("%w", err)
 	}
 
 	return oldLast.(*Resource), nil
@@ -1300,19 +1300,19 @@ func (rb *_ResponderBase) ResourceUsingConfig(
 
 	hTmplStr, pathTmplStr, secure, tslash, err = splitHostAndPath(pathTmplStr)
 	if err != nil {
-		return nil, newError("<- %w", err)
+		return nil, newErr("%w", err)
 	}
 
 	if hTmplStr != "" {
-		return nil, newError("%w", ErrNonRouterParent)
+		return nil, newErr("%w", ErrNonRouterParent)
 	}
 
 	if pathTmplStr == "" {
-		return nil, newError("%w", ErrEmptyPathTemplate)
+		return nil, newErr("%w", ErrEmptyPathTemplate)
 	}
 
 	if config.RedirectInsecureRequest && !secure {
-		return nil, newError("%w", ErrConflictingSecurity)
+		return nil, newErr("%w", ErrConflictingSecurity)
 	}
 
 	if pathTmplStr[0] != '/' {
@@ -1323,22 +1323,22 @@ func (rb *_ResponderBase) ResourceUsingConfig(
 	var newFirst, newLast *Resource
 	oldLast, newFirst, newLast, _, err = rb.pathSegmentResources(pathTmplStr)
 	if err != nil {
-		return nil, newError("<- %w", err)
+		return nil, newErr("%w", err)
 	}
 
 	var cfs = config.asFlags()
 	if newFirst != nil {
 		err = newLast.configCompatibility(secure, tslash, &cfs)
 		if err != nil {
-			return nil, newError("<- %w", err)
+			return nil, newErr("%w", err)
 		}
 
 		if r := oldLast.ChildResourceNamed(newFirst.Name()); r != nil {
-			return nil, newError("<- %w", ErrDuplicateNameAmongSiblings)
+			return nil, newErr("%w", ErrDuplicateNameAmongSiblings)
 		}
 
 		if err = oldLast.registerResource(newFirst); err != nil {
-			return nil, newError("<- %w", err)
+			return nil, newErr("%w", err)
 		}
 
 		return newLast, nil
@@ -1346,7 +1346,7 @@ func (rb *_ResponderBase) ResourceUsingConfig(
 
 	err = oldLast.configCompatibility(secure, tslash, &cfs)
 	if err != nil {
-		return nil, newError("<- %w", err)
+		return nil, newErr("%w", err)
 	}
 
 	return oldLast.(*Resource), nil
@@ -1370,35 +1370,35 @@ func (rb *_ResponderBase) ResourceUsingConfig(
 // recursively.
 func (rb *_ResponderBase) RegisterResource(r *Resource) error {
 	if r == nil {
-		return newError("%w", ErrNilArgument)
+		return newErr("%w", ErrNilArgument)
 	}
 
 	if r.IsRoot() {
-		return newError("%w", ErrNonRouterParent)
+		return newErr("%w", ErrNonRouterParent)
 	}
 
 	if r.parent() != nil {
-		return newError("%w", ErrRegisteredResource)
+		return newErr("%w", ErrRegisteredResource)
 	}
 
 	if err := rb.validate(r.Template()); err != nil {
-		return newError("<- %w", err)
+		return newErr("%w", err)
 	}
 
 	if err := rb.checkChildResourceNamesAreUniqueInThePath(r); err != nil {
-		return newError("%w", err)
+		return newErr("%w", err)
 	}
 
 	if urlt := r.urlTmpl(); urlt != nil {
 		var rppss, err = rb.validateURL(urlt.Host, urlt.PrefixPath)
 		if err != nil {
-			return newError("<- %w", err)
+			return newErr("%w", err)
 		}
 
 		if len(rppss) > 0 {
 			err = rb.registerResourceUnder(rppss, r)
 			if err != nil {
-				return newError("<- %w", err)
+				return newErr("%w", err)
 			}
 
 			return nil
@@ -1406,7 +1406,7 @@ func (rb *_ResponderBase) RegisterResource(r *Resource) error {
 	}
 
 	if err := rb.keepResourceOrItsChildResources(r); err != nil {
-		return newError("<- %w", err)
+		return newErr("%w", err)
 	}
 
 	return nil
@@ -1434,30 +1434,30 @@ func (rb *_ResponderBase) RegisterResourceUnder(
 	r *Resource,
 ) error {
 	if r == nil {
-		return newError("%w", ErrNilArgument)
+		return newErr("%w", ErrNilArgument)
 	}
 
 	if r.IsRoot() {
-		return newError("%w", ErrNonRouterParent)
+		return newErr("%w", ErrNonRouterParent)
 	}
 
 	if r.parent() != nil {
-		return newError("%w", ErrRegisteredResource)
+		return newErr("%w", ErrRegisteredResource)
 	}
 
 	if err := rb.validate(r.Template()); err != nil {
-		return newError("<- %w", err)
+		return newErr("%w", err)
 	}
 
 	if err := rb.checkChildResourceNamesAreUniqueInThePath(r); err != nil {
-		return newError("%w", err)
+		return newErr("%w", err)
 	}
 
 	if prefixPath == "/" {
 		if _, ok := rb.derived.(*Host); ok {
 			prefixPath = ""
 		} else {
-			return newError("%w", ErrNonRouterParent)
+			return newErr("%w", ErrNonRouterParent)
 		}
 	}
 
@@ -1476,7 +1476,7 @@ func (rb *_ResponderBase) RegisterResourceUnder(
 			}
 
 			if lpp > lurltPp {
-				return newError("%w", ErrConflictingPath)
+				return newErr("%w", ErrConflictingPath)
 			}
 
 			var pp = urlt.PrefixPath
@@ -1486,15 +1486,15 @@ func (rb *_ResponderBase) RegisterResourceUnder(
 
 			var rppss, err = rb.validateURL(urlt.Host, pp)
 			if err != nil {
-				return newError("<- %w", err)
+				return newErr("%w", err)
 			}
 
 			if len(rppss) > 0 {
-				return newError("%w", ErrConflictingPath)
+				return newErr("%w", ErrConflictingPath)
 			}
 		} else {
 			if err := rb.validateHostTmpl(urlt.Host); err != nil {
-				return newError("<- %w", err)
+				return newErr("%w", err)
 			}
 		}
 	}
@@ -1502,14 +1502,14 @@ func (rb *_ResponderBase) RegisterResourceUnder(
 	if prefixPath != "" {
 		var err = rb.registerResourceUnder(prefixPath, r)
 		if err != nil {
-			return newError("<- %w", err)
+			return newErr("%w", err)
 		}
 
 		return nil
 	}
 
 	if err := rb.keepResourceOrItsChildResources(r); err != nil {
-		return newError("<- %w", err)
+		return newErr("%w", err)
 	}
 
 	return nil
@@ -1537,25 +1537,25 @@ func (rb *_ResponderBase) RegisteredResource(pathTmplStr string) (
 
 	hTmplStr, pathTmplStr, secure, tslash, err = splitHostAndPath(pathTmplStr)
 	if err != nil {
-		return nil, newError("<- %w", err)
+		return nil, newErr("%w", err)
 	}
 
 	if hTmplStr != "" {
-		return nil, newError("%w", ErrNonRouterParent)
+		return nil, newErr("%w", ErrNonRouterParent)
 	}
 
 	if pathTmplStr == "" {
-		return nil, newError("%w", ErrEmptyPathTemplate)
+		return nil, newErr("%w", ErrEmptyPathTemplate)
 	}
 
 	if pathTmplStr == "/" {
-		return nil, newError("%w", ErrNonRouterParent)
+		return nil, newErr("%w", ErrNonRouterParent)
 	}
 
 	var r *Resource
 	r, _, err = rb.registeredResource(pathTmplStr)
 	if err != nil {
-		return nil, newError("<- %w", err)
+		return nil, newErr("%w", err)
 	}
 
 	if r != nil {
@@ -1660,12 +1660,12 @@ func (rb *_ResponderBase) HasAnyChildResources() bool {
 // are discarded.
 func (rb *_ResponderBase) SetImplementation(impl Impl) error {
 	if impl == nil {
-		return newError("%w", ErrNilArgument)
+		return newErr("%w", ErrNilArgument)
 	}
 
 	var rhb, err = detectHTTPMethodHandlersOf(impl)
 	if err != nil {
-		return newError("<- %w", err)
+		return newErr("%w", err)
 	}
 
 	rb.impl = impl
@@ -1703,20 +1703,20 @@ func (rb *_ResponderBase) SetHandlerFor(
 		if err != nil {
 			if errors.Is(err, ErrNoHandlerExists) {
 				if _, ok := rb.derived.(*Host); ok {
-					return newError("<- %w <- %s", ErrDummyHost, err)
+					return newErr("%w %s", ErrDummyHost, err)
 				}
 
-				return newError("<- %w <- %s", ErrDummyResource, err)
+				return newErr("%w %s", ErrDummyResource, err)
 			}
 
-			return newError("<- %w", err)
+			return newErr("%w", err)
 		}
 
 		rb.setRequestHandlerBase(rhb)
 	} else {
 		var err = rb.setHandlerFor(methods, handler)
 		if err != nil {
-			return newError("<- %w", err)
+			return newErr("%w", err)
 		}
 	}
 	return nil
@@ -1736,7 +1736,7 @@ func (rb *_ResponderBase) SetHandlerFuncFor(
 ) error {
 	var err = rb.SetHandlerFor(methods, handlerFunc)
 	if err != nil {
-		return newError("<- %w", err)
+		return newErr("%w", err)
 	}
 
 	return nil
@@ -1770,12 +1770,12 @@ func (rb *_ResponderBase) HandlerOf(method string) Handler {
 // was made to the host.
 func (rb *_ResponderBase) WrapSegmentHandler(mwfs ...MiddlewareFunc) error {
 	if len(mwfs) == 0 {
-		return newError("%w", ErrNoMiddleware)
+		return newErr("%w", ErrNoMiddleware)
 	}
 
 	for i, mw := range mwfs {
 		if mw == nil {
-			return newError("%w at index %d", ErrNilArgument, i)
+			return newErr("%w at index %d", ErrNilArgument, i)
 		}
 
 		rb.segmentHandler = mw(rb.segmentHandler)
@@ -1792,20 +1792,20 @@ func (rb *_ResponderBase) WrapSegmentHandler(mwfs ...MiddlewareFunc) error {
 // called only when the resource is going to handle the request.
 func (rb *_ResponderBase) WrapRequestHandler(mwfs ...MiddlewareFunc) error {
 	if len(mwfs) == 0 {
-		return newError("%w", ErrNoMiddleware)
+		return newErr("%w", ErrNoMiddleware)
 	}
 
 	if !rb.canHandleRequest() {
 		if _, ok := rb.derived.(*Host); ok {
-			return newError("%w", ErrDummyHost)
+			return newErr("%w", ErrDummyHost)
 		}
 
-		return newError("%w", ErrDummyResource)
+		return newErr("%w", ErrDummyResource)
 	}
 
 	for i, mw := range mwfs {
 		if mw == nil {
-			return newError("%w at index %d", ErrNilArgument, i)
+			return newErr("%w at index %d", ErrNilArgument, i)
 		}
 
 		rb.requestHandler = mw(rb.requestHandler)
@@ -1831,15 +1831,15 @@ func (rb *_ResponderBase) WrapHandlerOf(
 ) error {
 	if rb._RequestHandlerBase == nil {
 		if _, ok := rb.derived.(*Host); ok {
-			return newError("%w", ErrDummyHost)
+			return newErr("%w", ErrDummyHost)
 		}
 
-		return newError("%w", ErrDummyResource)
+		return newErr("%w", ErrDummyResource)
 	}
 
 	var err = rb.wrapHandlerOf(methods, mwfs...)
 	if err != nil {
-		return newError("<- %w", err)
+		return newErr("%w", err)
 	}
 
 	return nil
@@ -1852,11 +1852,11 @@ func (rb *_ResponderBase) WrapHandlerOf(
 func (rb *_ResponderBase) ConfigurePath(path string, config Config) error {
 	var r, err = rb.RegisteredResource(path)
 	if err != nil {
-		return newError("<- %w", err)
+		return newErr("%w", err)
 	}
 
 	if r == nil {
-		return newError("%w", ErrNonExistentResource)
+		return newErr("%w", ErrNonExistentResource)
 	}
 
 	r.Configure(config)
@@ -1867,11 +1867,11 @@ func (rb *_ResponderBase) ConfigurePath(path string, config Config) error {
 func (rb *_ResponderBase) PathConfig(path string) (Config, error) {
 	var r, err = rb.RegisteredResource(path)
 	if err != nil {
-		return Config{}, newError("<- %w", err)
+		return Config{}, newErr("%w", err)
 	}
 
 	if r == nil {
-		return Config{}, newError("%w", ErrNonExistentResource)
+		return Config{}, newErr("%w", ErrNonExistentResource)
 	}
 
 	return r.Config(), nil
@@ -1894,12 +1894,12 @@ func (rb *_ResponderBase) SetImplementationAt(
 ) error {
 	var r, err = rb.Resource(path)
 	if err != nil {
-		return newError("<- %w", err)
+		return newErr("%w", err)
 	}
 
 	err = r.SetImplementation(rh)
 	if err != nil {
-		return newError("<- %w", err)
+		return newErr("%w", err)
 	}
 
 	return nil
@@ -1915,11 +1915,11 @@ func (rb *_ResponderBase) SetImplementationAt(
 func (rb *_ResponderBase) ImplementationAt(path string) (Impl, error) {
 	var r, err = rb.RegisteredResource(path)
 	if err != nil {
-		return nil, newError("<- %w", err)
+		return nil, newErr("%w", err)
 	}
 
 	if r == nil {
-		return nil, newError("%w", ErrNonExistentResource)
+		return nil, newErr("%w", ErrNonExistentResource)
 	}
 
 	return r.Implementation(), nil
@@ -1946,12 +1946,12 @@ func (rb *_ResponderBase) SetPathHandlerFor(
 ) error {
 	var r, err = rb.Resource(path)
 	if err != nil {
-		return newError("<- %w", err)
+		return newErr("%w", err)
 	}
 
 	err = r.SetHandlerFor(methods, handler)
 	if err != nil {
-		return newError("<- %w", err)
+		return newErr("%w", err)
 	}
 
 	return nil
@@ -1976,12 +1976,12 @@ func (rb *_ResponderBase) SetPathHandlerFuncFor(
 ) error {
 	var r, err = rb.Resource(path)
 	if err != nil {
-		return newError("<- %w", err)
+		return newErr("%w", err)
 	}
 
 	err = r.SetHandlerFor(methods, handler)
 	if err != nil {
-		return newError("<- %w", err)
+		return newErr("%w", err)
 	}
 
 	return nil
@@ -2003,11 +2003,11 @@ func (rb *_ResponderBase) PathHandlerOf(method, path string) (
 ) {
 	var r, err = rb.RegisteredResource(path)
 	if err != nil {
-		return nil, newError("<- %w", err)
+		return nil, newErr("%w", err)
 	}
 
 	if r == nil {
-		return nil, newError("%w", ErrNonExistentResource)
+		return nil, newErr("%w", ErrNonExistentResource)
 	}
 
 	return r.HandlerOf(method), nil
@@ -2034,16 +2034,16 @@ func (rb *_ResponderBase) WrapPathSegmentHandler(
 ) error {
 	var r, err = rb.RegisteredResource(path)
 	if err != nil {
-		return newError("<- %w", err)
+		return newErr("%w", err)
 	}
 
 	if r == nil {
-		return newError("%w", ErrNonExistentResource)
+		return newErr("%w", ErrNonExistentResource)
 	}
 
 	err = r.WrapSegmentHandler(mwfs...)
 	if err != nil {
-		return newError("<- %w", err)
+		return newErr("%w", err)
 	}
 
 	return nil
@@ -2066,16 +2066,16 @@ func (rb *_ResponderBase) WrapPathRequestHandler(
 ) error {
 	var r, err = rb.RegisteredResource(path)
 	if err != nil {
-		return newError("<- %w", err)
+		return newErr("%w", err)
 	}
 
 	if r == nil {
-		return newError("%w", ErrNonExistentResource)
+		return newErr("%w", ErrNonExistentResource)
 	}
 
 	err = r.WrapRequestHandler(mwfs...)
 	if err != nil {
-		return newError("<- %w", err)
+		return newErr("%w", err)
 	}
 
 	return nil
@@ -2100,16 +2100,16 @@ func (rb *_ResponderBase) WrapPathHandlerOf(
 ) error {
 	var r, err = rb.RegisteredResource(path)
 	if err != nil {
-		return newError("<- %w", err)
+		return newErr("%w", err)
 	}
 
 	if r == nil {
-		return newError("<- %w", err)
+		return newErr("%w", err)
 	}
 
 	err = r.WrapHandlerOf(methods, mwfs...)
 	if err != nil {
-		return newError("<- %w", err)
+		return newErr("%w", err)
 	}
 
 	return nil
@@ -2150,7 +2150,7 @@ func (rb *_ResponderBase) WrapSubtreeSegmentHandlers(
 	)
 
 	if err != nil {
-		return newError("<- %w", err)
+		return newErr("%w", err)
 	}
 
 	return nil
@@ -2181,7 +2181,7 @@ func (rb *_ResponderBase) WrapSubtreeRequestHandlers(
 	)
 
 	if err != nil {
-		return newError("<- %w", err)
+		return newErr("%w", err)
 	}
 
 	return nil
@@ -2203,7 +2203,7 @@ func (rb *_ResponderBase) WrapSubtreeHandlersOf(
 ) error {
 	var err = wrapEveryHandlerOf(methods, rb._Resources(), mwfs...)
 	if err != nil {
-		return newError("<- %w", err)
+		return newErr("%w", err)
 	}
 
 	return nil

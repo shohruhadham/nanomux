@@ -20,11 +20,11 @@ type Host struct {
 // createDummyHost creates an unconfigured and dormant host.
 func createDummyHost(tmpl *Template) (*Host, error) {
 	if tmpl == nil {
-		return nil, newError("%w", ErrNilArgument)
+		return nil, newErr("%w", ErrNilArgument)
 	}
 
 	if tmpl.IsWildcard() {
-		return nil, newError("%w", ErrWildcardHostTemplate)
+		return nil, newErr("%w", ErrWildcardHostTemplate)
 	}
 
 	var h = &Host{}
@@ -43,24 +43,24 @@ func createHost(
 ) (*Host, error) {
 	var hTmplStr, secure, tslash, err = getHost(tmplStr)
 	if err != nil {
-		return nil, newError("%w", err)
+		return nil, newErr("%w", err)
 	}
 
 	var tmpl *Template
 	tmpl, err = TryToParse(hTmplStr)
 	if err != nil {
-		return nil, newError("%w", err)
+		return nil, newErr("%w", err)
 	}
 
 	if tmpl.IsWildcard() {
-		return nil, newError("%w", ErrWildcardHostTemplate)
+		return nil, newErr("%w", ErrWildcardHostTemplate)
 	}
 
 	var cfs *_ConfigFlags
 	if config != nil {
 		config.Secure, config.TrailingSlash = secure, tslash
 		if config.RedirectInsecureRequest && !secure {
-			return nil, newError("%w", ErrConflictingSecurity)
+			return nil, newErr("%w", ErrConflictingSecurity)
 		}
 
 		var tcfs = config.asFlags()
@@ -70,14 +70,14 @@ func createHost(
 	var h = &Host{}
 	err = h.configCompatibility(secure, tslash, cfs)
 	if err != nil {
-		return nil, newError("%w", err)
+		return nil, newErr("%w", err)
 	}
 
 	if impl != nil {
 		var rhb *_RequestHandlerBase
 		rhb, err = detectHTTPMethodHandlersOf(impl)
 		if err != nil {
-			return nil, newError("%w", err)
+			return nil, newErr("%w", err)
 		}
 
 		h.impl = impl
@@ -97,7 +97,7 @@ func createHost(
 func CreateDormantHost(urlTmplStr string) (*Host, error) {
 	var h, err = createHost(urlTmplStr, nil, nil)
 	if err != nil {
-		return nil, newError("<- %w", err)
+		return nil, newErr("%w", err)
 	}
 
 	return h, err
@@ -114,7 +114,7 @@ func CreateDormantHostUsingConfig(
 ) (*Host, error) {
 	var h, err = createHost(urlTmplStr, nil, &config)
 	if err != nil {
-		return nil, newError("<- %w", err)
+		return nil, newErr("%w", err)
 	}
 
 	return h, nil
@@ -146,12 +146,12 @@ func CreateDormantHostUsingConfig(
 // 	var exampleHost, err = CreateHost("https://example.com", &ExampleHost{})
 func CreateHost(urlTmplStr string, impl Impl) (*Host, error) {
 	if impl == nil {
-		return nil, newError("%w", ErrNilArgument)
+		return nil, newErr("%w", ErrNilArgument)
 	}
 
 	var h, err = createHost(urlTmplStr, impl, nil)
 	if err != nil {
-		return nil, newError("<- %w", err)
+		return nil, newErr("%w", err)
 	}
 
 	return h, nil
@@ -190,12 +190,12 @@ func CreateHostUsingConfig(
 	config Config,
 ) (*Host, error) {
 	if impl == nil {
-		return nil, newError("%w", ErrNilArgument)
+		return nil, newErr("%w", ErrNilArgument)
 	}
 
 	var h, err = createHost(urlTmplStr, impl, &config)
 	if err != nil {
-		return nil, newError("<- %w", err)
+		return nil, newErr("%w", err)
 	}
 
 	return h, nil
@@ -212,7 +212,7 @@ func CreateHostUsingConfig(
 func NewDormantHost(urlTmplStr string) *Host {
 	var h, err = CreateDormantHost(urlTmplStr)
 	if err != nil {
-		panic(newError("<- %w", err))
+		panic(newErr("%w", err))
 	}
 
 	return h
@@ -229,7 +229,7 @@ func NewDormantHost(urlTmplStr string) *Host {
 func NewDormantHostUsingConfig(urlTmplStr string, config Config) *Host {
 	var h, err = CreateDormantHostUsingConfig(urlTmplStr, config)
 	if err != nil {
-		panic(newError("<- %w", err))
+		panic(newErr("%w", err))
 	}
 
 	return h
@@ -263,7 +263,7 @@ func NewDormantHostUsingConfig(urlTmplStr string, config Config) *Host {
 func NewHost(urlTmplStr string, impl Impl) *Host {
 	var h, err = CreateHost(urlTmplStr, impl)
 	if err != nil {
-		panic(newError("<- %w", err))
+		panic(newErr("%w", err))
 	}
 
 	return h
@@ -306,7 +306,7 @@ func NewHostUsingConfig(
 ) *Host {
 	var h, err = CreateHostUsingConfig(urlTmplStr, impl, config)
 	if err != nil {
-		panic(newError("<- %w", err))
+		panic(newErr("%w", err))
 	}
 
 	return h

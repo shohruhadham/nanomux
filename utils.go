@@ -318,7 +318,7 @@ loop:
 
 			var ps, err = tmpl.Apply(hpVs, false)
 			if err != nil {
-				return nil, newError("%w", err)
+				return nil, newErr("%w", err)
 			}
 
 			pss = append(pss, ps)
@@ -330,7 +330,7 @@ loop:
 				var err error
 				host, err = tmpl.Apply(hpVs, false)
 				if err != nil {
-					return nil, newError("%w", err)
+					return nil, newErr("%w", err)
 				}
 			}
 
@@ -735,12 +735,21 @@ func getArgsFromThePool(url *url.URL, _r _Responder) *Args {
 
 // --------------------------------------------------
 
-func newError(description string, args ...interface{}) error {
+func newErr(description string, args ...interface{}) error {
 	if pc, _, _, ok := runtime.Caller(1); ok {
 		if fn := runtime.FuncForPC(pc); fn != nil {
 			var strb strings.Builder
-			strb.WriteString(fn.Name())
-			strb.WriteString("() ")
+			strb.WriteString("-> [")
+
+			var fnName = fn.Name()
+			var idx = strings.LastIndexByte(fnName, '.')
+			if idx < 0 {
+				strb.WriteString(fnName)
+			} else {
+				strb.WriteString(fnName[idx+1:])
+			}
+
+			strb.WriteString("] ")
 			strb.WriteString(description)
 
 			return fmt.Errorf(strb.String(), args...)

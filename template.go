@@ -519,7 +519,7 @@ func (t *Template) Apply(values TemplateValues, ignoreMissing bool) (
 			if slc.valuePattern.re != nil {
 				var idxs = slc.valuePattern.re.FindStringIndex(vf)
 				if idxs == nil || (idxs[0] != 0 && idxs[1] != len(vf)) {
-					return "", newError(
+					return "", newErr(
 						"%w value for %q",
 						ErrInvalidValue,
 						slc.valuePattern.name,
@@ -531,7 +531,7 @@ func (t *Template) Apply(values TemplateValues, ignoreMissing bool) (
 		} else if ignoreMissing {
 			continue
 		} else {
-			return "", newError(
+			return "", newErr(
 				"%w for %q",
 				ErrMissingValue,
 				slc.valuePattern.name,
@@ -651,7 +651,7 @@ func staticSlice(tmplStrSlc string) (
 			idx = i + 1
 		} else if ch == '}' {
 			if pch != '\\' {
-				err = newError(
+				err = newErr(
 					"%w - unescaped curly brace '}' at index %d",
 					ErrInvalidTemplate,
 					i,
@@ -718,13 +718,13 @@ func dynamicSlice(tmplStrSlc string) (
 				}
 
 				if depth > 1 {
-					err = newError("%w - open curly brace", ErrInvalidTemplate)
+					err = newErr("%w - open curly brace", ErrInvalidTemplate)
 					return
 				}
 
 				strb.WriteString(tmplStrSlc[idx:i])
 				if strb.Len() == 0 {
-					err = newError("%w - empty value name", ErrInvalidTemplate)
+					err = newErr("%w - empty value name", ErrInvalidTemplate)
 					return
 				}
 
@@ -748,7 +748,7 @@ func dynamicSlice(tmplStrSlc string) (
 					valueName = strb.String()
 				} else {
 					if i == idx {
-						err = newError(
+						err = newErr(
 							"%w - empty dynamic slice",
 							ErrInvalidTemplate,
 						)
@@ -798,7 +798,7 @@ func dynamicSlice(tmplStrSlc string) (
 				}
 
 				if i == idx {
-					err = newError("%w - empty pattern", ErrInvalidTemplate)
+					err = newErr("%w - empty pattern", ErrInvalidTemplate)
 					return
 				}
 
@@ -810,7 +810,7 @@ func dynamicSlice(tmplStrSlc string) (
 	}
 
 	if depth > 0 {
-		err = newError("%w - incomplete dynamic slice", ErrInvalidTemplate)
+		err = newErr("%w - incomplete dynamic slice", ErrInvalidTemplate)
 	}
 
 	return
@@ -840,7 +840,7 @@ func appendDynamicSliceTo(
 			}
 
 			if pattern != vp.re.String() {
-				return tss, valuePatterns, -1, newError(
+				return tss, valuePatterns, -1, newErr(
 					"%w for a value %q",
 					ErrDifferentPattern,
 					vName,
@@ -858,14 +858,14 @@ func appendDynamicSliceTo(
 		if wildcardIdx >= 0 {
 			var wc = tss[wildcardIdx]
 			if vName == wc.valuePattern.name {
-				return tss, valuePatterns, wildcardIdx, newError(
+				return tss, valuePatterns, wildcardIdx, newErr(
 					"%w %q",
 					ErrRepeatedWildcardName,
 					vName,
 				)
 			}
 
-			return tss, valuePatterns, wildcardIdx, newError(
+			return tss, valuePatterns, wildcardIdx, newErr(
 				"%w %q",
 				ErrAnotherWildcardName,
 				vName,
@@ -922,7 +922,7 @@ func parse(tmplStr string) (
 	err error,
 ) {
 	if tmplStr == "" {
-		return nil, -1, newError("%w", ErrInvalidTemplate)
+		return nil, -1, newErr("%w", ErrInvalidTemplate)
 	}
 
 	var (
@@ -990,7 +990,7 @@ func parse(tmplStr string) (
 // returns the Template instance.
 func TryToParse(tmplStr string) (*Template, error) {
 	if tmplStr == "" {
-		return nil, newError(" %w - empty template", ErrInvalidTemplate)
+		return nil, newErr(" %w - empty template", ErrInvalidTemplate)
 	}
 
 	var name string
