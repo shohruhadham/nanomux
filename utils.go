@@ -4,7 +4,6 @@
 package nanomux
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -13,7 +12,6 @@ import (
 	"runtime"
 	"strings"
 	"sync"
-	"time"
 )
 
 // --------------------------------------------------
@@ -373,6 +371,34 @@ type HostPathValues = TemplateValues
 
 // --------------------------------------------------
 
+type _Arg struct {
+	key, value interface{}
+}
+
+type _Args []_Arg
+
+func (pargs *_Args) set(key, value interface{}) {
+	var i, _ = pargs.get(key)
+	if i < 0 {
+		*pargs = append(*pargs, _Arg{key, value})
+		return
+	}
+
+	(*pargs)[i].value = value
+}
+
+func (args _Args) get(key interface{}) (int, interface{}) {
+	for i, largs := 0, len(args); i < largs; i++ {
+		if args[i].key == key {
+			return i, args[i].value
+		}
+	}
+
+	return -1, nil
+}
+
+// --------------------------------------------------
+
 // Args is created for each request when the host template contains a
 // pattern or when the request's URL contains path segments. It's kept in the
 // request's context.
@@ -386,6 +412,8 @@ type Args struct {
 
 	hostPathValues HostPathValues
 	_r             _Responder
+
+	slc _Args
 }
 
 // -------------------------
@@ -432,33 +460,118 @@ func getArgs(url *url.URL, _r _Responder) *Args {
 
 // -------------------------
 
-func (rd *Args) pathIsRoot() bool {
-	if rd.cleanPath != "" {
-		return rd.cleanPath == "/"
+func (args *Args) pathIsRoot() bool {
+	if args.cleanPath != "" {
+		return args.cleanPath == "/"
 	}
 
-	if rd.url.RawPath != "" {
-		return rd.url.RawPath == "/"
+	if args.url.RawPath != "" {
+		return args.url.RawPath == "/"
 	}
 
-	return rd.url.Path == "/"
+	return args.url.Path == "/"
 }
 
 // pathLen returns the length of the path that rd is using.
-func (rd *Args) pathLen() int {
-	var lpath = len(rd.cleanPath)
+func (args *Args) pathLen() int {
+	var lpath = len(args.cleanPath)
 	if lpath == 0 {
-		lpath = len(rd.url.RawPath)
+		lpath = len(args.url.RawPath)
 		if lpath == 0 {
-			lpath = len(rd.url.Path)
+			lpath = len(args.url.Path)
 		}
 	}
 
 	return lpath
 }
 
-// RemainingPath returns the escaped remaining path of the request's URL below
-// the resource that is using the routing data.
+// nextPathSegment returns the unescaped next path segment of the request's URL
+// below the resource that is using the routing data.
+func (args *Args) nextPathSegment() (string, error) {
+	var lpath = args.pathLen()
+	if args.currentPathSegmentIdx == lpath {
+		return "", nil
+	}
+
+	if args.currentPathSegmentIdx == 0 {
+		args.currentPathSegmentIdx++
+		return "/", nil
+	}
+
+	var pathWasCleaned = args.cleanPath != ""
+	var pathIsRaw = args.url.RawPath != ""
+
+	var idx int
+	if pathWasCleaned {
+		idx = strings.IndexByte(
+			args.cleanPath[args.currentPathSegmentIdx:],
+			'/',
+		)
+	} else if pathIsRaw {
+		idx = strings.IndexByte(
+			args.url.RawPath[args.currentPathSegmentIdx:],
+			'/',
+		)
+	} else {
+		idx = strings.IndexByte(
+			args.url.Path[args.currentPathSegmentIdx:],
+			'/',
+		)
+	}
+
+	var cIdx = args.currentPathSegmentIdx
+	args.currentPathSegmentIdx += idx + 1
+	idx += cIdx
+
+	if idx < cIdx {
+		idx = lpath
+		args.currentPathSegmentIdx = lpath
+	}
+
+	if pathIsRaw {
+		if pathWasCleaned {
+			return url.PathUnescape(args.cleanPath[cIdx:idx])
+		}
+
+		return url.PathUnescape(args.url.RawPath[cIdx:idx])
+	}
+
+	if pathWasCleaned {
+		return args.cleanPath[cIdx:idx], nil
+	}
+
+	return args.url.Path[cIdx:idx], nil
+}
+
+// reachedTheLastPathSegment returns true when the resource that is using the
+// routing data is the last resource in the request's URL.
+func (args *Args) reachedTheLastPathSegment() bool {
+	return args.currentPathSegmentIdx == args.pathLen()
+}
+
+// pathHasTrailingSlash returns true if the request's URL has a trailing slash.
+func (args *Args) pathHasTrailingSlash() bool {
+	if lpath := len(args.cleanPath); lpath > 0 {
+		return args.cleanPath != "/" && args.cleanPath[lpath-1] == '/'
+	} else if lpath = len(args.url.RawPath); lpath > 0 {
+		return args.url.RawPath != "/" && args.url.RawPath[lpath-1] == '/'
+	}
+
+	return args.url.Path != "" && args.url.Path != "/" &&
+		args.url.Path[len(args.url.Path)-1] == '/'
+}
+
+// -------------------------
+
+// HostPathValues returns the host and path values of the request's URL.
+func (args *Args) HostPathValues() HostPathValues {
+	return args.hostPathValues
+}
+
+// RemainingPath returns the escaped remaining path of the request's URL
+// that's below the current responder's segment. The remaining path doesn't
+// include the host, even when the method is called from the middleware of
+// the router's segment handler.
 func (rd *Args) RemainingPath() string {
 	if rd.reachedTheLastPathSegment() {
 		return ""
@@ -467,7 +580,7 @@ func (rd *Args) RemainingPath() string {
 	var pathWasCleaned = len(rd.cleanPath) > 0
 	var pathIsRaw = len(rd.url.RawPath) > 0
 
-	if rd._r.HasTrailingSlash() || rd.pathIsRoot() {
+	if rd._r != nil && rd._r.HasTrailingSlash() || rd.pathIsRoot() {
 		// If the _r is a host or resource with a trailing slash, or if the
 		// request's path contains only a slash "/" (root), the remaining path
 		// should not start with or contain only a trailing slash. When the
@@ -508,86 +621,9 @@ func (rd *Args) RemainingPath() string {
 	return rd.url.Path[rd.currentPathSegmentIdx:]
 }
 
-// nextPathSegment returns the unescaped next path segment of the request's URL
-// below the resource that is using the routing data.
-func (rd *Args) nextPathSegment() (string, error) {
-	var lpath = rd.pathLen()
-	if rd.currentPathSegmentIdx == lpath {
-		return "", nil
-	}
-
-	if rd.currentPathSegmentIdx == 0 {
-		rd.currentPathSegmentIdx++
-		return "/", nil
-	}
-
-	var pathWasCleaned = rd.cleanPath != ""
-	var pathIsRaw = rd.url.RawPath != ""
-
-	var idx int
-	if pathWasCleaned {
-		idx = strings.IndexByte(
-			rd.cleanPath[rd.currentPathSegmentIdx:],
-			'/',
-		)
-	} else if pathIsRaw {
-		idx = strings.IndexByte(
-			rd.url.RawPath[rd.currentPathSegmentIdx:],
-			'/',
-		)
-	} else {
-		idx = strings.IndexByte(
-			rd.url.Path[rd.currentPathSegmentIdx:],
-			'/',
-		)
-	}
-
-	var cIdx = rd.currentPathSegmentIdx
-	rd.currentPathSegmentIdx += idx + 1
-	idx += cIdx
-
-	if idx < cIdx {
-		idx = lpath
-		rd.currentPathSegmentIdx = lpath
-	}
-
-	if pathIsRaw {
-		if pathWasCleaned {
-			return url.PathUnescape(rd.cleanPath[cIdx:idx])
-		}
-
-		return url.PathUnescape(rd.url.RawPath[cIdx:idx])
-	}
-
-	if pathWasCleaned {
-		return rd.cleanPath[cIdx:idx], nil
-	}
-
-	return rd.url.Path[cIdx:idx], nil
-}
-
-// reachedTheLastPathSegment returns true when the resource that is using the
-// routing data is the last resource in the request's URL.
-func (rd *Args) reachedTheLastPathSegment() bool {
-	return rd.currentPathSegmentIdx == rd.pathLen()
-}
-
-// pathHasTrailingSlash returns true if the request's URL has a trailing slash.
-func (rd *Args) pathHasTrailingSlash() bool {
-	if lpath := len(rd.cleanPath); lpath > 0 {
-		return rd.cleanPath != "/" && rd.cleanPath[lpath-1] == '/'
-	} else if lpath = len(rd.url.RawPath); lpath > 0 {
-		return rd.url.RawPath != "/" && rd.url.RawPath[lpath-1] == '/'
-	}
-
-	return rd.url.Path != "" && rd.url.Path != "/" &&
-		rd.url.Path[len(rd.url.Path)-1] == '/'
-}
-
-func (args *Args) HostPathValues() HostPathValues {
-	return args.hostPathValues
-}
-
+// ResponderSharedData returns the shared data of the host or resource that
+// is currently handling the request. If the shared data wasn't set, nil is
+// returned.
 func (args *Args) ResponderSharedData() interface{} {
 	if args._r == nil {
 		return nil
@@ -596,172 +632,72 @@ func (args *Args) ResponderSharedData() interface{} {
 	return args._r.SharedData()
 }
 
-// --------------------------------------------------
-
-type _ContextValueKey uint8
-
-const (
-	routingDataKey _ContextValueKey = iota
-	hostPathValuesKey
-	remainingPathKey
-	responderKey
-	responderSharedDataKey
-	responderImplKey
-	hostKey
-	currentResourceKey
-)
-
-var (
-	// HostPathValuesKey can be used to retrieve the host and path values from
-	// the context.
-	HostPathValuesKey interface{} = hostPathValuesKey
-
-	// RemainingPathKey can be used to get the remaining path of the
-	// request's URL below the host or resource. The remaining path is
-	// available when the host or resource is configured as a subtree and
-	// below it there is no resource that can match the next path segment.
-	RemainingPathKey interface{} = remainingPathKey
-
-	// ResponderSharedDataKey can be used to retrieve the shared data of the
-	// host or resource that is currently handling the request.
-	ResponderSharedDataKey interface{} = responderSharedDataKey
-
-	// ResponderImplKey can be used to retrieve the implementation of the host
-	// or resource. If the host or resource wasn't created with the Impl or the
-	// Impl wasn't set, the returned value will be nil.
-	ResponderImplKey interface{} = responderImplKey
-
-	// HostKey can be used to retrieve the responder *Host of the request's URL.
-	// If there is no responder *Host, nil is returned.
-	HostKey interface{} = hostKey
-
-	// CurrentResourceKey can be used to retrieve the current *Resource that is
-	// handling the request. If the request is being handled by a host, nil is
-	// returned. In that case, the HostKey must be used.
-	CurrentResourceKey interface{} = currentResourceKey
-)
-
-// -------------------------
-
-// _Context is passed to request handlers.
-type _Context struct {
-	parent context.Context
-	rd     Args
-}
-
-func (c *_Context) Deadline() (deadline time.Time, ok bool) {
-	return c.parent.Deadline()
-}
-
-func (c *_Context) Done() <-chan struct{} {
-	return c.parent.Done()
-}
-
-func (c *_Context) Err() error {
-	return c.parent.Err()
-}
-
-func (c *_Context) Value(key interface{}) interface{} {
-	if key, ok := key.(_ContextValueKey); ok {
-		switch key {
-		case routingDataKey:
-			return &c.rd
-		case hostPathValuesKey:
-			return c.rd.hostPathValues
-		case remainingPathKey:
-			if c.rd._r == nil {
-				if c.rd.cleanPath != "" {
-					return c.rd.cleanPath
-				}
-
-				return c.rd.url.Path
-			}
-
-			return c.rd.RemainingPath()
-		case responderKey:
-			return c.rd._r
-		case responderSharedDataKey:
-			if c.rd._r == nil {
-				return nil
-			}
-
-			return c.rd._r.SharedData()
-		case responderImplKey:
-			if c.rd._r == nil {
-				return nil
-			}
-
-			return c.rd._r.Implementation()
-		case hostKey:
-			switch _r := c.rd._r.(type) {
-			case *Host:
-				return _r
-			case *Resource:
-				return _r.Host()
-			default:
-				return nil
-			}
-		case currentResourceKey:
-			switch _r := c.rd._r.(type) {
-			case *Host:
-				return nil
-			case *Resource:
-				return _r
-			default:
-				return nil
-			}
-		default:
-			return nil
-		}
+// ResponderImpl returns the implementation of the host or resource that
+// is currently handling the request. If the host or resource wasn't created
+// from an Impl or if they have no Impl set, nil is returned.
+func (args *Args) ResponderImpl() Impl {
+	if args._r == nil {
+		return nil
 	}
 
-	return c.parent.Value(key)
+	return args._r.Implementation()
+}
+
+// Host returns the *Host of the request's URL. If there is no *Host, nil is
+// returned.
+func (args *Args) Host() *Host {
+	switch _r := args._r.(type) {
+	case *Host:
+		return _r
+	case *Resource:
+		return _r.Host()
+	default:
+		return nil
+	}
+}
+
+// CurrentResource returns the current *Resource that is handling the request.
+// If the request is being handled by a host, nil is returned. In that
+// case, the Host method must be used.
+func (args *Args) CurrentResource() *Resource {
+	if _r, ok := args._r.(*Resource); ok {
+		return _r
+	}
+
+	return nil
+}
+
+// Set sets the custom argument that is passed between middlewares and/or
+// handlers. The rules for defining a key are the same as in the context
+// package. The key must be comparable and its type must be custom defined.
+// The recommended type is an empty struct (struct{}) to avoid allocation
+// when assigning to an interface{}. As stated in the context package,
+// exported key variables' static type should be a pointer or interface.
+func (args *Args) Set(key, value interface{}) {
+	args.slc.set(key, value)
+}
+
+// Get returns the custom argument that was set with the Set method.
+func (args *Args) Get(key interface{}) interface{} {
+	var _, v = args.slc.get(key)
+	return v
 }
 
 // -------------------------
 
-// GetHostPathValues returns the HostPathValues of the request's URL from the
-// context that was passed to the handler.
-func GetHostPathValues(c context.Context) HostPathValues {
-	var hpVs, _ = c.Value(HostPathValuesKey).(HostPathValues)
-	return hpVs
+type _ArgsKey struct{}
+
+var ArgsKey interface{} = _ArgsKey{}
+
+// ArgsFrom is a convenience function to retrieve *Args in the http.Handler or
+// http.HandlerFunc after the conversion to the Handler or HandlerFunc with the
+// Hr and HrFn functions.
+func ArgsFrom(r *http.Request) *Args {
+	var args, _ = r.Context().Value(ArgsKey).(*Args)
+	return args
 }
 
-// GetRemainingPath returns the remaining path of the request's URL that's below
-// the current responder's segment.
-func GetRemainingPath(c context.Context) string {
-	var remainingPath, _ = c.Value(RemainingPathKey).(string)
-	return remainingPath
-}
-
-// GetResponderSharedData returns the shared data of the host or resource that
-// is currently handling the request.
-func GetResponderSharedData(c context.Context) interface{} {
-	return c.Value(ResponderSharedDataKey)
-}
-
-// GetResponderImpl returns the implementation of the host or resource that
-// is currently handling the request.
-func GetResponderImpl(c context.Context) Impl {
-	return c.Value(ResponderImplKey)
-}
-
-// GetHost returns the responder *Host of the request's URL. If there is no
-// responder *Host, nil is returned.
-func GetHost(c context.Context) *Host {
-	var h, _ = c.Value(HostKey).(*Host)
-	return h
-}
-
-// GetCurrentResource returns the current *Resource that is handling the
-// request. If the request is being handled by a host, nil is returned. In that
-// case, GetHost must be used.
-func GetCurrentResource(c context.Context) *Resource {
-	var r, _ = c.Value(CurrentResourceKey).(*Resource)
-	return r
-}
-
-// -------------------------
+// --------------------------------------------------
 
 var argsPool = sync.Pool{
 	New: func() interface{} {
@@ -778,6 +714,10 @@ func putArgsInThePool(args *Args) {
 
 	if args.hostPathValues != nil {
 		args.hostPathValues = args.hostPathValues[:0]
+	}
+
+	if args.slc != nil {
+		args.slc = args.slc[:0]
 	}
 
 	// Other fields will be set at retrieval.

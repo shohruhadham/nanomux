@@ -4,6 +4,7 @@
 package nanomux
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"reflect"
@@ -42,24 +43,26 @@ func (hf HandlerFunc) ServeHTTP(
 }
 
 // Hr converts an http.Handler to a Handler.
-// func Hr(h http.Handler) Handler {
-// 	return HandlerFunc(
-// 		func(c context.Context, w http.ResponseWriter, r *http.Request) {
-// 			r = r.WithContext(c)
-// 			h.ServeHTTP(w, r)
-// 		},
-// 	)
-// }
+func Hr(h http.Handler) Handler {
+	return HandlerFunc(
+		func(w http.ResponseWriter, r *http.Request, args *Args) {
+			var c = context.WithValue(r.Context(), ArgsKey, args)
+			r = r.WithContext(c)
+			h.ServeHTTP(w, r)
+		},
+	)
+}
 
 // HrFn converts an http.HandlerFunc to a HandlerFunc.
-// func HrFn(hf http.HandlerFunc) HandlerFunc {
-// 	return HandlerFunc(
-// 		func(c context.Context, w http.ResponseWriter, r *http.Request) {
-// 			r = r.WithContext(c)
-// 			hf(w, r)
-// 		},
-// 	)
-// }
+func HrFn(hf http.HandlerFunc) HandlerFunc {
+	return HandlerFunc(
+		func(w http.ResponseWriter, r *http.Request, args *Args) {
+			var c = context.WithValue(r.Context(), ArgsKey, args)
+			r = r.WithContext(c)
+			hf(w, r)
+		},
+	)
+}
 
 // -------------------------
 
