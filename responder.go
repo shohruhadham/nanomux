@@ -80,15 +80,15 @@ var ErrDuplicateHostTemplate = fmt.Errorf("duplicate host template")
 // handle a request.
 var ErrDuplicateResourceTemplate = fmt.Errorf("duplicate resource template")
 
-// ErrDuplicateNameInThePath is returned when a new resource's name is not
-// unique in its path.
-var ErrDuplicateNameInThePath = fmt.Errorf("duplicate name in the path")
+// ErrDuplicateNameInTheURL is returned when a new resource's name is not
+// unique in its URL.
+var ErrDuplicateNameInTheURL = fmt.Errorf("duplicate name in the URL")
 
-// ErrDuplicateValueNameInThePath is returned when one of the value names
+// ErrDuplicateValueNameInTheURL is returned when one of the value names
 // in the resource's template is a duplicate of a value name in the host's
 // or another resource's template.
-var ErrDuplicateValueNameInThePath = fmt.Errorf(
-	"duplicate value name int the path",
+var ErrDuplicateValueNameInTheURL = fmt.Errorf(
+	"duplicate value name int the URL",
 )
 
 // ErrDuplicateNameAmongSiblings is returned when a new resource's name is not
@@ -293,7 +293,7 @@ type _Responder interface {
 
 	canHandleRequest() bool
 
-	checkChildResourceNamesAreUniqueInThePath(r *Resource) error
+	checkNamesOfTheChildrenAreUniqueInTheURL(r *Resource) error
 	validate(tmpl *Template) error
 	validateHostTmpl(tmplStr string) error
 	validateURL(hostTmplstr, pathTmplStr string) (
@@ -658,9 +658,9 @@ func (rb *_ResponderBase) canHandleRequest() bool {
 
 // -------------------------
 
-// checkNamesAreUniqueInThePath checks whether the name and value names of
+// checkNamesAreUniqueInTheURL checks whether the name and value names of
 // the template are unique in the resource's URL.
-func (rb *_ResponderBase) checkNamesAreUniqueInThePath(tmpl *Template) error {
+func (rb *_ResponderBase) checkNamesAreUniqueInTheURL(tmpl *Template) error {
 	if tmpl.name == "" && tmpl.ValueNames() == nil {
 		return nil
 	}
@@ -669,11 +669,11 @@ func (rb *_ResponderBase) checkNamesAreUniqueInThePath(tmpl *Template) error {
 	for p := _Parent(rb); p != nil; p = p.parent() {
 		if r, ok := p.(_Responder); ok {
 			if r.Name() == tmpl.name {
-				return ErrDuplicateNameInThePath
+				return ErrDuplicateNameInTheURL
 			}
 
 			if r.Template().HasValueName(tmplValueNames...) {
-				return ErrDuplicateValueNameInThePath
+				return ErrDuplicateValueNameInTheURL
 			}
 		} else {
 			break
@@ -683,10 +683,10 @@ func (rb *_ResponderBase) checkNamesAreUniqueInThePath(tmpl *Template) error {
 	return nil
 }
 
-// checkChildResourceNamesAreUniqueInThePath checks whether the child resources
+// checkNamesOfTheChildrenAreUniqueInTheURL checks whether the child resources
 // of the argument resource have unique names above in the receiver resource's
 // hierarchy.
-func (rb *_ResponderBase) checkChildResourceNamesAreUniqueInThePath(
+func (rb *_ResponderBase) checkNamesOfTheChildrenAreUniqueInTheURL(
 	r *Resource,
 ) error {
 	if _, ok := rb.derived.(*Host); ok {
@@ -694,12 +694,12 @@ func (rb *_ResponderBase) checkChildResourceNamesAreUniqueInThePath(
 	}
 
 	for _, chr := range r.ChildResources() {
-		var err = rb.checkNamesAreUniqueInThePath(chr.Template())
+		var err = rb.checkNamesAreUniqueInTheURL(chr.Template())
 		if err != nil {
 			return err
 		}
 
-		err = rb.checkChildResourceNamesAreUniqueInThePath(chr)
+		err = rb.checkNamesOfTheChildrenAreUniqueInTheURL(chr)
 		if err != nil {
 			return err
 		}
@@ -716,7 +716,7 @@ func (rb *_ResponderBase) validate(tmpl *Template) error {
 		return newErr("%w", ErrNilArgument)
 	}
 
-	if err := rb.checkNamesAreUniqueInThePath(tmpl); err != nil {
+	if err := rb.checkNamesAreUniqueInTheURL(tmpl); err != nil {
 		return newErr("%w", err)
 	}
 
@@ -1042,7 +1042,7 @@ func (rb *_ResponderBase) segmentResources(pathSegments []string) (
 
 			var r = newDummyResource(tmpl)
 			if newLast != nil {
-				err = newLast.checkNamesAreUniqueInThePath(tmpl)
+				err = newLast.checkNamesAreUniqueInTheURL(tmpl)
 				if err != nil {
 					err = newErr("%w", err)
 					return
@@ -1113,7 +1113,7 @@ func (rb *_ResponderBase) registerResourceUnder(
 	}
 
 	if newFirst != nil {
-		if err := newLast.checkChildResourceNamesAreUniqueInThePath(r); err != nil {
+		if err := newLast.checkNamesOfTheChildrenAreUniqueInTheURL(r); err != nil {
 			return newErr("%w", err)
 		}
 
@@ -1132,7 +1132,7 @@ func (rb *_ResponderBase) registerResourceUnder(
 		return nil
 	}
 
-	if err := oldLast.checkChildResourceNamesAreUniqueInThePath(r); err != nil {
+	if err := oldLast.checkNamesOfTheChildrenAreUniqueInTheURL(r); err != nil {
 		return newErr("%w", err)
 	}
 
@@ -1385,7 +1385,7 @@ func (rb *_ResponderBase) RegisterResource(r *Resource) error {
 		return newErr("%w", err)
 	}
 
-	if err := rb.checkChildResourceNamesAreUniqueInThePath(r); err != nil {
+	if err := rb.checkNamesOfTheChildrenAreUniqueInTheURL(r); err != nil {
 		return newErr("%w", err)
 	}
 
@@ -1449,7 +1449,7 @@ func (rb *_ResponderBase) RegisterResourceUnder(
 		return newErr("%w", err)
 	}
 
-	if err := rb.checkChildResourceNamesAreUniqueInThePath(r); err != nil {
+	if err := rb.checkNamesOfTheChildrenAreUniqueInTheURL(r); err != nil {
 		return newErr("%w", err)
 	}
 

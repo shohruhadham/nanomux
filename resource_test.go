@@ -608,7 +608,7 @@ func TestResourceBase_checkNamesAreUniqueInThePath(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.tmpl.String(), func(t *testing.T) {
-			var err = r3.checkNamesAreUniqueInThePath(c.tmpl)
+			var err = r3.checkNamesAreUniqueInTheURL(c.tmpl)
 			if (err != nil) != c.wantErr {
 				t.Fatalf(
 					"ResourceBase.checkNamesAreUniqueInThePath() error = %v, wantErr %v",
@@ -620,7 +620,7 @@ func TestResourceBase_checkNamesAreUniqueInThePath(t *testing.T) {
 	}
 }
 
-func TestResourceBase_checkChildResourceNamesAreUniqueInThePath(t *testing.T) {
+func TestResourceBase_checkNamesOfTheChildrenAreUniqueInTheURL(t *testing.T) {
 	var (
 		p1 = NewDormantResource("{country}")
 		p2 = NewDormantResource("{city}")
@@ -645,9 +645,9 @@ func TestResourceBase_checkChildResourceNamesAreUniqueInThePath(t *testing.T) {
 	ch3.papa = ch2
 	ch2.papa = ch1
 
-	if err := p3.checkChildResourceNamesAreUniqueInThePath(ch1); err != nil {
+	if err := p3.checkNamesOfTheChildrenAreUniqueInTheURL(ch1); err != nil {
 		t.Fatalf(
-			"ResourceBase.checkChildResourceNamesAreUniqueInThePath() error != nil, wantErr false",
+			"ResourceBase.checkNamesOfTheChildrenAreUniqueInTheURL() error != nil, wantErr false",
 		)
 	}
 
@@ -655,9 +655,9 @@ func TestResourceBase_checkChildResourceNamesAreUniqueInThePath(t *testing.T) {
 	ch3.wildcardResource = ch4
 	ch4.papa = ch3
 
-	if err := p3.checkChildResourceNamesAreUniqueInThePath(ch1); err == nil {
+	if err := p3.checkNamesOfTheChildrenAreUniqueInTheURL(ch1); err == nil {
 		t.Fatalf(
-			"ResourceBase.checkChildResourceNamesAreUniqueInThePath() error == nil, wantErr true",
+			"ResourceBase.checkNamesOfTheChildrenAreUniqueInTheURL() error == nil, wantErr true",
 		)
 	}
 }

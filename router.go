@@ -1170,7 +1170,7 @@ func (ro *Router) RegisterResource(r *Resource) error {
 		return newErr("%w", err)
 	}
 
-	if err := _r.checkChildResourceNamesAreUniqueInThePath(r); err != nil {
+	if err := _r.checkNamesOfTheChildrenAreUniqueInTheURL(r); err != nil {
 		return newErr("%w", err)
 	}
 
@@ -1310,7 +1310,7 @@ func (ro *Router) RegisterResourceUnder(urlTmplStr string, r *Resource) error {
 		return newErr("%w", err)
 	}
 
-	if err := r.checkChildResourceNamesAreUniqueInThePath(r); err != nil {
+	if err := r.checkNamesOfTheChildrenAreUniqueInTheURL(r); err != nil {
 		return newErr("%w", err)
 	}
 
