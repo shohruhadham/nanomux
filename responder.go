@@ -88,7 +88,7 @@ var ErrDuplicateNameInTheURL = fmt.Errorf("duplicate name in the URL")
 // in the resource's template is a duplicate of a value name in the host's
 // or another resource's template.
 var ErrDuplicateValueNameInTheURL = fmt.Errorf(
-	"duplicate value name int the URL",
+	"duplicate value name in the URL",
 )
 
 // ErrDuplicateNameAmongSiblings is returned when a new resource's name is not

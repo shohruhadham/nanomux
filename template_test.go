@@ -474,7 +474,7 @@ func TestTemplate_Match(t *testing.T) {
 			}
 
 			for _, wantPair := range c.wantValues {
-				var vi, vf = values.Get(wantPair.key)
+				var vi, vf = values.get(wantPair.key)
 				if vi < 0 || vf != wantPair.value {
 					t.Fatalf(
 						"Template.Match() values = %v, want %v",
