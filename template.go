@@ -119,7 +119,7 @@ type TemplateValues []_StringPair
 // Set sets the value for the key. If the key doesn't exist, it's added to the
 // slice.
 func (tmplVs *TemplateValues) Set(key, value string) {
-	var i, _ = tmplVs.Get(key)
+	var i, _ = tmplVs.get(key)
 	if i < 0 {
 		*tmplVs = append(*tmplVs, _StringPair{key, value})
 		return
@@ -128,9 +128,9 @@ func (tmplVs *TemplateValues) Set(key, value string) {
 	(*tmplVs)[i] = _StringPair{key, value}
 }
 
-// Get returns the index and the value, if the key exists, or -1 and an empty
+// get returns the index and the value, if the key exists, or -1 and an empty
 // string.
-func (tmplVs TemplateValues) Get(key string) (int, string) {
+func (tmplVs TemplateValues) get(key string) (int, string) {
 	for i := len(tmplVs) - 1; i >= 0; i-- {
 		if tmplVs[i].key == key {
 			return i, tmplVs[i].value
@@ -138,6 +138,13 @@ func (tmplVs TemplateValues) Get(key string) (int, string) {
 	}
 
 	return -1, ""
+}
+
+// Get returns the value of the key. If the key doesn't exist, it returns an
+// empty string.
+func (tmplVs TemplateValues) Get(key string) string {
+	var _, v = tmplVs.get(key)
+	return v
 }
 
 // --------------------------------------------------
@@ -430,7 +437,7 @@ func (t *Template) Match(
 			var idxs = vp.re.FindStringIndex(str)
 			if idxs != nil {
 				var v = str[:idxs[1]]
-				if vi, vf := values.Get(vp.name); vi >= 0 {
+				if vi, vf := values.get(vp.name); vi >= 0 {
 					if v != vf {
 						return false, values
 					}
@@ -461,7 +468,7 @@ func (t *Template) Match(
 			var idxs = vp.re.FindAllStringIndex(str, -1)
 			if len(idxs) == 1 {
 				var v = str[idxs[0][0]:]
-				if vi, vf := values.Get(vp.name); vi >= 0 {
+				if vi, vf := values.get(vp.name); vi >= 0 {
 					if v != vf {
 						return false, values
 					}
@@ -515,7 +522,7 @@ func (t *Template) Apply(values TemplateValues, ignoreMissing bool) (
 			continue
 		}
 
-		if vi, vf := values.Get(slc.valuePattern.name); vi >= 0 {
+		if vi, vf := values.get(slc.valuePattern.name); vi >= 0 {
 			if slc.valuePattern.re != nil {
 				var idxs = slc.valuePattern.re.FindStringIndex(vf)
 				if idxs == nil || (idxs[0] != 0 && idxs[1] != len(vf)) {
