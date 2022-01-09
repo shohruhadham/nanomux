@@ -977,16 +977,15 @@ func parse(tmplStr string) (
 	tmplSlcs = make([]_TemplateSlice, len(tss))
 	copy(tmplSlcs, tss)
 
-	if len(tmplSlcs) == 1 {
-		if vp := tmplSlcs[0].valuePattern; vp != nil && vp.re != nil {
-			// There are no other slices other than the single value-pattern
-			// slice. So, its pattern must be modified to match the whole
-			// string.
-			var reStr = vp.re.String() + "$"
-			vp.re, err = regexp.Compile(reStr)
-			if err != nil {
-				return nil, -1, err
-			}
+	var lastIdx = len(tmplSlcs) - 1
+	var vp = tmplSlcs[lastIdx].valuePattern
+	if vp != nil && vp.re != nil && wildcardIdx < 0 {
+		// The last slice is a value-pattern slice. So, its pattern must be
+		// modified to match the end of the string.
+		var reStr = vp.re.String() + "$"
+		vp.re, err = regexp.Compile(reStr)
+		if err != nil {
+			return nil, -1, err
 		}
 	}
 

@@ -1398,7 +1398,7 @@ func TestTemplate_parse(t *testing.T) {
 				{staticStr: `static{slice} `},
 				{valuePattern: &_ValuePattern{
 					name: `:valueName:`,
-					re:   regexp.MustCompile("^pattern"), // ^pattern$   ???
+					re:   regexp.MustCompile("^pattern$"),
 				}},
 			},
 			-1, false,
@@ -1629,7 +1629,7 @@ func TestTemplate_TryToParse(t *testing.T) {
 					{staticStr: "static{slice} "},
 					{valuePattern: &_ValuePattern{
 						name: `:valueName:`,
-						re:   regexp.MustCompile("^pattern"),
+						re:   regexp.MustCompile("^pattern$"),
 					}},
 				},
 				wildCardIdx: -1,
@@ -1824,7 +1824,7 @@ func TestTemplate_Parse(t *testing.T) {
 					{staticStr: "static{slice} "},
 					{valuePattern: &_ValuePattern{
 						name: `:valueName:`,
-						re:   regexp.MustCompile("^pattern"),
+						re:   regexp.MustCompile("^pattern$"),
 					}},
 				},
 				wildCardIdx: -1,

@@ -1832,7 +1832,7 @@ func TestResourceBase_Resource(t *testing.T) {
 			"pattern with no name",
 			"static2/{name1:pattern1}{name2:pattern2}",
 			nil,
-			true,
+			false,
 		},
 	}
 
@@ -2076,7 +2076,7 @@ func TestResourceBase_ResourceUsingConfig(t *testing.T) {
 			"{n1:1}{n2:2}-resource",
 			Config{SubtreeHandler: true},
 			nil,
-			true,
+			false,
 		},
 	}
 
