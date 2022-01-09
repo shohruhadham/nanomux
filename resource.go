@@ -597,12 +597,12 @@ func (rb *Resource) handleOrPassRequest(
 		newURL.Scheme = "https"
 	}
 
-	if len(args.cleanPath) > 0 && !rb.IsLenientOnUncleanPath() {
+	if args.cleanPath && !rb.IsLenientOnUncleanPath() {
 		if newURL == nil {
 			newURL = cloneRequestURL(r)
 		}
 
-		newURL.Path = args.cleanPath
+		newURL.Path = args.path
 	}
 
 	if lastSegment && !rb.IsLenientOnTrailingSlash() {

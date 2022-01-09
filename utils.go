@@ -403,8 +403,9 @@ func (args _Args) get(key interface{}) (int, interface{}) {
 // pattern or when the request's URL contains path segments. It's kept in the
 // request's context.
 type Args struct {
-	url                   *url.URL
-	cleanPath             string
+	path                  string
+	rawPath               bool
+	cleanPath             bool
 	currentPathSegmentIdx int
 
 	subtreeExists bool
@@ -418,40 +419,27 @@ type Args struct {
 
 // -------------------------
 
-// getArgs returns a context with _RoutingData that keeps the
-// passed URL and the _Resource.
+// getArgs returns an instance of Args adapted to the URL.
 func getArgs(url *url.URL, _r _Responder) *Args {
 	var args = getArgsFromThePool(url, _r)
-	var tmpPath = url.Path
-
-	// The escaped path may have a slash "/", which is a part of the path
-	// segment, not a separator. So the unescaped path must be used for routing.
-	//
-	// As the documentation of the URL.EscapedPath() states, it may return a
-	// different path from the URL.RawPath. Sometimes it's not suitable for
-	// our intentions. It's preferable to use URL.RawPath if it's not empty.
-	if len(url.RawPath) > 0 {
-		tmpPath = url.RawPath
-	}
-
-	if tmpPath != "" {
+	if args.path != "" {
 		var trailingSlash bool
-		var ltmpPath = len(tmpPath)
-		if ltmpPath > 1 && tmpPath[ltmpPath-1] == '/' {
+		if len(args.path) > 1 && args.path[len(args.path)-1] == '/' {
 			trailingSlash = true
 		}
 
-		if tmpPath[0] != '/' {
-			tmpPath = "/" + tmpPath
+		if args.path[0] != '/' {
+			args.path = "/" + args.path
 		}
 
-		var cleanPath = path.Clean(tmpPath)
+		var cleanPath = path.Clean(args.path)
 		if trailingSlash && len(cleanPath) > 1 {
 			cleanPath += "/"
 		}
 
-		if len(cleanPath) != len(tmpPath) {
-			args.cleanPath = cleanPath
+		if len(cleanPath) != len(args.path) {
+			args.path = cleanPath
+			args.cleanPath = true
 		}
 	}
 
@@ -460,35 +448,10 @@ func getArgs(url *url.URL, _r _Responder) *Args {
 
 // -------------------------
 
-func (args *Args) pathIsRoot() bool {
-	if args.cleanPath != "" {
-		return args.cleanPath == "/"
-	}
-
-	if args.url.RawPath != "" {
-		return args.url.RawPath == "/"
-	}
-
-	return args.url.Path == "/"
-}
-
-// pathLen returns the length of the path that rd is using.
-func (args *Args) pathLen() int {
-	var lpath = len(args.cleanPath)
-	if lpath == 0 {
-		lpath = len(args.url.RawPath)
-		if lpath == 0 {
-			lpath = len(args.url.Path)
-		}
-	}
-
-	return lpath
-}
-
 // nextPathSegment returns the unescaped next path segment of the request's URL
 // below the resource that is using the routing data.
 func (args *Args) nextPathSegment() (string, error) {
-	var lpath = args.pathLen()
+	var lpath = len(args.path)
 	if args.currentPathSegmentIdx == lpath {
 		return "", nil
 	}
@@ -498,26 +461,10 @@ func (args *Args) nextPathSegment() (string, error) {
 		return "/", nil
 	}
 
-	var pathWasCleaned = args.cleanPath != ""
-	var pathIsRaw = args.url.RawPath != ""
-
-	var idx int
-	if pathWasCleaned {
-		idx = strings.IndexByte(
-			args.cleanPath[args.currentPathSegmentIdx:],
-			'/',
-		)
-	} else if pathIsRaw {
-		idx = strings.IndexByte(
-			args.url.RawPath[args.currentPathSegmentIdx:],
-			'/',
-		)
-	} else {
-		idx = strings.IndexByte(
-			args.url.Path[args.currentPathSegmentIdx:],
-			'/',
-		)
-	}
+	var idx = strings.IndexByte(
+		args.path[args.currentPathSegmentIdx:],
+		'/',
+	)
 
 	var cIdx = args.currentPathSegmentIdx
 	args.currentPathSegmentIdx += idx + 1
@@ -528,37 +475,23 @@ func (args *Args) nextPathSegment() (string, error) {
 		args.currentPathSegmentIdx = lpath
 	}
 
-	if pathIsRaw {
-		if pathWasCleaned {
-			return url.PathUnescape(args.cleanPath[cIdx:idx])
-		}
-
-		return url.PathUnescape(args.url.RawPath[cIdx:idx])
+	if args.rawPath {
+		return url.PathUnescape(args.path[cIdx:idx])
 	}
 
-	if pathWasCleaned {
-		return args.cleanPath[cIdx:idx], nil
-	}
-
-	return args.url.Path[cIdx:idx], nil
+	return args.path[cIdx:idx], nil
 }
 
 // reachedTheLastPathSegment returns true when the resource that is using the
 // routing data is the last resource in the request's URL.
 func (args *Args) reachedTheLastPathSegment() bool {
-	return args.currentPathSegmentIdx == args.pathLen()
+	return args.currentPathSegmentIdx == len(args.path)
 }
 
 // pathHasTrailingSlash returns true if the request's URL has a trailing slash.
 func (args *Args) pathHasTrailingSlash() bool {
-	if lpath := len(args.cleanPath); lpath > 0 {
-		return args.cleanPath != "/" && args.cleanPath[lpath-1] == '/'
-	} else if lpath = len(args.url.RawPath); lpath > 0 {
-		return args.url.RawPath != "/" && args.url.RawPath[lpath-1] == '/'
-	}
-
-	return args.url.Path != "" && args.url.Path != "/" &&
-		args.url.Path[len(args.url.Path)-1] == '/'
+	return args.path != "" && args.path != "/" &&
+		args.path[len(args.path)-1] == '/'
 }
 
 // -------------------------
@@ -572,53 +505,26 @@ func (args *Args) HostPathValues() HostPathValues {
 // that's below the current responder's segment. The remaining path doesn't
 // include the host, even when the method is called from the middleware of
 // the router's segment handler.
-func (rd *Args) RemainingPath() string {
-	if rd.reachedTheLastPathSegment() {
+func (args *Args) RemainingPath() string {
+	if args.reachedTheLastPathSegment() {
 		return ""
 	}
 
-	var pathWasCleaned = len(rd.cleanPath) > 0
-	var pathIsRaw = len(rd.url.RawPath) > 0
-
-	if rd._r != nil && rd._r.HasTrailingSlash() || rd.pathIsRoot() {
+	if args._r != nil && args._r.HasTrailingSlash() || args.path == "/" {
 		// If the _r is a host or resource with a trailing slash, or if the
 		// request's path contains only a slash "/" (root), the remaining path
 		// should not start with or contain only a trailing slash. When the
 		// request's path contains only a slash "/", that means the remaining
 		// path is being retrieved by a host which is lenient on the trailing
 		// slash or a root resource.
-		if rd.currentPathSegmentIdx == 0 {
-			if pathWasCleaned {
-				return rd.cleanPath[1:]
-			}
-
-			if pathIsRaw {
-				return rd.url.RawPath[1:]
-			}
-
-			return rd.url.Path[1:]
+		if args.currentPathSegmentIdx == 0 {
+			return args.path[1:]
 		}
-	} else if rd.currentPathSegmentIdx > 0 {
-		if pathWasCleaned {
-			return rd.cleanPath[rd.currentPathSegmentIdx-1:]
-		}
-
-		if pathIsRaw {
-			return rd.url.RawPath[rd.currentPathSegmentIdx-1:]
-		}
-
-		return rd.url.Path[rd.currentPathSegmentIdx-1:]
+	} else if args.currentPathSegmentIdx > 0 {
+		return args.path[args.currentPathSegmentIdx-1:]
 	}
 
-	if pathWasCleaned {
-		return rd.cleanPath[rd.currentPathSegmentIdx:]
-	}
-
-	if pathIsRaw {
-		return rd.url.RawPath[rd.currentPathSegmentIdx:]
-	}
-
-	return rd.url.Path[rd.currentPathSegmentIdx:]
+	return args.path[args.currentPathSegmentIdx:]
 }
 
 // ResponderSharedData returns the shared data of the host or resource that
@@ -706,7 +612,7 @@ var argsPool = sync.Pool{
 }
 
 func putArgsInThePool(args *Args) {
-	args.cleanPath = ""
+	args.cleanPath = false
 	args.currentPathSegmentIdx = 0
 
 	args.subtreeExists = false
@@ -727,7 +633,21 @@ func putArgsInThePool(args *Args) {
 
 func getArgsFromThePool(url *url.URL, _r _Responder) *Args {
 	var args = argsPool.Get().(*Args)
-	args.url = url
+
+	// The escaped path may have a slash "/", which is a part of the path
+	// segment, not a separator. So the unescaped path must be used for routing.
+	//
+	// As the documentation of the URL.EscapedPath() states, it may return a
+	// different path from the URL.RawPath. So in this case, it's preferable to
+	// use URL.RawPath if it's not empty.
+	args.path = url.RawPath
+	args.rawPath = true
+
+	if len(args.path) == 0 {
+		args.path = url.Path
+		args.rawPath = false
+	}
+
 	args._r = _r
 
 	return args
