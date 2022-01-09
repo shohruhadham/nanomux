@@ -371,8 +371,7 @@ func (hb *Host) handleOrPassRequest(
 	r *http.Request,
 	args *Args,
 ) {
-	var lpath = args.pathLen()
-	if lpath > 1 {
+	if len(args.path) > 1 {
 		if hb.IsSubtreeHandler() {
 			args.subtreeExists = true
 		}
@@ -408,16 +407,16 @@ func (hb *Host) handleOrPassRequest(
 	}
 
 	// Following checks unclean paths, like '////'.
-	if len(args.cleanPath) > 0 && !hb.IsLenientOnUncleanPath() {
+	if args.cleanPath && !hb.IsLenientOnUncleanPath() {
 		if newURL == nil {
 			newURL = cloneRequestURL(r)
 		}
 
-		newURL.Path = args.cleanPath
+		newURL.Path = args.path
 	}
 
-	if lpath < 2 && !hb.IsLenientOnTrailingSlash() {
-		if hb.HasTrailingSlash() && !args.pathIsRoot() {
+	if len(args.path) < 2 && !hb.IsLenientOnTrailingSlash() {
+		if hb.HasTrailingSlash() && args.path != "/" {
 			if hb.IsStrictOnTrailingSlash() {
 				notFoundResourceHandler.ServeHTTP(w, r, args)
 				return
@@ -428,7 +427,7 @@ func (hb *Host) handleOrPassRequest(
 			}
 
 			newURL.Path += "/"
-		} else if !hb.HasTrailingSlash() && args.pathIsRoot() {
+		} else if !hb.HasTrailingSlash() && args.path == "/" {
 			if hb.IsStrictOnTrailingSlash() {
 				notFoundResourceHandler.ServeHTTP(w, r, args)
 				return
