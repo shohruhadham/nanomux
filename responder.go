@@ -661,14 +661,14 @@ func (rb *_ResponderBase) canHandleRequest() bool {
 // checkNamesAreUniqueInTheURL checks whether the name and value names of
 // the template are unique in the resource's URL.
 func (rb *_ResponderBase) checkNamesAreUniqueInTheURL(tmpl *Template) error {
-	if tmpl.name == "" && tmpl.ValueNames() == nil {
+	var tmplValueNames = tmpl.ValueNames()
+	if tmpl.name == "" && tmplValueNames == nil {
 		return nil
 	}
 
-	var tmplValueNames = tmpl.ValueNames()
 	for p := _Parent(rb); p != nil; p = p.parent() {
 		if r, ok := p.(_Responder); ok {
-			if r.Name() == tmpl.name {
+			if tmpl.name != "" && r.Name() == tmpl.name {
 				return ErrDuplicateNameInTheURL
 			}
 

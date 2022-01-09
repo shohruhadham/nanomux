@@ -95,10 +95,10 @@ func TestRouter__Resource(t *testing.T) {
 		{"r11 #3", "https:///{r00:1}/r11", nil, true},
 		{"r11 #4", "http:///{r00:1}/r11/", nil, true},
 
-		{"r13 #1", "http:///{r00:1}/{r13-1:abc}{r13-2:bca}/", nil, true},
+		{"r13 #1", "http:///{r00:1}/{r13-1:abc}{r13-2:bca}/", nil, false},
 		{
 			"r13 #2",
-			"http:///{r00:1}/$r13:{r13-1:abc}{r13-2:bca}/",
+			"{r00:1}/{r13-1:abc}{r13-2:bca}/",
 			nil,
 			false,
 		},
@@ -106,7 +106,7 @@ func TestRouter__Resource(t *testing.T) {
 			"r13 #3",
 			"http:///{r00:1}/$r13:{r13-1:abc}{r13-2:bca}/",
 			nil,
-			false,
+			true,
 		},
 		{
 			"r13 #4",
@@ -2412,7 +2412,7 @@ func TestRouter_Resource(t *testing.T) {
 			"pattern with no name",
 			"static2/{name1:pattern1}{name2:pattern2}",
 			nil,
-			true,
+			false,
 		},
 	}
 
