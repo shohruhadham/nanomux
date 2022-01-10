@@ -453,7 +453,7 @@ func (rb *_ResponderBase) setParent(p _Parent) error {
 		}
 	}
 
-	if rb.Template().Content() == "/" {
+	if rb.Template().UnescapedContent() == "/" {
 		// Only a router can be set as a parent for a root.
 		if _, ok := p.(*Router); !ok {
 			return newErr("%w", ErrNonRouterParent)
@@ -811,7 +811,7 @@ func (rb *_ResponderBase) resourceWithTemplate(tmpl *Template) (
 	error,
 ) {
 	if tmpl.IsStatic() {
-		var r = rb.staticResources[tmpl.Content()]
+		var r = rb.staticResources[tmpl.UnescapedContent()]
 		if r != nil {
 			var stmpl = r.Template()
 			if stmpl == tmpl {
@@ -952,7 +952,7 @@ func (rb *_ResponderBase) replaceResource(oldR, newR *Resource) error {
 	var tmpl = oldR.Template()
 	switch {
 	case tmpl.IsStatic():
-		rb.staticResources[tmpl.Content()] = newR
+		rb.staticResources[tmpl.UnescapedContent()] = newR
 	case tmpl.IsWildcard():
 		rb.wildcardResource = newR
 	default:
@@ -989,7 +989,7 @@ func (rb *_ResponderBase) registerResource(r *Resource) error {
 			rb.staticResources = make(map[string]*Resource)
 		}
 
-		rb.staticResources[tmpl.Content()] = r
+		rb.staticResources[tmpl.UnescapedContent()] = r
 	case tmpl.IsWildcard():
 		rb.wildcardResource = r
 	default:
