@@ -166,6 +166,128 @@ func TestTemplate_Content(t *testing.T) {
 	}
 }
 
+func TestTemplate_UnescapedContent(t *testing.T) {
+	var cases = []struct {
+		name string
+		tmpl *Template
+		want string
+	}{
+		{
+			"static",
+			&Template{
+				slices: []_TemplateSlice{{staticStr: "$static{template}"}},
+			},
+			"$static{template}",
+		},
+		{
+			"pattern",
+			&Template{slices: []_TemplateSlice{
+				{
+					valuePattern: &_ValuePattern{
+						name: "pattern:1",
+						re:   regexp.MustCompile(`\d{3}`),
+					},
+				},
+			}},
+			`{pattern:1:\d{3}}`,
+		},
+		{
+			"static pattern",
+			&Template{slices: []_TemplateSlice{
+				{staticStr: "{static} "},
+				{
+					valuePattern: &_ValuePattern{
+						name: "pattern:name",
+						re:   regexp.MustCompile(`\d{3}`),
+					},
+				},
+			}},
+			`{static} {pattern:name:\d{3}}`,
+		},
+		{
+			"pattern static",
+			&Template{slices: []_TemplateSlice{
+				{
+					valuePattern: &_ValuePattern{
+						name: "{pattern:name}",
+						re:   regexp.MustCompile(`\d{3}`),
+					},
+				},
+				{staticStr: " static{segment} "},
+			}},
+			`{{pattern:name}:\d{3}} static{segment} `,
+		},
+		{
+			"static pattern static",
+			&Template{slices: []_TemplateSlice{
+				{staticStr: "static{slice}"},
+				{
+					valuePattern: &_ValuePattern{
+						name: "pattern {slice}",
+						re:   regexp.MustCompile(`\d{3}`),
+					},
+				},
+				{staticStr: " {static} slice"},
+			}},
+			`static{slice}{pattern {slice}:\d{3}} {static} slice`,
+		},
+		{
+			"pattern static pattern",
+			&Template{slices: []_TemplateSlice{
+				{
+					valuePattern: &_ValuePattern{
+						name: `pattern:{slice}`,
+						re:   regexp.MustCompile(`\d{3}`),
+					},
+				},
+				{staticStr: "{static} slice"},
+				{
+					valuePattern: &_ValuePattern{
+						name: "pattern-2:{slice}",
+						re:   regexp.MustCompile(`\d{3}\{\}`),
+					},
+				},
+			}},
+			`{pattern:{slice}:\d{3}}{static} slice{pattern-2:{slice}:\d{3}\{\}}`,
+		},
+		{
+			"pattern static wildcard pattern",
+			&Template{slices: []_TemplateSlice{
+				{staticStr: "$"},
+				{
+					valuePattern: &_ValuePattern{
+						name: `pattern:{1}`,
+						re:   regexp.MustCompile(`\d{3}`),
+					},
+				},
+				{staticStr: "{static slice}"},
+				{
+					valuePattern: &_ValuePattern{name: "wildcard:{slice}"},
+				},
+				{
+					valuePattern: &_ValuePattern{
+						name: "pattern:{2}",
+						re:   regexp.MustCompile(`\d{3}`),
+					},
+				},
+			}},
+			`${pattern:{1}:\d{3}}{static slice}{wildcard:{slice}}{pattern:{2}:\d{3}}`,
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := c.tmpl.UnescapedContent(); got != c.want {
+				t.Fatalf(
+					"Template.UnescapedContent() = %v, want %v",
+					got,
+					c.want,
+				)
+			}
+		})
+	}
+}
+
 func TestTemplate_IsStatic(t *testing.T) {
 	var cases = []struct {
 		name string

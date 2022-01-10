@@ -239,7 +239,7 @@ func (t *Template) HasValueName(names ...string) bool {
 	return false
 }
 
-// Content returns the content of the template without a name.
+// Content returns the escaped content of the template without a name.
 // A pattern is omitted from a repeated value-pattern starting from the second
 // repitition.
 func (t *Template) Content() string {
@@ -280,6 +280,37 @@ func (t *Template) Content() string {
 				strb.WriteString(`\:`)
 				str = str[idx+1:]
 			}
+
+			if vns == nil {
+				vns = make(map[string]bool)
+			}
+
+			if slice.valuePattern.re != nil && !vns[slice.valuePattern.name] {
+				strb.WriteByte(':')
+				strb.WriteString(slice.valuePattern.re.String())
+				vns[slice.valuePattern.name] = true
+			}
+
+			strb.WriteByte('}')
+		}
+	}
+
+	return strb.String()
+}
+
+// UnescapedContent returns the unescaped content of the template without a
+// name. A pattern is omitted from a repeated value-pattern starting from the
+// second repitition.
+func (t *Template) UnescapedContent() string {
+	var strb = strings.Builder{}
+	var vns map[string]bool
+
+	for _, slice := range t.slices {
+		if slice.staticStr != "" {
+			strb.WriteString(slice.staticStr)
+		} else {
+			strb.WriteByte('{')
+			strb.WriteString(slice.valuePattern.name)
 
 			if vns == nil {
 				vns = make(map[string]bool)
@@ -584,7 +615,8 @@ func (t *Template) Clear() {
 
 // --------------------------------------------------
 
-// templateNameAndContent divides a template string into its name and content.
+// templateNameAndContent divides the template string into its unescaped name
+// and the escaped content. So the content can be parsed.
 func templateNameAndContent(tmplStr string) (
 	name string,
 	content string,
