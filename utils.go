@@ -95,6 +95,10 @@ func (psi *_PathSegmentIterator) pathHasTrailingSlash() bool {
 func cloneRequestURL(r *http.Request) *url.URL {
 	var url = &url.URL{}
 	*url = *r.URL
+	if url.Host == "" {
+		url.Host = r.Host
+	}
+
 	return url
 }
 
