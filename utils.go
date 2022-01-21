@@ -130,12 +130,11 @@ func toUpperSplitByCommaSpace(str string) []string {
 // It also returns the security and tslash property values.
 //
 // Only an absolute URL template can have a host template. When a URL template
-// doesn't start with a scheme, it is considered a path template. After a host
-// template, if a path template contains only a slash, the trailing slash return
-// value will be true and the path template return value will be empty.
-//
-// A URL template can start with a scheme to specify security even if there is
-// no host template.
+// doesn't start with a scheme, it is considered a path template. The URL
+// template may have no host segment template but can start with a scheme to
+// specify the security of the last path segment. After a host template, if a
+// path template contains only a slash, the trailing slash return value will be
+// true and the path template return value will be empty.
 //
 // For example,
 // https:///resource1/resource2 - specifies that resource2 is secure.
