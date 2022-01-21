@@ -29,26 +29,27 @@ var ErrConflictingStatusCode = fmt.Errorf("conflicting status code")
 // --------------------------------------------------
 
 type Handler interface {
-	ServeHTTP(w http.ResponseWriter, r *http.Request, args *Args)
+	ServeHTTP(w http.ResponseWriter, r *http.Request, args *Args) bool
 }
 
-type HandlerFunc func(w http.ResponseWriter, r *http.Request, args *Args)
+type HandlerFunc func(w http.ResponseWriter, r *http.Request, args *Args) bool
 
 func (hf HandlerFunc) ServeHTTP(
 	w http.ResponseWriter,
 	r *http.Request,
 	args *Args,
-) {
-	hf(w, r, args)
+) bool {
+	return hf(w, r, args)
 }
 
 // Hr converts an http.Handler to a Handler.
 func Hr(h http.Handler) Handler {
 	return HandlerFunc(
-		func(w http.ResponseWriter, r *http.Request, args *Args) {
+		func(w http.ResponseWriter, r *http.Request, args *Args) bool {
 			var c = context.WithValue(r.Context(), ArgsKey, args)
 			r = r.WithContext(c)
 			h.ServeHTTP(w, r)
+			return true
 		},
 	)
 }
@@ -56,10 +57,11 @@ func Hr(h http.Handler) Handler {
 // HrFn converts an http.HandlerFunc to a HandlerFunc.
 func HrFn(hf http.HandlerFunc) HandlerFunc {
 	return HandlerFunc(
-		func(w http.ResponseWriter, r *http.Request, args *Args) {
+		func(w http.ResponseWriter, r *http.Request, args *Args) bool {
 			var c = context.WithValue(r.Context(), ArgsKey, args)
 			r = r.WithContext(c)
 			hf(w, r)
+			return true
 		},
 	)
 }
@@ -198,7 +200,7 @@ func detectHTTPMethodHandlersOf(impl Impl) (*_RequestHandlerBase, error) {
 	var v reflect.Value = reflect.ValueOf(impl)
 	var handlerFuncType = reflect.TypeOf(
 		// Signature of the HandlerFunc.
-		func(http.ResponseWriter, *http.Request, *Args) {},
+		func(http.ResponseWriter, *http.Request, *Args) bool { return true },
 	)
 
 	for hm, n := range hmns {
@@ -216,7 +218,7 @@ func detectHTTPMethodHandlersOf(impl Impl) (*_RequestHandlerBase, error) {
 			http.ResponseWriter,
 			*http.Request,
 			*Args,
-		))
+		) bool)
 
 		if !ok {
 			// This should never happen.
@@ -395,42 +397,40 @@ func (rhb *_RequestHandlerBase) handleRequest(
 	w http.ResponseWriter,
 	r *http.Request,
 	args *Args,
-) {
+) bool {
 	if rhb == nil || len(rhb.mhPairs) == 0 {
-		notFoundResourceHandler.ServeHTTP(w, r, args)
-		return
+		return notFoundResourceHandler.ServeHTTP(w, r, args)
 	}
 
 	if _, handler := rhb.mhPairs.get(r.Method); handler != nil {
-		handler.ServeHTTP(w, r, args)
-		return
+		return handler.ServeHTTP(w, r, args)
 	}
 
 	if rhb.notAllowedHTTPMethodsHandler != nil {
-		rhb.notAllowedHTTPMethodsHandler.ServeHTTP(w, r, args)
-		return
+		return rhb.notAllowedHTTPMethodsHandler.ServeHTTP(w, r, args)
 	}
 
-	rhb.handleNotAllowedHTTPMethods(w, r, args)
+	return rhb.handleNotAllowedHTTPMethods(w, r, args)
 }
 
 func (rhb *_RequestHandlerBase) handleOptionsHTTPMethod(
 	w http.ResponseWriter,
 	r *http.Request,
 	_ *Args,
-) {
+) bool {
 	for _, mhp := range rhb.mhPairs {
 		w.Header().Add("Allow", mhp.method)
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+	return true
 }
 
 func (rhb *_RequestHandlerBase) handleNotAllowedHTTPMethods(
 	w http.ResponseWriter,
 	r *http.Request,
 	_ *Args,
-) {
+) bool {
 	for _, mhp := range rhb.mhPairs {
 		w.Header().Add("Allow", mhp.method)
 	}
@@ -440,6 +440,8 @@ func (rhb *_RequestHandlerBase) handleNotAllowedHTTPMethods(
 		http.StatusText(http.StatusMethodNotAllowed),
 		http.StatusMethodNotAllowed,
 	)
+
+	return true
 }
 
 // -------------------------
@@ -495,7 +497,7 @@ type RedirectHandlerFunc func(
 	url string,
 	code int,
 	args *Args,
-)
+) bool
 
 var permanentRedirect = func(
 	w http.ResponseWriter,
@@ -503,8 +505,9 @@ var permanentRedirect = func(
 	url string,
 	code int,
 	_ *Args,
-) {
+) bool {
 	http.Redirect(w, r, url, code)
+	return true
 }
 
 func SetPermanentRedirectHandlerFunc(fn RedirectHandlerFunc) error {
@@ -534,8 +537,9 @@ func WrapPermanentRedirectHandlerFunc(
 // --------------------------------------------------
 
 var notFoundResourceHandler Handler = HandlerFunc(
-	func(w http.ResponseWriter, _ *http.Request, _ *Args) {
+	func(w http.ResponseWriter, _ *http.Request, _ *Args) bool {
 		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+		return true
 	},
 )
 

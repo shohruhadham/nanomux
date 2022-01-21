@@ -366,7 +366,7 @@ func (hb *Host) handleOrPassRequest(
 	w http.ResponseWriter,
 	r *http.Request,
 	args *Args,
-) {
+) bool {
 	if len(args.path) > 1 {
 		if hb.IsSubtreeHandler() {
 			args.subtreeExists = true
@@ -374,28 +374,25 @@ func (hb *Host) handleOrPassRequest(
 
 		args.nextPathSegment() // First call returns '/'.
 		if hb.passRequestToChildResource(w, r, args) {
-			return
+			return true
 		}
 
 		// Here the host must be set again because it may have been changed.
 		args._r = hb.derived
 
 		if !hb.IsSubtreeHandler() {
-			notFoundResourceHandler.ServeHTTP(w, r, args)
-			return
+			return notFoundResourceHandler.ServeHTTP(w, r, args)
 		}
 	}
 
 	if !hb.canHandleRequest() {
-		notFoundResourceHandler.ServeHTTP(w, r, args)
-		return
+		return notFoundResourceHandler.ServeHTTP(w, r, args)
 	}
 
 	var newURL *url.URL
 	if r.TLS == nil && hb.IsSecure() {
 		if !hb.RedirectsInsecureRequest() {
-			notFoundResourceHandler.ServeHTTP(w, r, args)
-			return
+			return notFoundResourceHandler.ServeHTTP(w, r, args)
 		}
 
 		newURL = cloneRequestURL(r)
@@ -414,8 +411,7 @@ func (hb *Host) handleOrPassRequest(
 	if len(args.path) < 2 && !hb.IsLenientOnTrailingSlash() {
 		if hb.HasTrailingSlash() && args.path != "/" {
 			if hb.IsStrictOnTrailingSlash() {
-				notFoundResourceHandler.ServeHTTP(w, r, args)
-				return
+				return notFoundResourceHandler.ServeHTTP(w, r, args)
 			}
 
 			if newURL == nil {
@@ -425,8 +421,7 @@ func (hb *Host) handleOrPassRequest(
 			newURL.Path += "/"
 		} else if !hb.HasTrailingSlash() && args.path == "/" {
 			if hb.IsStrictOnTrailingSlash() {
-				notFoundResourceHandler.ServeHTTP(w, r, args)
-				return
+				return notFoundResourceHandler.ServeHTTP(w, r, args)
 			}
 
 			if newURL == nil {
@@ -438,9 +433,14 @@ func (hb *Host) handleOrPassRequest(
 	}
 
 	if newURL != nil {
-		permanentRedirect(w, r, newURL.String(), permanentRedirectCode, args)
-		return
+		return permanentRedirect(
+			w,
+			r,
+			newURL.String(),
+			permanentRedirectCode,
+			args,
+		)
 	}
 
-	hb.requestHandler(w, r, args)
+	return hb.requestHandler(w, r, args)
 }

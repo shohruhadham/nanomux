@@ -552,7 +552,7 @@ func (rb *Resource) handleOrPassRequest(
 	w http.ResponseWriter,
 	r *http.Request,
 	args *Args,
-) {
+) bool {
 	if rb.IsSubtreeHandler() {
 		// If there is no resource in the hierarchy below that matches the
 		// request's path, this resource handles the request.
@@ -566,11 +566,11 @@ func (rb *Resource) handleOrPassRequest(
 		lastSegment = false
 
 		if rb.passRequestToChildResource(w, r, args) {
-			return
+			return true
 		}
 
 		if !rb.IsSubtreeHandler() {
-			return
+			return false
 		}
 
 		args._r = rb.derived
@@ -580,17 +580,13 @@ func (rb *Resource) handleOrPassRequest(
 		// If rb is a subtree handler that cannot handle a request, this
 		// prevents other subtree handlers above the hierarchy from handling
 		// the request.
-		notFoundResourceHandler.ServeHTTP(w, r, args)
-		args.handled = true
-		return
+		return notFoundResourceHandler.ServeHTTP(w, r, args)
 	}
 
 	var newURL *url.URL
 	if r.TLS == nil && rb.IsSecure() {
 		if !rb.RedirectsInsecureRequest() {
-			notFoundResourceHandler.ServeHTTP(w, r, args)
-			args.handled = true
-			return
+			return notFoundResourceHandler.ServeHTTP(w, r, args)
 		}
 
 		newURL = cloneRequestURL(r)
@@ -608,9 +604,7 @@ func (rb *Resource) handleOrPassRequest(
 	if lastSegment && !rb.IsLenientOnTrailingSlash() {
 		if rb.HasTrailingSlash() && !args.pathHasTrailingSlash() {
 			if rb.IsStrictOnTrailingSlash() {
-				notFoundResourceHandler.ServeHTTP(w, r, args)
-				args.handled = true
-				return
+				return notFoundResourceHandler.ServeHTTP(w, r, args)
 			}
 
 			if newURL == nil {
@@ -620,9 +614,7 @@ func (rb *Resource) handleOrPassRequest(
 			newURL.Path += "/"
 		} else if !rb.HasTrailingSlash() && args.pathHasTrailingSlash() {
 			if rb.IsStrictOnTrailingSlash() {
-				notFoundResourceHandler.ServeHTTP(w, r, args)
-				args.handled = true
-				return
+				return notFoundResourceHandler.ServeHTTP(w, r, args)
 			}
 
 			if newURL == nil {
@@ -634,12 +626,15 @@ func (rb *Resource) handleOrPassRequest(
 	}
 
 	if newURL != nil {
-		permanentRedirect(w, r, newURL.String(), permanentRedirectCode, args)
-		args.handled = true
-		return
+		return permanentRedirect(
+			w,
+			r,
+			newURL.String(),
+			permanentRedirectCode,
+			args,
+		)
 	}
 
 	// At this point, the request may have been modified by subresources.
-	rb.requestHandler(w, r, args)
-	args.handled = true
+	return rb.requestHandler(w, r, args)
 }

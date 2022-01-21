@@ -2264,10 +2264,10 @@ func (rb *_ResponderBase) passRequestToChildResource(
 	if len(ps) > 0 {
 		if sr := rb.staticResources[ps]; sr != nil {
 			args._r = sr.derived
-			sr.segmentHandler(w, r, args)
+			var handled = sr.segmentHandler(w, r, args)
 
 			args.currentPathSegmentIdx = currentPathSegmentIdx
-			return args.handled
+			return handled
 		}
 
 		for _, pr := range rb.patternResources {
@@ -2279,10 +2279,10 @@ func (rb *_ResponderBase) passRequestToChildResource(
 
 			if matched {
 				args._r = pr.derived
-				pr.segmentHandler(w, r, args)
+				var handled = pr.segmentHandler(w, r, args)
 
 				args.currentPathSegmentIdx = currentPathSegmentIdx
-				return args.handled
+				return handled
 			}
 		}
 
@@ -2293,10 +2293,10 @@ func (rb *_ResponderBase) passRequestToChildResource(
 			)
 
 			args._r = rb.wildcardResource.derived
-			rb.wildcardResource.segmentHandler(w, r, args)
+			var handled = rb.wildcardResource.segmentHandler(w, r, args)
 
 			args.currentPathSegmentIdx = currentPathSegmentIdx
-			return args.handled
+			return handled
 		}
 	}
 
@@ -2305,8 +2305,8 @@ func (rb *_ResponderBase) passRequestToChildResource(
 		return false
 	}
 
-	notFoundResourceHandler.ServeHTTP(w, r, args)
-	args.handled = true
+	var handled = notFoundResourceHandler.ServeHTTP(w, r, args)
+
 	args.currentPathSegmentIdx = currentPathSegmentIdx
-	return true
+	return handled
 }

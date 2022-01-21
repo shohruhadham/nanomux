@@ -401,24 +401,44 @@ func TestRouter_URLConfig(t *testing.T) {
 // implType is usef in other test files too.
 type implType struct{}
 
-func (rht *implType) HandleGet(http.ResponseWriter, *http.Request, *Args) {}
+func (rht *implType) HandleGet(
+	http.ResponseWriter,
+	*http.Request,
+	*Args,
+) bool {
+	return true
+}
 
-func (rht *implType) HandlePost(http.ResponseWriter, *http.Request, *Args) {}
+func (rht *implType) HandlePost(
+	http.ResponseWriter,
+	*http.Request,
+	*Args,
+) bool {
+	return true
+}
 
-func (rht *implType) HandleCustom(http.ResponseWriter, *http.Request, *Args) {}
+func (rht *implType) HandleCustom(
+	http.ResponseWriter,
+	*http.Request,
+	*Args,
+) bool {
+	return true
+}
 
 func (rht *implType) HandleNotAllowedMethod(
 	http.ResponseWriter,
 	*http.Request,
 	*Args,
-) {
+) bool {
+	return true
 }
 
 func (rht *implType) SomeMethod(
 	http.ResponseWriter,
 	*http.Request,
 	*Args,
-) {
+) bool {
+	return true
 }
 
 const rhTypeHTTPMethods = "get post custom"
@@ -590,7 +610,7 @@ func TestRouter_ImplementationAt(t *testing.T) {
 func TestRouter_SetURLHandlerFor(t *testing.T) {
 	var ro = NewRouter()
 	var handler = HandlerFunc(
-		func(http.ResponseWriter, *http.Request, *Args) {},
+		func(http.ResponseWriter, *http.Request, *Args) bool { return true },
 	)
 
 	var cases = []struct {
@@ -718,7 +738,9 @@ func TestRouter_SetURLHandlerFor(t *testing.T) {
 
 func TestRouter_SetURLHandlerFuncFor(t *testing.T) {
 	var ro = NewRouter()
-	var handler = func(http.ResponseWriter, *http.Request, *Args) {}
+	var handler = func(http.ResponseWriter, *http.Request, *Args) bool {
+		return true
+	}
 
 	var cases = []struct {
 		name, methods, urlTmpl, urlToCheck string
@@ -846,7 +868,7 @@ func TestRouter_SetURLHandlerFuncFor(t *testing.T) {
 func TestRouter_URLHandlerOf(t *testing.T) {
 	var ro = NewRouter()
 	var handler = HandlerFunc(
-		func(http.ResponseWriter, *http.Request, *Args) {},
+		func(http.ResponseWriter, *http.Request, *Args) bool { return true },
 	)
 
 	var err = ro.SetURLHandlerFor("get put", "http://example.com", handler)
@@ -958,9 +980,9 @@ func TestRouter_WrapURLSegmentHandler(t *testing.T) {
 				w http.ResponseWriter,
 				r *http.Request,
 				args *Args,
-			) {
+			) bool {
 				strb.WriteByte('b')
-				handler.ServeHTTP(w, r, args)
+				return handler.ServeHTTP(w, r, args)
 			}
 		},
 		func(handler Handler) HandlerFunc {
@@ -968,9 +990,9 @@ func TestRouter_WrapURLSegmentHandler(t *testing.T) {
 				w http.ResponseWriter,
 				r *http.Request,
 				args *Args,
-			) {
+			) bool {
 				strb.WriteByte('a')
-				handler.ServeHTTP(w, r, args)
+				return handler.ServeHTTP(w, r, args)
 			}
 		},
 	}
@@ -1077,9 +1099,9 @@ func TestRouter_WrapURLRequestHandler(t *testing.T) {
 				w http.ResponseWriter,
 				r *http.Request,
 				args *Args,
-			) {
+			) bool {
 				strb.WriteByte('b')
-				handler.ServeHTTP(w, r, args)
+				return handler.ServeHTTP(w, r, args)
 			}
 		},
 		func(handler Handler) HandlerFunc {
@@ -1087,9 +1109,9 @@ func TestRouter_WrapURLRequestHandler(t *testing.T) {
 				w http.ResponseWriter,
 				r *http.Request,
 				args *Args,
-			) {
+			) bool {
 				strb.WriteByte('a')
-				handler.ServeHTTP(w, r, args)
+				return handler.ServeHTTP(w, r, args)
 			}
 		},
 	}
@@ -1195,8 +1217,9 @@ func TestRouter_WrapURLHandlerOf(t *testing.T) {
 		ro      = NewRouter()
 		strb    strings.Builder
 		handler = HandlerFunc(
-			func(http.ResponseWriter, *http.Request, *Args) {
+			func(http.ResponseWriter, *http.Request, *Args) bool {
 				strb.WriteByte('1')
+				return true
 			},
 		)
 
@@ -1206,9 +1229,9 @@ func TestRouter_WrapURLHandlerOf(t *testing.T) {
 					w http.ResponseWriter,
 					r *http.Request,
 					args *Args,
-				) {
+				) bool {
 					strb.WriteByte('2')
-					h.ServeHTTP(w, r, args)
+					return h.ServeHTTP(w, r, args)
 				}
 			},
 			func(h Handler) HandlerFunc {
@@ -1216,9 +1239,9 @@ func TestRouter_WrapURLHandlerOf(t *testing.T) {
 					w http.ResponseWriter,
 					r *http.Request,
 					args *Args,
-				) {
+				) bool {
 					strb.WriteByte('3')
-					h.ServeHTTP(w, r, args)
+					return h.ServeHTTP(w, r, args)
 				}
 			},
 		}
@@ -2695,7 +2718,7 @@ func TestRouter_registerNewRoot(t *testing.T) {
 
 	var root1 = newRootResource()
 	err = root1.SetHandlerFor("get", HandlerFunc(
-		func(http.ResponseWriter, *http.Request, *Args) {},
+		func(http.ResponseWriter, *http.Request, *Args) bool { return true },
 	))
 
 	if err != nil {
@@ -2743,7 +2766,7 @@ func TestRouter_registerNewRoot(t *testing.T) {
 
 	root2 = newRootResource()
 	err = root2.SetHandlerFor("get", HandlerFunc(
-		func(http.ResponseWriter, *http.Request, *Args) {},
+		func(http.ResponseWriter, *http.Request, *Args) bool { return true },
 	))
 
 	if err != nil {
@@ -2840,7 +2863,7 @@ func TestRouter_RegisterResource(t *testing.T) {
 	}
 
 	err = ro.r.SetHandlerFor("get", HandlerFunc(
-		func(http.ResponseWriter, *http.Request, *Args) {},
+		func(http.ResponseWriter, *http.Request, *Args) bool { return true },
 	))
 
 	if err != nil {
@@ -3043,7 +3066,7 @@ func TestRouter_RegisterResourceUnder(t *testing.T) {
 	}
 
 	err = root.SetHandlerFor("get", HandlerFunc(
-		func(http.ResponseWriter, *http.Request, *Args) {},
+		func(http.ResponseWriter, *http.Request, *Args) bool { return true },
 	))
 
 	if err != nil {
@@ -3158,8 +3181,9 @@ func TestRouter_WrapWith(t *testing.T) {
 	)
 
 	ro.segmentHandler = HandlerFunc(
-		func(http.ResponseWriter, *http.Request, *Args) {
+		func(http.ResponseWriter, *http.Request, *Args) bool {
 			strb.WriteByte('A')
+			return true
 		},
 	)
 
@@ -3170,9 +3194,9 @@ func TestRouter_WrapWith(t *testing.T) {
 					w http.ResponseWriter,
 					r *http.Request,
 					args *Args,
-				) {
+				) bool {
 					strb.WriteByte('B')
-					next.ServeHTTP(w, r, args)
+					return next.ServeHTTP(w, r, args)
 				}
 			},
 			func(next Handler) HandlerFunc {
@@ -3180,9 +3204,9 @@ func TestRouter_WrapWith(t *testing.T) {
 					w http.ResponseWriter,
 					r *http.Request,
 					args *Args,
-				) {
+				) bool {
 					strb.WriteByte('C')
-					next.ServeHTTP(w, r, args)
+					return next.ServeHTTP(w, r, args)
 				}
 			},
 		}...,
@@ -3206,9 +3230,9 @@ func TestRouter_WrapWith(t *testing.T) {
 					w http.ResponseWriter,
 					r *http.Request,
 					args *Args,
-				) {
+				) bool {
 					strb.WriteByte('D')
-					next.ServeHTTP(w, r, args)
+					return next.ServeHTTP(w, r, args)
 				}
 			},
 		}...,
@@ -3377,9 +3401,9 @@ func TestRouter_WrapAllSegmentHandlers(t *testing.T) {
 				w http.ResponseWriter,
 				r *http.Request,
 				args *Args,
-			) {
+			) bool {
 				strb.WriteByte('B')
-				handler.ServeHTTP(w, r, args)
+				return handler.ServeHTTP(w, r, args)
 			}
 		},
 		func(handler Handler) HandlerFunc {
@@ -3387,9 +3411,9 @@ func TestRouter_WrapAllSegmentHandlers(t *testing.T) {
 				w http.ResponseWriter,
 				r *http.Request,
 				args *Args,
-			) {
+			) bool {
 				strb.WriteByte('A')
-				handler.ServeHTTP(w, r, args)
+				return handler.ServeHTTP(w, r, args)
 			}
 		},
 	}
@@ -3513,7 +3537,9 @@ func TestRouter_WrapAllRequestHandlers(t *testing.T) {
 			err = ro.SetURLHandlerFuncFor(
 				"get",
 				c.urlTmpl,
-				func(http.ResponseWriter, *http.Request, *Args) {},
+				func(http.ResponseWriter, *http.Request, *Args) bool {
+					return true
+				},
 			)
 
 			if err != nil {
@@ -3529,9 +3555,9 @@ func TestRouter_WrapAllRequestHandlers(t *testing.T) {
 				w http.ResponseWriter,
 				r *http.Request,
 				args *Args,
-			) {
+			) bool {
 				strb.WriteByte('B')
-				handler.ServeHTTP(w, r, args)
+				return handler.ServeHTTP(w, r, args)
 			}
 		},
 		func(handler Handler) HandlerFunc {
@@ -3539,9 +3565,9 @@ func TestRouter_WrapAllRequestHandlers(t *testing.T) {
 				w http.ResponseWriter,
 				r *http.Request,
 				args *Args,
-			) {
+			) bool {
 				strb.WriteByte('A')
-				handler.ServeHTTP(w, r, args)
+				return handler.ServeHTTP(w, r, args)
 			}
 		},
 	}
@@ -3572,7 +3598,7 @@ func TestRouter_WrapAllRequestHandlers(t *testing.T) {
 func TestRouter_WrapAllHandlersOf(t *testing.T) {
 	var ro = NewRouter()
 	var h = HandlerFunc(
-		func(http.ResponseWriter, *http.Request, *Args) {},
+		func(http.ResponseWriter, *http.Request, *Args) bool { return true },
 	)
 
 	var rh = &implType{}
@@ -3649,9 +3675,9 @@ func TestRouter_WrapAllHandlersOf(t *testing.T) {
 				w http.ResponseWriter,
 				r *http.Request,
 				args *Args,
-			) {
+			) bool {
 				strb.WriteByte('B')
-				handler.ServeHTTP(w, r, args)
+				return handler.ServeHTTP(w, r, args)
 			}
 		},
 		func(handler Handler) HandlerFunc {
@@ -3659,9 +3685,9 @@ func TestRouter_WrapAllHandlersOf(t *testing.T) {
 				w http.ResponseWriter,
 				r *http.Request,
 				args *Args,
-			) {
+			) bool {
 				strb.WriteByte('A')
-				handler.ServeHTTP(w, r, args)
+				return handler.ServeHTTP(w, r, args)
 			}
 		},
 	}
@@ -4226,8 +4252,9 @@ func TestRouter_ServeHTTP(t *testing.T) {
 		url string,
 		code int,
 		args *Args,
-	) {
+	) bool {
 		strb.WriteString("redirect")
+		return true
 	}
 
 	err = SetPermanentRedirectHandlerFunc(permanentRedirectFunc)
@@ -4251,9 +4278,10 @@ func TestRouter_ServeHTTP(t *testing.T) {
 				url string,
 				code int,
 				args *Args,
-			) {
+			) bool {
 				strb.Reset()
 				strb.WriteString("redirect middleware")
+				return true
 			}
 		},
 	)
@@ -4270,9 +4298,10 @@ func TestRouter_ServeHTTP(t *testing.T) {
 	}
 
 	err = SetHandlerForNotFoundResource(HandlerFunc(
-		func(http.ResponseWriter, *http.Request, *Args) {
+		func(http.ResponseWriter, *http.Request, *Args) bool {
 			strb.Reset()
 			strb.WriteString("not found resource handler")
+			return true
 		},
 	))
 
@@ -4293,9 +4322,10 @@ func TestRouter_ServeHTTP(t *testing.T) {
 				w http.ResponseWriter,
 				r *http.Request,
 				args *Args,
-			) {
+			) bool {
 				strb.Reset()
 				strb.WriteString("middleware of not found resource")
+				return true
 			}
 		},
 	)
@@ -4316,8 +4346,9 @@ func TestRouter_ServeHTTP(t *testing.T) {
 
 func TestMwFn(t *testing.T) {
 	var strb strings.Builder
-	var h = func(http.ResponseWriter, *http.Request, *Args) {
+	var h = func(http.ResponseWriter, *http.Request, *Args) bool {
 		strb.WriteByte('a')
+		return true
 	}
 
 	var mw = func(next http.Handler) http.Handler {
@@ -4695,7 +4726,7 @@ func BenchmarkRouterWithWildcardRequest(b *testing.B) {
 }
 
 func BenchmarkMap(b *testing.B) {
-	var h = func(http.ResponseWriter, *http.Request, *Args) {}
+	var h = func(http.ResponseWriter, *http.Request, *Args) bool { return true }
 	var methods = []string{
 		"GET",
 		"POST",
@@ -4729,7 +4760,7 @@ func BenchmarkMap(b *testing.B) {
 
 func BenchmarkSlice(b *testing.B) {
 	var h = HandlerFunc(
-		func(http.ResponseWriter, *http.Request, *Args) {},
+		func(http.ResponseWriter, *http.Request, *Args) bool { return true },
 	)
 
 	var methods = []string{
