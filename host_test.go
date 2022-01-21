@@ -12,7 +12,7 @@ import (
 
 func setHandlers(t *testing.T, h *Host) {
 	if err := h.SetHandlerFor("get post custom", HandlerFunc(
-		func(w http.ResponseWriter, r *http.Request, args *Args) {
+		func(w http.ResponseWriter, r *http.Request, args *Args) bool {
 			var hasValue, ok = args.ResponderSharedData().(bool)
 			if ok && hasValue {
 				var hValues = args.HostPathValues()
@@ -34,7 +34,7 @@ func setHandlers(t *testing.T, h *Host) {
 							http.StatusInternalServerError,
 						)
 
-						return
+						return true
 					}
 				}
 			}
@@ -51,6 +51,7 @@ func setHandlers(t *testing.T, h *Host) {
 			}
 
 			w.Write([]byte(strb.String()))
+			return true
 		},
 	)); err != nil {
 		t.Fatal(err)
@@ -763,7 +764,7 @@ func TestHostBase_ServeHTTP(t *testing.T) {
 			w http.ResponseWriter,
 			r *http.Request,
 			args *Args,
-		) {
+		) bool {
 			var strb strings.Builder
 			strb.WriteString("middleware ")
 			strb.WriteString(r.Method)
@@ -777,6 +778,7 @@ func TestHostBase_ServeHTTP(t *testing.T) {
 			}
 
 			w.Write([]byte(strb.String()))
+			return true
 		}
 	}
 
@@ -785,7 +787,7 @@ func TestHostBase_ServeHTTP(t *testing.T) {
 			w http.ResponseWriter,
 			r *http.Request,
 			args *Args,
-		) {
+		) bool {
 			var strb strings.Builder
 			strb.WriteString("middleware of the not allowed ")
 			strb.WriteString(r.Method)
@@ -799,6 +801,7 @@ func TestHostBase_ServeHTTP(t *testing.T) {
 			}
 
 			w.Write([]byte(strb.String()))
+			return true
 		}
 	}
 

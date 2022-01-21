@@ -26,16 +26,17 @@ func MwFn(mw func(http.Handler) http.Handler) MiddlewareFunc {
 		var h http.Handler = http.HandlerFunc(
 			func(w http.ResponseWriter, r *http.Request) {
 				var args = r.Context().Value(ArgsKey).(*Args)
-				next.ServeHTTP(w, r, args)
+				args.handled = next.ServeHTTP(w, r, args)
 			},
 		)
 
 		h = mw(h)
 
-		return func(w http.ResponseWriter, r *http.Request, args *Args) {
+		return func(w http.ResponseWriter, r *http.Request, args *Args) bool {
 			var c = context.WithValue(r.Context(), ArgsKey, args)
 			r = r.WithContext(c)
 			h.ServeHTTP(w, r)
+			return args.handled
 		}
 	}
 }
