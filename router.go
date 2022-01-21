@@ -686,10 +686,10 @@ func (ro *Router) Host(hostTmplStr string) (*Host, error) {
 //
 // The name given to the host must be unique among the other hosts.
 func (ro *Router) HostUsingConfig(
-	hTmplStr string,
+	hostTmplStr string,
 	config Config,
 ) (*Host, error) {
-	var h, newHost, secure, tslash, err = ro.host(hTmplStr)
+	var h, newHost, secure, tslash, err = ro.host(hostTmplStr)
 	if err != nil {
 		return nil, newErr("%w", err)
 	}
@@ -780,19 +780,19 @@ func (ro *Router) RegisterHost(h *Host) error {
 //
 // Template's scheme and trailing slash property values must be compatible with
 // the host's properties, otherwise the method returns an error.
-func (ro *Router) RegisteredHost(hTmplStr string) (*Host, error) {
+func (ro *Router) RegisteredHost(hostTmplStr string) (*Host, error) {
 	var (
 		err            error
 		secure, tslash bool
 	)
 
-	hTmplStr, secure, tslash, err = getHost(hTmplStr)
+	hostTmplStr, secure, tslash, err = getHost(hostTmplStr)
 	if err != nil {
 		return nil, newErr("%w", err)
 	}
 
 	var h *Host
-	h, _, err = ro.registeredHost(hTmplStr)
+	h, _, err = ro.registeredHost(hostTmplStr)
 	if err != nil {
 		return nil, newErr("%w", err)
 	}

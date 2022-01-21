@@ -36,11 +36,7 @@ func createDummyHost(tmpl *Template) (*Host, error) {
 
 // createHost creates an instance of the Host. The Impl and
 // config parameters can be nil.
-func createHost(
-	tmplStr string,
-	impl Impl,
-	config *Config,
-) (*Host, error) {
+func createHost(tmplStr string, impl Impl, config *Config) (*Host, error) {
 	var hTmplStr, secure, tslash, err = getHost(tmplStr)
 	if err != nil {
 		return nil, newErr("%w", err)
@@ -94,8 +90,8 @@ func createHost(
 // the URL template. The template's scheme and trailing slash property values
 // are used to configure the host. The host's template must not be a wildcard
 // template.
-func CreateDormantHost(urlTmplStr string) (*Host, error) {
-	var h, err = createHost(urlTmplStr, nil, nil)
+func CreateDormantHost(hostTmplStr string) (*Host, error) {
+	var h, err = createHost(hostTmplStr, nil, nil)
 	if err != nil {
 		return nil, newErr("%w", err)
 	}
@@ -109,10 +105,10 @@ func CreateDormantHost(urlTmplStr string) (*Host, error) {
 // the URL template (the config's Secure and TrailingSlash values are ignored
 // and may not be set). The host's template must not be a wildcard template.
 func CreateDormantHostUsingConfig(
-	urlTmplStr string,
+	hostTmplStr string,
 	config Config,
 ) (*Host, error) {
-	var h, err = createHost(urlTmplStr, nil, &config)
+	var h, err = createHost(hostTmplStr, nil, &config)
 	if err != nil {
 		return nil, newErr("%w", err)
 	}
@@ -144,12 +140,12 @@ func CreateDormantHostUsingConfig(
 //
 // 	// ...
 // 	var exampleHost, err = CreateHost("https://example.com", &ExampleHost{})
-func CreateHost(urlTmplStr string, impl Impl) (*Host, error) {
+func CreateHost(hostTmplStr string, impl Impl) (*Host, error) {
 	if impl == nil {
 		return nil, newErr("%w", ErrNilArgument)
 	}
 
-	var h, err = createHost(urlTmplStr, impl, nil)
+	var h, err = createHost(hostTmplStr, impl, nil)
 	if err != nil {
 		return nil, newErr("%w", err)
 	}
@@ -185,7 +181,7 @@ func CreateHost(urlTmplStr string, impl Impl) (*Host, error) {
 // 		Config{Subtree: true, RedirectInsecureRequest: true},
 // 	)
 func CreateHostUsingConfig(
-	urlTmplStr string,
+	hostTmplStr string,
 	impl Impl,
 	config Config,
 ) (*Host, error) {
@@ -193,7 +189,7 @@ func CreateHostUsingConfig(
 		return nil, newErr("%w", ErrNilArgument)
 	}
 
-	var h, err = createHost(urlTmplStr, impl, &config)
+	var h, err = createHost(hostTmplStr, impl, &config)
 	if err != nil {
 		return nil, newErr("%w", err)
 	}
@@ -209,8 +205,8 @@ func CreateHostUsingConfig(
 //
 // The template's scheme and trailing slash property values are used to
 // configure the host. The host's template must not be a wildcard template.
-func NewDormantHost(urlTmplStr string) *Host {
-	var h, err = CreateDormantHost(urlTmplStr)
+func NewDormantHost(hostTmplStr string) *Host {
+	var h, err = CreateDormantHost(hostTmplStr)
 	if err != nil {
 		panic(newErr("%w", err))
 	}
@@ -226,8 +222,8 @@ func NewDormantHost(urlTmplStr string) *Host {
 // scheme and trailing slash property values of the URL template (the config's
 // Secure and TrailingSlash values are ignored and may not be set). The host's
 // template must not be a wildcard template.
-func NewDormantHostUsingConfig(urlTmplStr string, config Config) *Host {
-	var h, err = CreateDormantHostUsingConfig(urlTmplStr, config)
+func NewDormantHostUsingConfig(hostTmplStr string, config Config) *Host {
+	var h, err = CreateDormantHostUsingConfig(hostTmplStr, config)
 	if err != nil {
 		panic(newErr("%w", err))
 	}
@@ -260,8 +256,8 @@ func NewDormantHostUsingConfig(urlTmplStr string, config Config) *Host {
 //
 // 	// ...
 // 	var exampleHost = NewHost("https://example.com", &ExampleHost{})
-func NewHost(urlTmplStr string, impl Impl) *Host {
-	var h, err = CreateHost(urlTmplStr, impl)
+func NewHost(hostTmplStr string, impl Impl) *Host {
+	var h, err = CreateHost(hostTmplStr, impl)
 	if err != nil {
 		panic(newErr("%w", err))
 	}
@@ -300,11 +296,11 @@ func NewHost(urlTmplStr string, impl Impl) *Host {
 // 		Config{Subtree: true, RedirectInsecureRequest: true},
 // 	)
 func NewHostUsingConfig(
-	urlTmplStr string,
+	hostTmplStr string,
 	impl Impl,
 	config Config,
 ) *Host {
-	var h, err = CreateHostUsingConfig(urlTmplStr, impl, config)
+	var h, err = CreateHostUsingConfig(hostTmplStr, impl, config)
 	if err != nil {
 		panic(newErr("%w", err))
 	}

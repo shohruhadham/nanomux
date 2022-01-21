@@ -311,7 +311,7 @@ type _Responder interface {
 		err error,
 	)
 
-	pathSegmentResources(path string) (
+	pathSegmentResources(pathTmplStr string) (
 		oldLast _Responder,
 		newFirst, newLast *Resource,
 		tslash bool,
@@ -321,11 +321,11 @@ type _Responder interface {
 	registerResourceUnder(prefixPath string, r *Resource) error
 	keepResourceOrItsChildResources(r *Resource) error
 
-	Resource(path string) (*Resource, error)
-	ResourceUsingConfig(path string, config Config) (*Resource, error)
+	Resource(pathTmplStr string) (*Resource, error)
+	ResourceUsingConfig(pathTmplStr string, config Config) (*Resource, error)
 	RegisterResource(r *Resource) error
 	RegisterResourceUnder(prefixPath string, r *Resource) error
-	RegisteredResource(path string) (*Resource, error)
+	RegisteredResource(pathTmplStr string) (*Resource, error)
 
 	ChildResourceNamed(name string) *Resource
 	ChildResources() []*Resource
@@ -348,19 +348,24 @@ type _Responder interface {
 
 	// -------------------------
 
-	ConfigurePath(path string, config Config) error
-	PathConfig(path string) (Config, error)
+	ConfigurePath(pathTmplStr string, config Config) error
+	PathConfig(pathTmplStr string) (Config, error)
 
-	SetImplementationAt(path string, impl Impl) error
-	ImplementationAt(path string) (Impl, error)
+	SetImplementationAt(pathTmplStr string, impl Impl) error
+	ImplementationAt(pathTmplStr string) (Impl, error)
 
-	SetPathHandlerFor(methods, path string, handler Handler) error
-	SetPathHandlerFuncFor(methods, path string, handler HandlerFunc) error
-	PathHandlerOf(method, path string) (Handler, error)
+	SetPathHandlerFor(methods, pathTmplStr string, handler Handler) error
+	SetPathHandlerFuncFor(
+		methods,
+		pathTmplStr string,
+		handler HandlerFunc,
+	) error
 
-	WrapPathSegmentHandler(path string, mwfs ...MiddlewareFunc) error
-	WrapPathRequestHandler(path string, mwfs ...MiddlewareFunc) error
-	WrapPathHandlerOf(methods, path string, mwfs ...MiddlewareFunc) error
+	PathHandlerOf(method, pathTmplStr string) (Handler, error)
+
+	WrapPathSegmentHandler(pathTmplStr string, mwfs ...MiddlewareFunc) error
+	WrapPathRequestHandler(pathTmplStr string, mwfs ...MiddlewareFunc) error
+	WrapPathHandlerOf(methods, pathTmplStr string, mwfs ...MiddlewareFunc) error
 
 	// -------------------------
 
@@ -725,8 +730,8 @@ func (rb *_ResponderBase) validate(tmpl *Template) error {
 
 // validateHostTmpl checks whether the argument template is the template of the
 // resource's host. Validation fails even if the resource doesn't have a host.
-func (rb *_ResponderBase) validateHostTmpl(tmplStr string) error {
-	if tmplStr != "" {
+func (rb *_ResponderBase) validateHostTmpl(hostTmplStr string) error {
+	if hostTmplStr != "" {
 		var h *Host
 		switch _r := rb.derived.(type) {
 		case *Host:
@@ -739,7 +744,7 @@ func (rb *_ResponderBase) validateHostTmpl(tmplStr string) error {
 			return newErr("%w", ErrConflictingHost)
 		}
 
-		var tmpl, err = TryToParse(tmplStr)
+		var tmpl, err = TryToParse(hostTmplStr)
 		if err != nil {
 			return newErr("%w", err)
 		}
@@ -1219,14 +1224,14 @@ func (rb *_ResponderBase) keepResourceOrItsChildResources(r *Resource) error {
 //
 // The names given to the path segment resources must be unique in the path and
 // among their respective siblings.
-func (rb *_ResponderBase) Resource(path string) (*Resource, error) {
+func (rb *_ResponderBase) Resource(pathTmplStr string) (*Resource, error) {
 	var (
 		hTmplStr       string
 		secure, tslash bool
 		err            error
 	)
 
-	hTmplStr, path, secure, tslash, err = splitHostAndPath(path)
+	hTmplStr, pathTmplStr, secure, tslash, err = splitHostAndPath(pathTmplStr)
 	if err != nil {
 		return nil, newErr("%w", err)
 	}
@@ -1235,17 +1240,17 @@ func (rb *_ResponderBase) Resource(path string) (*Resource, error) {
 		return nil, newErr("%w", ErrNonRouterParent)
 	}
 
-	if path == "" {
+	if pathTmplStr == "" {
 		return nil, newErr("%w", ErrEmptyPathTemplate)
 	}
 
-	if path[0] != '/' {
-		path = "/" + path
+	if pathTmplStr[0] != '/' {
+		pathTmplStr = "/" + pathTmplStr
 	}
 
 	var oldLast _Responder
 	var newFirst, newLast *Resource
-	oldLast, newFirst, newLast, _, err = rb.pathSegmentResources(path)
+	oldLast, newFirst, newLast, _, err = rb.pathSegmentResources(pathTmplStr)
 	if err != nil {
 		return nil, newErr("%w", err)
 	}
@@ -1849,8 +1854,11 @@ func (rb *_ResponderBase) WrapHandlerOf(
 
 // ConfigurePath configures the existing resource at the path. If the resource
 // was configured before, it will be reconfigured.
-func (rb *_ResponderBase) ConfigurePath(path string, config Config) error {
-	var r, err = rb.RegisteredResource(path)
+func (rb *_ResponderBase) ConfigurePath(
+	pathTmplStr string,
+	config Config,
+) error {
+	var r, err = rb.RegisteredResource(pathTmplStr)
 	if err != nil {
 		return newErr("%w", err)
 	}
@@ -1864,8 +1872,8 @@ func (rb *_ResponderBase) ConfigurePath(path string, config Config) error {
 }
 
 // PathConfig returns the configuration of the existing resource.
-func (rb *_ResponderBase) PathConfig(path string) (Config, error) {
-	var r, err = rb.RegisteredResource(path)
+func (rb *_ResponderBase) PathConfig(pathTmplStr string) (Config, error) {
+	var r, err = rb.RegisteredResource(pathTmplStr)
 	if err != nil {
 		return Config{}, newErr("%w", err)
 	}
@@ -1889,10 +1897,10 @@ func (rb *_ResponderBase) PathConfig(path string) (Config, error) {
 // returns an error. A newly created resource is configured with the values in
 // the path template.
 func (rb *_ResponderBase) SetImplementationAt(
-	path string,
+	pathTmplStr string,
 	rh Impl,
 ) error {
-	var r, err = rb.Resource(path)
+	var r, err = rb.Resource(pathTmplStr)
 	if err != nil {
 		return newErr("%w", err)
 	}
@@ -1912,8 +1920,8 @@ func (rb *_ResponderBase) SetImplementationAt(
 // The scheme and trailing slash property values in the path template must be
 // compatible with the resource's properties, otherwise the method returns an
 // error.
-func (rb *_ResponderBase) ImplementationAt(path string) (Impl, error) {
-	var r, err = rb.RegisteredResource(path)
+func (rb *_ResponderBase) ImplementationAt(pathTmplStr string) (Impl, error) {
+	var r, err = rb.RegisteredResource(pathTmplStr)
 	if err != nil {
 		return nil, newErr("%w", err)
 	}
@@ -1941,10 +1949,10 @@ func (rb *_ResponderBase) ImplementationAt(path string) (Impl, error) {
 // not allowed HTTP methods' handler must happen in a separate call. Examples of
 // methods: "get", "PUT POST", "get, custom" or "!".
 func (rb *_ResponderBase) SetPathHandlerFor(
-	methods, path string,
+	methods, pathTmplStr string,
 	handler Handler,
 ) error {
-	var r, err = rb.Resource(path)
+	var r, err = rb.Resource(pathTmplStr)
 	if err != nil {
 		return newErr("%w", err)
 	}
@@ -1971,10 +1979,10 @@ func (rb *_ResponderBase) SetPathHandlerFor(
 // not allowed HTTP methods' handler must happen in a separate call. Examples of
 // methods: "get", "PUT POST", "get, custom" or "!".
 func (rb *_ResponderBase) SetPathHandlerFuncFor(
-	methods, path string,
+	methods, pathTmplStr string,
 	handler HandlerFunc,
 ) error {
-	var r, err = rb.Resource(path)
+	var r, err = rb.Resource(pathTmplStr)
 	if err != nil {
 		return newErr("%w", err)
 	}
@@ -1997,11 +2005,11 @@ func (rb *_ResponderBase) SetPathHandlerFuncFor(
 // The argument method is an HTTP method. An exclamation mark "!" can be used
 // to get the handler of HTTP methods that are not allowed. Examples: "get",
 // "POST" or "!".
-func (rb *_ResponderBase) PathHandlerOf(method, path string) (
+func (rb *_ResponderBase) PathHandlerOf(method, pathTmplStr string) (
 	Handler,
 	error,
 ) {
-	var r, err = rb.RegisteredResource(path)
+	var r, err = rb.RegisteredResource(pathTmplStr)
 	if err != nil {
 		return nil, newErr("%w", err)
 	}
@@ -2029,10 +2037,10 @@ func (rb *_ResponderBase) PathHandlerOf(method, path string) (
 // compatible with the resource's properties, otherwise the method returns an
 // error.
 func (rb *_ResponderBase) WrapPathSegmentHandler(
-	path string,
+	pathTmplStr string,
 	mwfs ...MiddlewareFunc,
 ) error {
-	var r, err = rb.RegisteredResource(path)
+	var r, err = rb.RegisteredResource(pathTmplStr)
 	if err != nil {
 		return newErr("%w", err)
 	}
@@ -2061,10 +2069,10 @@ func (rb *_ResponderBase) WrapPathSegmentHandler(
 // compatible with the resource's properties, otherwise the method returns an
 // error.
 func (rb *_ResponderBase) WrapPathRequestHandler(
-	path string,
+	pathTmplStr string,
 	mwfs ...MiddlewareFunc,
 ) error {
-	var r, err = rb.RegisteredResource(path)
+	var r, err = rb.RegisteredResource(pathTmplStr)
 	if err != nil {
 		return newErr("%w", err)
 	}
@@ -2095,10 +2103,10 @@ func (rb *_ResponderBase) WrapPathRequestHandler(
 // If the resource or the handler of any HTTP method doesn't exist, the method
 // returns an error.
 func (rb *_ResponderBase) WrapPathHandlerOf(
-	methods, path string,
+	methods, pathTmplStr string,
 	mwfs ...MiddlewareFunc,
 ) error {
-	var r, err = rb.RegisteredResource(path)
+	var r, err = rb.RegisteredResource(pathTmplStr)
 	if err != nil {
 		return newErr("%w", err)
 	}

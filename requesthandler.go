@@ -249,7 +249,6 @@ func detectHTTPMethodHandlersOf(impl Impl) (*_RequestHandlerBase, error) {
 	}
 
 	return rhb, nil
-
 }
 
 // -------------------------
