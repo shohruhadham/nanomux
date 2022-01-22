@@ -25,7 +25,7 @@ func createDummyResource(tmpl *Template) (*Resource, error) {
 	var rb = &Resource{}
 	rb.derived = rb
 	rb.tmpl = tmpl
-	rb.segmentHandler = HandlerFunc(rb.handleOrPassRequest)
+	rb.segmentHandler = rb.passRequestToChildResource
 	return rb, nil
 }
 
@@ -91,7 +91,7 @@ func createResource(
 
 	r.derived = r
 	r.tmpl = tmpl
-	r.segmentHandler = r.handleOrPassRequest
+	r.segmentHandler = r.passRequestToChildResource
 	return r, nil
 }
 
@@ -500,7 +500,7 @@ func (rb *Resource) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var args = getArgs(r.URL, rb.derived)
 	args.nextPathSegment() // First call returns '/'.
 	if rb.tmpl == rootTmpl {
-		rb.segmentHandler.ServeHTTP(w, r, args)
+		rb.handleOrPassRequest(w, r, args)
 		putArgsInThePool(args)
 		return
 	}
@@ -521,7 +521,7 @@ func (rb *Resource) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		var matched bool
 		matched, args.hostPathValues = rb.tmpl.Match(ps, args.hostPathValues)
 		if matched {
-			rb.segmentHandler.ServeHTTP(w, r, args)
+			rb.handleOrPassRequest(w, r, args)
 			putArgsInThePool(args)
 			return
 		}
@@ -531,9 +531,8 @@ func (rb *Resource) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	putArgsInThePool(args)
 }
 
-// handleOrPassRequest is the segment handler of the resource. It handles
-// the request if the resource's template matches the last path segment of the
-// request's URL.
+// handleOrPassRequest handles the request if the resource corresponds to the
+// last path segment of the request's URL.
 //
 // If the resource was configured to respond only when it's used under the
 // HTTPs, but instead it is used under the HTTP, it drops the request, unless it
@@ -544,8 +543,8 @@ func (rb *Resource) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // redirecting it to a URL with the matching trailing slash.
 //
 // When the request's URL contains path segments below the resource's path
-// segment, the method tries to pass the request to a child resource that
-// matches the following path segment. When there is no matching child resource
+// segment, the method tries to pass the request to a child resource by calling
+// its resource's segment handler. If there is no matching child resource
 // and the resource was configured as a subtree handler, the request is handled
 // by the resource itself, otherwise a "404 Not Found" status code is returned.
 func (rb *Resource) handleOrPassRequest(
@@ -565,7 +564,7 @@ func (rb *Resource) handleOrPassRequest(
 	if !args.reachedTheLastPathSegment() {
 		lastSegment = false
 
-		if rb.passRequestToChildResource(w, r, args) {
+		if rb.segmentHandler(w, r, args) {
 			return true
 		}
 

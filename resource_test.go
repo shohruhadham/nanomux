@@ -3636,17 +3636,23 @@ func TestResourceBase_WrapPathSegmentHandler(t *testing.T) {
 		name, path, requestPath, wantStr string
 		wantErr                          bool
 	}{
-		{"r00", "https:///r00", "/r00", "ab", false},
-		{"r01", "{r01}", "/r01", "ab", false},
-		{"r10", "/{r01}/{r10:abc}/", "/r01/abc/", "abab", false},
-		{"r11", "{r01}/{r11}", "/r01/r11", "abab", false},
+		{"r00", "https:///r00", "/r00", "", false},
+		{"r01", "{r01}", "/r01", "", false},
+		{"r10", "/{r01}/{r10:abc}/", "/r01/abc/", "ab", false},
+		{"r20", "{r01}/{r10:abc}/{r20}", "/r01/abc/r20", "abab", false},
 		{
-			// r12 won't be wrapped.
-			"r20", "https:///{r01}/r12/{r20:123}", "/r01/r12/123", "abab",
+			"r21", "https:///{r01}/r11/{r21:123}", "/r01/r11/123", "ab",
 			false,
 		},
-		{"r12 error #1", "{r01}/r12/{r20:123}", "", "", true},
-		{"r12 error #2", "https:///{r01}/r12/{r20:123}/", "", "", true},
+		{
+			"r30",
+			"https:///{r01}/r11/{r21:123}/r30",
+			"/r01/r11/123/r30",
+			"abab",
+			false,
+		},
+		{"r21 error #1", "{r01}/r11/{r21:123}", "", "", true},
+		{"r21 error #2", "https:///{r01}/r11/{r20:123}/", "", "", true},
 		{"empty path", "", "", "", true},
 	}
 
@@ -4001,37 +4007,37 @@ func TestResourceBase_WrapSubtreeSegmentHandlers(t *testing.T) {
 			"r00",
 			"https:///r00",
 			"https:///r00",
-			"AB",
+			"",
 		},
 		{
 			"r00 r10",
 			"http:///r00/{r10:abc}/",
 			"/r00/abc/",
-			"ABAB",
+			"AB",
 		},
 		{
-			"r00 r11",
-			"r00/{r11:123}",
-			"/r00/123",
+			"r00 r20",
+			"r00/{r10:abc}/{r20:123}",
+			"/r00/abc/123",
 			"ABAB",
 		},
 		{
 			"r01",
 			"http:///r01",
 			"/r01",
-			"AB",
+			"",
 		},
 		{
 			"r01 r10",
 			"https:///r01/{r10}",
 			"https:///r01/r10",
-			"ABAB",
+			"AB",
 		},
 		{
 			"r01 r20",
 			"http:///r01/{r10}/r20/",
 			"/r01/r10/r20/",
-			"ABABAB",
+			"ABAB",
 		},
 	}
 

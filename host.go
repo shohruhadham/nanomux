@@ -30,7 +30,7 @@ func createDummyHost(tmpl *Template) (*Host, error) {
 	var h = &Host{}
 	h.derived = h
 	h.tmpl = tmpl
-	h.segmentHandler = HandlerFunc(h.handleOrPassRequest)
+	h.segmentHandler = h.passRequestToChildResource
 	return h, nil
 }
 
@@ -82,7 +82,7 @@ func createHost(tmplStr string, impl Impl, config *Config) (*Host, error) {
 
 	h.derived = h
 	h.tmpl = tmpl
-	h.segmentHandler = h.handleOrPassRequest
+	h.segmentHandler = h.passRequestToChildResource
 	return h, nil
 }
 
@@ -334,7 +334,7 @@ func (hb *Host) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		)
 
 		if matched {
-			hb.segmentHandler.ServeHTTP(w, r, args)
+			hb.handleOrPassRequest(w, r, args)
 			putArgsInThePool(args)
 			return
 		}
@@ -344,10 +344,10 @@ func (hb *Host) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	putArgsInThePool(args)
 }
 
-// handleOrPassRequest is the segment handler of the host. It handles the
-// request if the host's template matches the host segment of the request's URL
-// and the URL doesn't have any path segments or has a root "/" (root is
-// considered as a trailing slash for a host).
+// handleOrPassRequest handles the request if the host's template matches the
+// host segment of the request's URL and the URL has an empty path or has only
+// a slash "/" (a slash is considered the trailing slash for the host, not a
+// root resource).
 //
 // If the host was configured to respond only when it's used under the HTTPs,
 // but instead is used under the HTTP, it drops the request, unless it was
@@ -358,7 +358,7 @@ func (hb *Host) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // redirecting it to a URL with the matching trailing slash.
 //
 // When the request's URL contains path segments, the function tries to pass the
-// request to a child resource that matches the first path segment. If there
+// request to a child resource by calling the host's segment handler. If there
 // is no matching child resource and the host was configured as a subtree
 // handler, the request is handled by the host itself, otherwise a "404 Not
 // Found" status code is returned.
@@ -373,7 +373,7 @@ func (hb *Host) handleOrPassRequest(
 		}
 
 		args.nextPathSegment() // First call returns '/'.
-		if hb.passRequestToChildResource(w, r, args) {
+		if hb.segmentHandler(w, r, args) {
 			return true
 		}
 

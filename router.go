@@ -1576,7 +1576,7 @@ func (ro *Router) passRequest(
 
 		if h := ro.staticHosts[host]; h != nil {
 			args._r = h.derived
-			return h.segmentHandler(w, r, args)
+			return h.handleOrPassRequest(w, r, args)
 		}
 
 		for _, ph := range ro.patternHosts {
@@ -1588,7 +1588,7 @@ func (ro *Router) passRequest(
 
 			if matched {
 				args._r = ph.derived
-				return ph.segmentHandler(w, r, args)
+				return ph.handleOrPassRequest(w, r, args)
 			}
 		}
 	}
@@ -1597,7 +1597,7 @@ func (ro *Router) passRequest(
 		args.nextPathSegment() // Returns '/'.
 
 		args._r = ro.r.derived
-		return ro.r.segmentHandler(w, r, args)
+		return ro.r.handleOrPassRequest(w, r, args)
 	}
 
 	return notFoundResourceHandler.ServeHTTP(w, r, args)
