@@ -152,7 +152,7 @@ type Config struct {
 	TrailingSlash bool
 
 	// StrictOnTrailingSlash tells the resource to drop the
-	// request when the existence or absence of the trailing slash in the
+	// request when the presence or absence of the trailing slash in the
 	// request's URL doesn't match the resource's. By default, resources
 	// redirect requests to the matching version of the URL.
 	StrictOnTrailingSlash bool
@@ -630,7 +630,7 @@ func (rb *_ResponderBase) HasTrailingSlash() bool {
 }
 
 // IsStrictOnTrailingSlash returns true if the resource was configured to
-// drop the request when the existence or absence of the trailing slash in
+// drop the request when the presence or absence of the trailing slash in
 // the request's URL doesn't match with its own URL. By default, the resource
 // redirects the request on unmatched trailing slash.
 func (rb *_ResponderBase) IsStrictOnTrailingSlash() bool {
@@ -2240,8 +2240,9 @@ func (rb *_ResponderBase) requestHandlerBase() *_RequestHandlerBase {
 
 // -------------------------
 
-// passRequestToChildResource passes the request that was made to a resource
-// below in the hierarchy.
+// passRequestToChildResource is the segment handler of the host and resource.
+// It passes the request to the next child resource if the child resource's
+// template matches the next path segment of the request's URL.
 func (rb *_ResponderBase) passRequestToChildResource(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -2264,7 +2265,7 @@ func (rb *_ResponderBase) passRequestToChildResource(
 	if len(ps) > 0 {
 		if sr := rb.staticResources[ps]; sr != nil {
 			args._r = sr.derived
-			var handled = sr.segmentHandler(w, r, args)
+			var handled = sr.handleOrPassRequest(w, r, args)
 
 			args.currentPathSegmentIdx = currentPathSegmentIdx
 			return handled
@@ -2279,7 +2280,7 @@ func (rb *_ResponderBase) passRequestToChildResource(
 
 			if matched {
 				args._r = pr.derived
-				var handled = pr.segmentHandler(w, r, args)
+				var handled = pr.handleOrPassRequest(w, r, args)
 
 				args.currentPathSegmentIdx = currentPathSegmentIdx
 				return handled
@@ -2293,7 +2294,7 @@ func (rb *_ResponderBase) passRequestToChildResource(
 			)
 
 			args._r = rb.wildcardResource.derived
-			var handled = rb.wildcardResource.segmentHandler(w, r, args)
+			var handled = rb.wildcardResource.handleOrPassRequest(w, r, args)
 
 			args.currentPathSegmentIdx = currentPathSegmentIdx
 			return handled
