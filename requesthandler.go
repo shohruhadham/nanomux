@@ -5,26 +5,10 @@ package nanomux
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"reflect"
 	"strings"
 )
-
-// --------------------------------------------------
-
-// ErrNoMethod is returned when the HTTP methods argument string is empty.
-var ErrNoMethod = fmt.Errorf("no method has been given")
-
-// ErrNoHandlerExists is returned on an attempt to wrap a non-existent handler
-// of the HTTP method.
-var ErrNoHandlerExists = fmt.Errorf("no handler exists")
-
-// ErrConflictingStatusCode is returned on an attempt to set a different
-// value for a status code other than the expected value. This is the case
-// of customizable redirection status codes, where one of the
-// StatusMovedPermanently and StatusPermanentRedirect can be chosen.
-var ErrConflictingStatusCode = fmt.Errorf("conflicting status code")
 
 // --------------------------------------------------
 
@@ -46,7 +30,7 @@ func (hf HandlerFunc) ServeHTTP(
 func Hr(h http.Handler) Handler {
 	return HandlerFunc(
 		func(w http.ResponseWriter, r *http.Request, args *Args) bool {
-			var c = context.WithValue(r.Context(), ArgsKey, args)
+			var c = context.WithValue(r.Context(), argsKey, args)
 			r = r.WithContext(c)
 			h.ServeHTTP(w, r)
 			return true
@@ -58,7 +42,7 @@ func Hr(h http.Handler) Handler {
 func HrFn(hf http.HandlerFunc) HandlerFunc {
 	return HandlerFunc(
 		func(w http.ResponseWriter, r *http.Request, args *Args) bool {
-			var c = context.WithValue(r.Context(), ArgsKey, args)
+			var c = context.WithValue(r.Context(), argsKey, args)
 			r = r.WithContext(c)
 			hf(w, r)
 			return true
@@ -271,7 +255,7 @@ func (rhb *_RequestHandlerBase) setHandlerFor(
 	var ms = toUpperSplitByCommaSpace(methods)
 	var lms = len(ms)
 	if lms == 0 {
-		return newErr("%w", ErrNoMethod)
+		return newErr("%w", ErrNoHTTPMethod)
 	}
 
 	if lms == 1 && ms[0] == "!" {
@@ -340,7 +324,7 @@ func (rhb *_RequestHandlerBase) wrapHandlerOf(
 	var ms = toUpperSplitByCommaSpace(methods)
 	var lms = len(ms)
 	if lms == 0 {
-		return newErr("%w", ErrNoMethod)
+		return newErr("%w", ErrNoHTTPMethod)
 	}
 
 	if lms == 1 {
@@ -475,6 +459,14 @@ func (rhb *_RequestHandlerBase) ServeHTTP(
 
 var permanentRedirectCode = http.StatusPermanentRedirect
 
+// SetPermanentRedirectCode sets the status code that will be used to redirect
+// requests. Requests can be redirected to an "https" from an "http", to a URL
+// with a trailing slash from one without, or vice versa. It's either 301
+// (moved permanently) or 308 (permanent redirect). The difference between the
+// 301 and 308 status codes is that with the 301 status code, the request's
+// HTTP method may change. For example, some clients change the POST HTTP
+// method to GET. The 308 status code does not allow this behavior. By default,
+// the 308 status code is sent.
 func SetPermanentRedirectCode(code int) error {
 	if code != http.StatusMovedPermanently &&
 		code != http.StatusPermanentRedirect {
@@ -485,12 +477,24 @@ func SetPermanentRedirectCode(code int) error {
 	return nil
 }
 
+// PermanentRedirectCode returns the status code that is sent when redirecting
+// requests. Requests can be redirected to an "https" from an "http", to a URL
+// with a trailing slash from one without, or vice versa. It's either 301
+// (moved permanently) or 308 (permanent redirect). The difference between the
+// 301 and 308 status codes is that with the 301 status code, the request's
+// HTTP method may change. For example, some clients change the POST HTTP
+// method to GET. The 308 status code does not allow this behavior. By default,
+// the 308 status code is sent.
 func PermanentRedirectCode() int {
 	return permanentRedirectCode
 }
 
 // -------------------------
 
+// RedirectHandlerFunc is the type of handler that is used for request
+// redirecting. This type of handler is used to redirect requests to an "https"
+// from an "http", to a URL with a trailing slash from a URL without, or vice
+// versa.
 type RedirectHandlerFunc func(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -499,6 +503,7 @@ type RedirectHandlerFunc func(
 	args *Args,
 ) bool
 
+// permanentRedirect is the default redirect handler.
 var permanentRedirect = func(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -510,6 +515,10 @@ var permanentRedirect = func(
 	return true
 }
 
+// SetPermanentRedirectHandlerFunc can be used to set a custom implementation
+// of the redirect handler function. The handler is used to redirect requests
+// to an "https" from an "http", to a URL with a trailing slash from a URL
+// without, or vice versa.
 func SetPermanentRedirectHandlerFunc(fn RedirectHandlerFunc) error {
 	if fn == nil {
 		return newErr("%w", ErrNilArgument)
@@ -519,10 +528,15 @@ func SetPermanentRedirectHandlerFunc(fn RedirectHandlerFunc) error {
 	return nil
 }
 
+// PermanentRedirectHandlerFunc returns the redirect handler function. The
+// handler is used to redirect requests to an "https" from an "http", to a URL
+// with a trailing slash from one without, or vice versa.
 func PermanentRedirectHandlerFunc() RedirectHandlerFunc {
 	return permanentRedirect
 }
 
+// WrapPermanentRedirectHandlerFunc is used to wrap the permanent redirect
+// handler with the middleware.
 func WrapPermanentRedirectHandlerFunc(
 	mwf func(RedirectHandlerFunc) RedirectHandlerFunc,
 ) error {
@@ -543,6 +557,8 @@ var notFoundResourceHandler Handler = HandlerFunc(
 	},
 )
 
+// SetHandlerForNotFoundResource can be used to set a custom handler for
+// not-found resources.
 func SetHandlerForNotFoundResource(handler Handler) error {
 	if handler == nil {
 		return newErr("%w", ErrNilArgument)
@@ -552,10 +568,13 @@ func SetHandlerForNotFoundResource(handler Handler) error {
 	return nil
 }
 
+// HandlerOfNotFoundResource returns the handler of not-found resources.
 func HandlerOfNotFoundResource() Handler {
 	return notFoundResourceHandler
 }
 
+// WrapHandlerOfNotFoundResource wraps the handler of not-found resources
+// with the passed middleware.
 func WrapHandlerOfNotFoundResource(mwf MiddlewareFunc) error {
 	if mwf == nil {
 		return newErr("%w", ErrNilArgument)

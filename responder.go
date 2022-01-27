@@ -5,123 +5,10 @@ package nanomux
 
 import (
 	"errors"
-	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
 )
-
-// ErrNilArgument is returned when one of the function arguments is nil.
-var ErrNilArgument = fmt.Errorf("nil argument")
-
-// ErrConflictingHost is returned when there is a conflict between a resource's
-// host and its parent resource's host or a host in a URL template. Conflict
-// can be the existence or absence of the host or a difference in a host
-// template.
-var ErrConflictingHost = fmt.Errorf("conflicting host")
-
-// ErrConflictingPath is returned when there is a difference between a
-// resource's prefix path and a prefix path in a URL template.
-var ErrConflictingPath = fmt.Errorf("conflicting path")
-
-// ErrConflictingPathSegment is returned when there is a difference between
-// one of the resource's prefix path segments and a corresponding path segment
-// in a URL template.
-var ErrConflictingPathSegment = fmt.Errorf("conflicting path segment")
-
-// ErrConflictingSecurity is returned when the argument URL template has a
-// different scheme from the resource's scheme, or the resource is insecure
-// (https is not required by the resource to respond), and the argument config
-// has the RedirectInsecureRequest property set.
-var ErrConflictingSecurity = fmt.Errorf("conflicting security")
-
-// ErrConflictingTrailingSlash is returned when the argument URL template has a
-// different trailing slash property than the one the resource was configured
-// with.
-var ErrConflictingTrailingSlash = fmt.Errorf("conflicting trailing slash")
-
-// ErrConfictingConfig is returned when the argument config is different from
-// the resource's configuration.
-var ErrConflictingConfig = fmt.Errorf("conflicting config")
-
-// ErrEmptyHostTemplate is returned when a host is required but its template is
-// empty or the URL template doesn't contain a host template.
-var ErrEmptyHostTemplate = fmt.Errorf("empty host template")
-
-// ErrEmptyPathTemplate is returned when a path template is required but it's
-// empty or a URL template doesn't contain a path template.
-var ErrEmptyPathTemplate = fmt.Errorf("empty path template")
-
-// ErrEmptyPathSegmentTemplate is returned when one of the path segment
-// templates is empty in a path template.
-var ErrEmptyPathSegmentTemplate = fmt.Errorf("empty path segment template")
-
-// ErrWildcardHostTemplate is returned when a host template is a wildcard.
-var ErrWildcardHostTemplate = fmt.Errorf("wildcard host template")
-
-// ErrUnwantedPathTemplate is returned when a host template also contains a
-// path template.
-var ErrUnwantedPathTemplate = fmt.Errorf("unwanted path template")
-
-// ErrNonRouterParent is returned on an attempt to register a host or a root
-// resource under another host or resource.
-var ErrNonRouterParent = fmt.Errorf("non-router parent")
-
-// ErrUnnamedResource is returned when a resource has a pattern in its template
-// or has a wildcard template, but has no name.
-var ErrUnnamedResource = fmt.Errorf("unnamed resource")
-
-// ErrDuplicateHostTemplate is returned when registering a new host if there
-// is another host with the same template and both of them can handle a request.
-var ErrDuplicateHostTemplate = fmt.Errorf("duplicate host template")
-
-// ErrDuplicateResourceTemplate is returned when registering a new resource
-// if there is another resource with the same template and both of them can
-// handle a request.
-var ErrDuplicateResourceTemplate = fmt.Errorf("duplicate resource template")
-
-// ErrDuplicateNameInTheURL is returned when a new resource's name is not
-// unique in its URL.
-var ErrDuplicateNameInTheURL = fmt.Errorf("duplicate name in the URL")
-
-// ErrDuplicateValueNameInTheURL is returned when one of the value names
-// in the resource's template is a duplicate of a value name in the host's
-// or another resource's template.
-var ErrDuplicateValueNameInTheURL = fmt.Errorf(
-	"duplicate value name in the URL",
-)
-
-// ErrDuplicateNameAmongSiblings is returned when a new resource's name is not
-// unique among the resources registered under the same host or resource.
-var ErrDuplicateNameAmongSiblings = fmt.Errorf("duplicate name among siblings")
-
-// ErrDummyHost is returned when a host doesn't have a request handler for any
-// HTTP method and an attempt to set a handler for the not allowed methods or
-// to wrap one of the HTTP method handlers occurs.
-var ErrDummyHost = fmt.Errorf("dummy host")
-
-// ErrDummyResource is returned when a resource doesn't have a request handler
-// for any HTTP method and an attempt to set a handler for the not allowed
-// methods or to wrap one of the HTTP method handlers occurs.
-var ErrDummyResource = fmt.Errorf("dummy resource")
-
-// ErrRegisteredHost is returned on an attempt to register an already
-// registered host. A host is considered registered even if it is registered
-// under a different router.
-var ErrRegisteredHost = fmt.Errorf("registered host")
-
-// ErrRegisteredResource is returned on an attempt to register an already
-// registered resource. A resource is considered registered even if it was
-// registered under a different router, host, or resource.
-var ErrRegisteredResource = fmt.Errorf("registered resource")
-
-// ErrNonExistentHost is returned on an attempt to change the state of a
-// non-existent host.
-var ErrNonExistentHost = fmt.Errorf("non-existent host")
-
-// ErrNonExistentResource is returned on an attempt to change the state of a
-// non-existent resource.
-var ErrNonExistentResource = fmt.Errorf("non-existent resource")
 
 // --------------------------------------------------
 
@@ -1045,7 +932,7 @@ func (rb *_ResponderBase) segmentResources(pathSegments []string) (
 				return
 			}
 
-			var r = newDummyResource(tmpl)
+			var r = newDormantResource(tmpl)
 			if newLast != nil {
 				err = newLast.checkNamesAreUniqueInTheURL(tmpl)
 				if err != nil {
@@ -1708,10 +1595,10 @@ func (rb *_ResponderBase) SetHandlerFor(
 		if err != nil {
 			if errors.Is(err, ErrNoHandlerExists) {
 				if _, ok := rb.derived.(*Host); ok {
-					return newErr("%w %s", ErrDummyHost, err)
+					return newErr("%w %s", ErrDormantHost, err)
 				}
 
-				return newErr("%w %s", ErrDummyResource, err)
+				return newErr("%w %s", ErrDormantResource, err)
 			}
 
 			return newErr("%w", err)
@@ -1802,10 +1689,10 @@ func (rb *_ResponderBase) WrapRequestHandler(mwfs ...MiddlewareFunc) error {
 
 	if !rb.canHandleRequest() {
 		if _, ok := rb.derived.(*Host); ok {
-			return newErr("%w", ErrDummyHost)
+			return newErr("%w", ErrDormantHost)
 		}
 
-		return newErr("%w", ErrDummyResource)
+		return newErr("%w", ErrDormantResource)
 	}
 
 	for i, mw := range mwfs {
@@ -1836,10 +1723,10 @@ func (rb *_ResponderBase) WrapHandlerOf(
 ) error {
 	if rb._RequestHandlerBase == nil {
 		if _, ok := rb.derived.(*Host); ok {
-			return newErr("%w", ErrDummyHost)
+			return newErr("%w", ErrDormantHost)
 		}
 
-		return newErr("%w", ErrDummyResource)
+		return newErr("%w", ErrDormantResource)
 	}
 
 	var err = rb.wrapHandlerOf(methods, mwfs...)
@@ -2178,9 +2065,9 @@ func (rb *_ResponderBase) WrapSubtreeRequestHandlers(
 		rb._Resources(),
 		func(_r _Responder) error {
 			var err = _r.WrapRequestHandler(mwfs...)
-			// Subtree below hosts cannot return the ErrDummyHost.
-			// It's enough to check the ErrDummyResource.
-			if errors.Is(err, ErrDummyResource) {
+			// Subtree below hosts cannot return the ErrDormantHost.
+			// It's enough to check the ErrDormantResource.
+			if errors.Is(err, ErrDormantResource) {
 				return nil
 			}
 

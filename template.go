@@ -30,10 +30,6 @@ const (
 	TheSame
 )
 
-var ErrDifferentTemplates = fmt.Errorf("different templates")
-var ErrDifferentValueNames = fmt.Errorf("different value names")
-var ErrDifferentNames = fmt.Errorf("different names")
-
 // Err returns differences as errors.
 func (s Similarity) Err() error {
 	switch s {
@@ -49,31 +45,6 @@ func (s Similarity) Err() error {
 		panic(fmt.Errorf("undefined similarity"))
 	}
 }
-
-// --------------------------------------------------
-
-// ErrInvalidTemplate is returned when a template is empty or not complete.
-var ErrInvalidTemplate = fmt.Errorf("invalid template")
-
-// ErrInvalidValue is returned from the Template's Apply method when one of the
-// values doesn't match the pattern.
-var ErrInvalidValue = fmt.Errorf("invalid value")
-
-// ErrMissingValue is returned from the Template's Apply method when one of the
-// values is missing.
-var ErrMissingValue = fmt.Errorf("missing value")
-
-// ErrDifferentPattern is returned when a different pattern is provided for the
-// repeated value name.
-var ErrDifferentPattern = fmt.Errorf("different pattern")
-
-// ErrRepeatedWildcardName is returned when the wildcard name comes again in
-// the template.
-var ErrRepeatedWildcardName = fmt.Errorf("repeated wild card name")
-
-// ErrAnotherWildcardName is returned when there is more than one wildcard name
-// in the template.
-var ErrAnotherWildcardName = fmt.Errorf("another wild card name")
 
 // --------------------------------------------------
 
