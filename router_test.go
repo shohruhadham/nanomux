@@ -1149,14 +1149,14 @@ func TestRouter_WrapURLRequestHandler(t *testing.T) {
 		{"r11", "{r01}/{r11}", "/r01/r11", false},
 		{"r20", "https:///{r01}/r12/{r20:123}", "https:///r01/r12/123", false},
 		{"r02 r10", "{r02:abc}/r10/", "/abc/r10/", false},
-		{"dummy host", "example3.com", "", true},
+		{"dormant host", "example3.com", "", true},
 		{
-			"example3.com dummy resource",
+			"example3.com dormant resource",
 			"http://example3.com{r00:123}/",
 			"",
 			true,
 		},
-		{"dummy resource", "/{r02:abc}", "", true},
+		{"dormant resource", "/{r02:abc}", "", true},
 		{
 			"example1.com r10",
 			"http://example1.com/r00/{r10:abc}/",

@@ -565,9 +565,9 @@ func (args *Args) Host() *Host {
 	}
 }
 
-// CurrentResource returns the current *Resource that is handling the request.
-// If the request is being handled by a host, nil is returned. In that
-// case, the Host method must be used.
+// CurrentResource returns the current resource that is passing or handling
+// the request. If the request is being handled by a host, nil is returned.
+// In that case, the Host method must be used.
 func (args *Args) CurrentResource() *Resource {
 	if _r, ok := args._r.(*Resource); ok {
 		return _r
@@ -596,13 +596,16 @@ func (args *Args) Get(key interface{}) interface{} {
 
 type _ArgsKey struct{}
 
-var ArgsKey interface{} = _ArgsKey{}
+// argsKey can be used to retrieve *Args from the request's context in the
+// http.Handler or http.HandlerFunc after the conversion to the Handler or
+// HandlerFunc with the HR and HrFn functions.
+var argsKey interface{} = _ArgsKey{}
 
-// ArgsFrom is a convenience function to retrieve *Args in the http.Handler or
-// http.HandlerFunc after the conversion to the Handler or HandlerFunc with the
-// Hr and HrFn functions.
+// ArgsFrom is a function to retrieve the argument *Args in the http.Handler
+// or http.HandlerFunc after the conversion to the Handler or HandlerFunc
+// with the Hr and HrFn functions.
 func ArgsFrom(r *http.Request) *Args {
-	var args, _ = r.Context().Value(ArgsKey).(*Args)
+	var args, _ = r.Context().Value(argsKey).(*Args)
 	return args
 }
 

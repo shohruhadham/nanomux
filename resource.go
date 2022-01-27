@@ -16,8 +16,8 @@ type Resource struct {
 	urlt *URLTmpl
 }
 
-// createDummyResource creates an unconfigured and dormant resource.
-func createDummyResource(tmpl *Template) (*Resource, error) {
+// createDormantResource creates an unconfigured and dormant resource.
+func createDormantResource(tmpl *Template) (*Resource, error) {
 	if tmpl == nil {
 		return nil, newErr("%w", ErrNilArgument)
 	}
@@ -437,9 +437,9 @@ func NewResourceUsingConfig(
 	return rb
 }
 
-// newDummyResource creates a dummy instance of the Resource from the tmpl.
-func newDummyResource(tmpl *Template) *Resource {
-	var r, err = createDummyResource(tmpl)
+// newDormantResource creates a dormant instance of the Resource from the tmpl.
+func newDormantResource(tmpl *Template) *Resource {
+	var r, err = createDormantResource(tmpl)
 	if err != nil {
 		panic(newErr("%w", err))
 	}
@@ -447,9 +447,9 @@ func newDummyResource(tmpl *Template) *Resource {
 	return r
 }
 
-// newRootResource creates a dummy root resource.
+// newRootResource creates a dormant root resource.
 func newRootResource() *Resource {
-	return newDummyResource(rootTmpl)
+	return newDormantResource(rootTmpl)
 }
 
 // -------------------------

@@ -17,8 +17,8 @@ type Host struct {
 	_ResponderBase
 }
 
-// createDummyHost creates an unconfigured and dormant host.
-func createDummyHost(tmpl *Template) (*Host, error) {
+// createDormantHost creates an unconfigured and dormant host.
+func createDormantHost(tmpl *Template) (*Host, error) {
 	if tmpl == nil {
 		return nil, newErr("%w", ErrNilArgument)
 	}

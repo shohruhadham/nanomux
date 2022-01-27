@@ -6,14 +6,8 @@ package nanomux
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
 )
-
-// --------------------------------------------------
-
-var ErrNoMiddleware = fmt.Errorf("no middleware has been provided")
-var ErrConflictingMethod = fmt.Errorf("conflicting method")
 
 // --------------------------------------------------
 
@@ -25,7 +19,7 @@ func MwFn(mw func(http.Handler) http.Handler) MiddlewareFunc {
 	return func(next Handler) HandlerFunc {
 		var h http.Handler = http.HandlerFunc(
 			func(w http.ResponseWriter, r *http.Request) {
-				var args = r.Context().Value(ArgsKey).(*Args)
+				var args = r.Context().Value(argsKey).(*Args)
 				args.handled = next.ServeHTTP(w, r, args)
 			},
 		)
@@ -33,7 +27,7 @@ func MwFn(mw func(http.Handler) http.Handler) MiddlewareFunc {
 		h = mw(h)
 
 		return func(w http.ResponseWriter, r *http.Request, args *Args) bool {
-			var c = context.WithValue(r.Context(), ArgsKey, args)
+			var c = context.WithValue(r.Context(), argsKey, args)
 			r = r.WithContext(c)
 			h.ServeHTTP(w, r)
 			return args.handled
@@ -53,7 +47,7 @@ func wrapEveryHandlerOf(
 ) error {
 	var ms = toUpperSplitByCommaSpace(methods)
 	if len(ms) == 0 {
-		return newErr("%w", ErrNoMethod)
+		return newErr("%w", ErrNoHTTPMethod)
 	}
 
 	var err = traverseAndCall(

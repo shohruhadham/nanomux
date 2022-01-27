@@ -55,7 +55,7 @@ func TestResourceBase_Name(t *testing.T) {
 	var tmplStr = "$resource-name:static{name:pattern}"
 	var tmpl = Parse(tmplStr)
 
-	rb := newDummyResource(tmpl)
+	rb := newDormantResource(tmpl)
 	if got := rb.Name(); got != rb.tmpl.Name() {
 		t.Fatalf("ResourceBase.Name() = %v, want %v", got, rb.tmpl.Name())
 	}
@@ -65,7 +65,7 @@ func TestResourceBase_Template(t *testing.T) {
 	var tmplStr = "$tmplName:{valueName:pattern}"
 	var tmpl = Parse(tmplStr)
 
-	var rb = newDummyResource(tmpl)
+	var rb = newDormantResource(tmpl)
 	if got := rb.Template(); !reflect.DeepEqual(got, tmpl) {
 		t.Fatalf("ResourceBase.Template() = %v, want %v", got, tmpl)
 	}
@@ -410,7 +410,7 @@ func TestResourceBase_Configure(t *testing.T) {
 }
 
 func TestResourceBase_IsRoot(t *testing.T) {
-	var r = newDummyResource(rootTmpl)
+	var r = newDormantResource(rootTmpl)
 	if !r.IsRoot() {
 		t.Fatalf("ResourceBase.IsRoot() = false, want true")
 	}

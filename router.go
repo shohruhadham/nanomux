@@ -631,7 +631,7 @@ func (ro *Router) host(hostTmplStr string) (
 	}
 
 	if h == nil {
-		h, err = createDummyHost(tmpl)
+		h, err = createDormantHost(tmpl)
 		if err != nil {
 			err = newErr("%w", err)
 		}
@@ -1485,11 +1485,11 @@ func (ro *Router) WrapAllRequestHandlers(mwfs ...MiddlewareFunc) error {
 		ro._Resources(),
 		func(_r _Responder) error {
 			var err = _r.WrapRequestHandler(mwfs...)
-			if errors.Is(err, ErrDummyHost) {
+			if errors.Is(err, ErrDormantHost) {
 				return nil
 			}
 
-			if errors.Is(err, ErrDummyResource) {
+			if errors.Is(err, ErrDormantResource) {
 				return nil
 			}
 
