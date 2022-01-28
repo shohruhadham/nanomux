@@ -12,53 +12,37 @@ import (
 
 // --------------------------------------------------
 
-type Handler interface {
-	ServeHTTP(w http.ResponseWriter, r *http.Request, args *Args) bool
-}
-
-type HandlerFunc func(w http.ResponseWriter, r *http.Request, args *Args) bool
-
-func (hf HandlerFunc) ServeHTTP(
-	w http.ResponseWriter,
-	r *http.Request,
-	args *Args,
-) bool {
-	return hf(w, r, args)
-}
+type Handler func(w http.ResponseWriter, r *http.Request, args *Args) bool
 
 // Hr converts an http.Handler to a Handler.
 func Hr(h http.Handler) Handler {
-	return HandlerFunc(
-		func(w http.ResponseWriter, r *http.Request, args *Args) bool {
-			var c = context.WithValue(r.Context(), argsKey, args)
-			r = r.WithContext(c)
-			h.ServeHTTP(w, r)
-			return true
-		},
-	)
+	return func(w http.ResponseWriter, r *http.Request, args *Args) bool {
+		var c = context.WithValue(r.Context(), argsKey, args)
+		r = r.WithContext(c)
+		h.ServeHTTP(w, r)
+		return true
+	}
 }
 
-// HrFn converts an http.HandlerFunc to a HandlerFunc.
-func HrFn(hf http.HandlerFunc) HandlerFunc {
-	return HandlerFunc(
-		func(w http.ResponseWriter, r *http.Request, args *Args) bool {
-			var c = context.WithValue(r.Context(), argsKey, args)
-			r = r.WithContext(c)
-			hf(w, r)
-			return true
-		},
-	)
+// FnHr converts an http.HandlerFunc to a Handler.
+func FnHr(hf http.HandlerFunc) Handler {
+	return func(w http.ResponseWriter, r *http.Request, args *Args) bool {
+		var c = context.WithValue(r.Context(), argsKey, args)
+		r = r.WithContext(c)
+		hf(w, r)
+		return true
+	}
 }
 
 // -------------------------
 
 // Impl is used to accept any type that has methods to handle HTTP requests.
-// Methods must have the signature of the HandlerFunc and start with the
-// 'Handle' prefix. The remaining part of any such method's name is considered
-// an HTTP method. For example, HandleGet and HandleCustom are considered the
-// handlers of the GET and CUSTOM HTTP methods, respectively. If the type has
-// the HandleNotAllowedMethod then it's used as the handler of the not allowed
-// methods.
+// Methods must have the signature of the Handler and start with the 'Handle'
+// prefix. The remaining part of any such method's name is considered an HTTP
+// method. For example, HandleGet and HandleCustom are considered the handlers
+// of the GET and CUSTOM HTTP methods, respectively. If the type has the
+// HandleNotAllowedMethod then it's used as the handler of the not allowed
+// HTTB methods.
 type Impl interface{}
 
 // --------------------------------------------------
@@ -177,13 +161,13 @@ func detectHTTPMethodHandlersOf(impl Impl) (*_RequestHandlerBase, error) {
 	}
 
 	var handlers = _MethodHandlerPairs{}
-	var notAllowedMethodsHandler HandlerFunc
+	var notAllowedHTTPMethodsHandler Handler
 
 	// reflect.Value allows us to compare method signatures directly instead of
 	// the signatures of their function values.
 	var v reflect.Value = reflect.ValueOf(impl)
-	var handlerFuncType = reflect.TypeOf(
-		// Signature of the HandlerFunc.
+	var handlerType = reflect.TypeOf(
+		// Signature of the Handler.
 		func(http.ResponseWriter, *http.Request, *Args) bool { return true },
 	)
 
@@ -193,8 +177,8 @@ func detectHTTPMethodHandlersOf(impl Impl) (*_RequestHandlerBase, error) {
 			continue
 		}
 
-		if m.Type() != handlerFuncType {
-			// Method doesn't have the signature of the HandlerFunc.
+		if m.Type() != handlerType {
+			// Method doesn't have the signature of the Handler.
 			continue
 		}
 
@@ -205,29 +189,29 @@ func detectHTTPMethodHandlersOf(impl Impl) (*_RequestHandlerBase, error) {
 		) bool)
 
 		if !ok {
-			// This should never happen.
+			// This block should never be entered.
 			return nil, newErr("failed to get the handler method")
 		}
 
 		if hm == "NOTALLOWEDMETHOD" {
-			notAllowedMethodsHandler = hf
+			notAllowedHTTPMethodsHandler = hf
 		} else {
-			handlers.set(hm, HandlerFunc(hf))
+			handlers.set(hm, hf)
 		}
 	}
 
 	var lhandlers = len(handlers)
-	if lhandlers == 0 && notAllowedMethodsHandler == nil {
+	if lhandlers == 0 && notAllowedHTTPMethodsHandler == nil {
 		return nil, nil
 	}
 
-	var rhb = &_RequestHandlerBase{handlers, notAllowedMethodsHandler}
+	var rhb = &_RequestHandlerBase{handlers, notAllowedHTTPMethodsHandler}
 	if lhandlers > 0 {
 		var _, hf = rhb.mhPairs.get(http.MethodOptions)
 		if hf == nil {
 			rhb.mhPairs.set(
 				http.MethodOptions,
-				HandlerFunc(rhb.handleOptionsHTTPMethod),
+				rhb.handleOptionsHTTPMethod,
 			)
 		}
 	} else {
@@ -244,11 +228,6 @@ func (rhb *_RequestHandlerBase) setHandlerFor(
 	h Handler,
 ) error {
 	if h == nil {
-		return newErr("%w", ErrNilArgument)
-	}
-
-	// If the h is a HandlerFunc it passes the above check.
-	if hf, ok := h.(HandlerFunc); ok && hf == nil {
 		return newErr("%w", ErrNilArgument)
 	}
 
@@ -279,7 +258,7 @@ func (rhb *_RequestHandlerBase) setHandlerFor(
 	if h == nil {
 		rhb.mhPairs.set(
 			http.MethodOptions,
-			HandlerFunc(rhb.handleOptionsHTTPMethod),
+			rhb.handleOptionsHTTPMethod,
 		)
 	}
 
@@ -298,7 +277,7 @@ func (rhb *_RequestHandlerBase) handlerOf(method string) Handler {
 			return rhb.notAllowedHTTPMethodsHandler
 		}
 
-		return HandlerFunc(rhb.handleNotAllowedHTTPMethods)
+		return rhb.handleNotAllowedHTTPMethods
 	}
 
 	if rhb.mhPairs != nil {
@@ -311,9 +290,9 @@ func (rhb *_RequestHandlerBase) handlerOf(method string) Handler {
 
 func (rhb *_RequestHandlerBase) wrapHandlerOf(
 	methods string,
-	mwfs ...MiddlewareFunc,
+	mws ...Middleware,
 ) error {
-	if len(mwfs) == 0 {
+	if len(mws) == 0 {
 		return newErr("%w", ErrNoMiddleware)
 	}
 
@@ -330,12 +309,12 @@ func (rhb *_RequestHandlerBase) wrapHandlerOf(
 	if lms == 1 {
 		if ms[0] == "!" {
 			rhb.notAllowedHTTPMethodsHandler = rhb.handlerOf("!")
-			for i, mwf := range mwfs {
-				if mwf == nil {
+			for i, mw := range mws {
+				if mw == nil {
 					return newErr("%w at index %d", ErrNoMiddleware, i)
 				}
 
-				rhb.notAllowedHTTPMethodsHandler = mwf(
+				rhb.notAllowedHTTPMethodsHandler = mw(
 					rhb.notAllowedHTTPMethodsHandler,
 				)
 			}
@@ -343,12 +322,12 @@ func (rhb *_RequestHandlerBase) wrapHandlerOf(
 			return nil
 		} else if ms[0] == "*" {
 			for _, mhp := range rhb.mhPairs {
-				for i, mwf := range mwfs {
-					if mwf == nil {
+				for i, mw := range mws {
+					if mw == nil {
 						return newErr("%w at index %d", ErrNoMiddleware, i)
 					}
 
-					mhp.handler = mwf(mhp.handler)
+					mhp.handler = mw(mhp.handler)
 					rhb.mhPairs.set(mhp.method, mhp.handler)
 				}
 			}
@@ -359,12 +338,12 @@ func (rhb *_RequestHandlerBase) wrapHandlerOf(
 
 	for _, m := range ms {
 		if _, h := rhb.mhPairs.get(m); h != nil {
-			for i, mwf := range mwfs {
-				if mwf == nil {
+			for i, mw := range mws {
+				if mw == nil {
 					return newErr("%w at index %d", ErrNoMiddleware, i)
 				}
 
-				h = mwf(h)
+				h = mw(h)
 				rhb.mhPairs.set(m, h)
 			}
 		} else {
@@ -383,15 +362,15 @@ func (rhb *_RequestHandlerBase) handleRequest(
 	args *Args,
 ) bool {
 	if rhb == nil || len(rhb.mhPairs) == 0 {
-		return notFoundResourceHandler.ServeHTTP(w, r, args)
+		return notFoundResourceHandler(w, r, args)
 	}
 
 	if _, handler := rhb.mhPairs.get(r.Method); handler != nil {
-		return handler.ServeHTTP(w, r, args)
+		return handler(w, r, args)
 	}
 
 	if rhb.notAllowedHTTPMethodsHandler != nil {
-		return rhb.notAllowedHTTPMethodsHandler.ServeHTTP(w, r, args)
+		return rhb.notAllowedHTTPMethodsHandler(w, r, args)
 	}
 
 	return rhb.handleNotAllowedHTTPMethods(w, r, args)
@@ -491,11 +470,10 @@ func PermanentRedirectCode() int {
 
 // -------------------------
 
-// RedirectHandlerFunc is the type of handler that is used for request
-// redirecting. This type of handler is used to redirect requests to an "https"
-// from an "http", to a URL with a trailing slash from a URL without, or vice
-// versa.
-type RedirectHandlerFunc func(
+// RedirectHandler is the type of handler that is used for request redirecting.
+// This type of handler is used to redirect requests to an "https" from an
+// "http", to a URL with a trailing slash from a URL without, or vice versa.
+type RedirectHandler func(
 	w http.ResponseWriter,
 	r *http.Request,
 	url string,
@@ -503,8 +481,8 @@ type RedirectHandlerFunc func(
 	args *Args,
 ) bool
 
-// permanentRedirect is the default redirect handler.
-var permanentRedirect = func(
+// permanentRedirectHandler is the default redirect handler.
+var permanentRedirectHandler = func(
 	w http.ResponseWriter,
 	r *http.Request,
 	url string,
@@ -515,47 +493,49 @@ var permanentRedirect = func(
 	return true
 }
 
-// SetPermanentRedirectHandlerFunc can be used to set a custom implementation
+// SetPermanentRedirectHandler can be used to set a custom implementation
 // of the redirect handler function. The handler is used to redirect requests
 // to an "https" from an "http", to a URL with a trailing slash from a URL
 // without, or vice versa.
-func SetPermanentRedirectHandlerFunc(fn RedirectHandlerFunc) error {
+func SetPermanentRedirectHandler(fn RedirectHandler) error {
 	if fn == nil {
 		return newErr("%w", ErrNilArgument)
 	}
 
-	permanentRedirect = fn
+	permanentRedirectHandler = fn
 	return nil
 }
 
-// PermanentRedirectHandlerFunc returns the redirect handler function. The
+// PermanentRedirectHandler returns the redirect handler function. The
 // handler is used to redirect requests to an "https" from an "http", to a URL
 // with a trailing slash from one without, or vice versa.
-func PermanentRedirectHandlerFunc() RedirectHandlerFunc {
-	return permanentRedirect
+func PermanentRedirectHandler() RedirectHandler {
+	return permanentRedirectHandler
 }
 
-// WrapPermanentRedirectHandlerFunc is used to wrap the permanent redirect
+// WrapPermanentRedirectHandler is used to wrap the permanent redirect
 // handler with the middleware.
-func WrapPermanentRedirectHandlerFunc(
-	mwf func(RedirectHandlerFunc) RedirectHandlerFunc,
+func WrapPermanentRedirectHandler(
+	mw func(RedirectHandler) RedirectHandler,
 ) error {
-	if mwf == nil {
+	if mw == nil {
 		return newErr("%w", ErrNilArgument)
 	}
 
-	permanentRedirect = mwf(permanentRedirect)
+	permanentRedirectHandler = mw(permanentRedirectHandler)
 	return nil
 }
 
 // --------------------------------------------------
 
-var notFoundResourceHandler Handler = HandlerFunc(
-	func(w http.ResponseWriter, _ *http.Request, _ *Args) bool {
-		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
-		return true
-	},
-)
+var notFoundResourceHandler Handler = func(
+	w http.ResponseWriter,
+	_ *http.Request,
+	_ *Args,
+) bool {
+	http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+	return true
+}
 
 // SetHandlerForNotFoundResource can be used to set a custom handler for
 // not-found resources.
@@ -575,11 +555,11 @@ func HandlerOfNotFoundResource() Handler {
 
 // WrapHandlerOfNotFoundResource wraps the handler of not-found resources
 // with the passed middleware.
-func WrapHandlerOfNotFoundResource(mwf MiddlewareFunc) error {
-	if mwf == nil {
+func WrapHandlerOfNotFoundResource(mw Middleware) error {
+	if mw == nil {
 		return newErr("%w", ErrNilArgument)
 	}
 
-	notFoundResourceHandler = mwf(notFoundResourceHandler)
+	notFoundResourceHandler = mw(notFoundResourceHandler)
 	return nil
 }

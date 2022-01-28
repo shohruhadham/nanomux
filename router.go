@@ -19,7 +19,7 @@ type Router struct {
 	patternHosts []*Host
 	r            *Resource
 
-	segmentHandler HandlerFunc
+	segmentHandler Handler
 }
 
 func NewRouter() *Router {
@@ -309,8 +309,8 @@ func (ro *Router) ImplementationAt(urlTmplStr string) (Impl, error) {
 	return nil, nil
 }
 
-// SetURLHandlerFor sets HTTP methods' handler for a host or resource. If the
-// host or resource doesn't exist, it will be created.
+// SetURLHandlerFor sets HTTP methods' handler function for a host or
+// resource. If the host or resource doesn't exist, it will be created.
 //
 // The argument methods is a case-insensitive list of HTTP methods separated
 // by a comma and/or space. An exclamation mark "!" denotes the handler of the
@@ -327,6 +327,7 @@ func (ro *Router) SetURLHandlerFor(
 	urlTmplStr string,
 	handler Handler,
 ) error {
+
 	var _r, err = ro._Responder(urlTmplStr)
 	if err != nil {
 		return newErr("%w", err)
@@ -334,31 +335,6 @@ func (ro *Router) SetURLHandlerFor(
 
 	err = _r.SetHandlerFor(methods, handler)
 	if err != nil {
-		return newErr("%w", err)
-	}
-
-	return nil
-}
-
-// SetURLHandlerFuncFor sets HTTP methods' handler function for a host or
-// resource. If the host or resource doesn't exist, it will be created.
-//
-// The argument methods is a case-insensitive list of HTTP methods separated
-// by a comma and/or space. An exclamation mark "!" denotes the handler of the
-// not allowed HTTP methods and must be used alone. Which means that setting the
-// not allowed HTTP methods' handler must happen in a separate call. Examples of
-// methods: "get", "PUT POST", "get, custom" or "!".
-//
-// The scheme and trailing slash property values in the URL template must be
-// compatible with the existing host or resource's properties, otherwise the
-// method returns an error. A newly created host or resource is configured with
-// the values in the URL template.
-func (ro *Router) SetURLHandlerFuncFor(
-	methods string,
-	urlTmplStr string,
-	handlerFunc HandlerFunc,
-) error {
-	if err := ro.SetURLHandlerFor(methods, urlTmplStr, handlerFunc); err != nil {
 		return newErr("%w", err)
 	}
 
@@ -407,7 +383,7 @@ func (ro *Router) URLHandlerOf(method string, urlTmplStr string) (
 // returns an error.
 func (ro *Router) WrapURLSegmentHandler(
 	urlTmplStr string,
-	middlewares ...MiddlewareFunc,
+	mws ...Middleware,
 ) error {
 	var r, rIsHost, err = ro.registered_Responder(urlTmplStr)
 	if err != nil {
@@ -415,7 +391,7 @@ func (ro *Router) WrapURLSegmentHandler(
 	}
 
 	if r != nil {
-		if err = r.WrapSegmentHandler(middlewares...); err != nil {
+		if err = r.WrapSegmentHandler(mws...); err != nil {
 			return newErr("%w", err)
 		}
 
@@ -445,7 +421,7 @@ func (ro *Router) WrapURLSegmentHandler(
 // returns an error.
 func (ro *Router) WrapURLRequestHandler(
 	urlTmplStr string,
-	mwfs ...MiddlewareFunc,
+	mws ...Middleware,
 ) error {
 	var r, rIsHost, err = ro.registered_Responder(urlTmplStr)
 	if err != nil {
@@ -453,7 +429,7 @@ func (ro *Router) WrapURLRequestHandler(
 	}
 
 	if r != nil {
-		if err = r.WrapRequestHandler(mwfs...); err != nil {
+		if err = r.WrapRequestHandler(mws...); err != nil {
 			return newErr("%w", err)
 		}
 
@@ -488,7 +464,7 @@ func (ro *Router) WrapURLRequestHandler(
 func (ro *Router) WrapURLHandlerOf(
 	methods string,
 	urlTmplStr string,
-	middlewares ...MiddlewareFunc,
+	mws ...Middleware,
 ) error {
 	var r, rIsHost, err = ro.registered_Responder(urlTmplStr)
 	if err != nil {
@@ -496,7 +472,7 @@ func (ro *Router) WrapURLHandlerOf(
 	}
 
 	if r != nil {
-		if err = r.WrapHandlerOf(methods, middlewares...); err != nil {
+		if err = r.WrapHandlerOf(methods, mws...); err != nil {
 			return newErr("%w", err)
 		}
 
@@ -1420,12 +1396,12 @@ func (ro *Router) RootResource() *Resource {
 // WrapSegmentHandler wraps the router's segment handler with the middlewares
 // in their passed order. The router's segment handler is responsible for
 // passing the request to the matching host or the root resource.
-func (ro *Router) WrapSegmentHandler(mwfs ...MiddlewareFunc) error {
-	if len(mwfs) == 0 {
+func (ro *Router) WrapSegmentHandler(mws ...Middleware) error {
+	if len(mws) == 0 {
 		return newErr("%w", ErrNoMiddleware)
 	}
 
-	for i, mw := range mwfs {
+	for i, mw := range mws {
 		if mw == nil {
 			return newErr("%w at index %d", ErrNoMiddleware, i)
 		}
@@ -1458,11 +1434,11 @@ func (ro *Router) ConfigureAll(config Config) {
 // next resource that matches the next path segment and passes the request to
 // it. If there is no matching resource for the next path segment, the handler
 // for a not-found resource is called.
-func (ro *Router) WrapAllSegmentHandlers(mwfs ...MiddlewareFunc) error {
+func (ro *Router) WrapAllSegmentHandlers(mws ...Middleware) error {
 	var err = traverseAndCall(
 		ro._Resources(),
 		func(_r _Responder) error {
-			return _r.WrapSegmentHandler(mwfs...)
+			return _r.WrapSegmentHandler(mws...)
 		},
 	)
 
@@ -1480,11 +1456,11 @@ func (ro *Router) WrapAllSegmentHandlers(mwfs ...MiddlewareFunc) error {
 // depending on the request's method. Unlike the segment handler, the request
 // handler is called only when the host or resource is going to handle the
 // request.
-func (ro *Router) WrapAllRequestHandlers(mwfs ...MiddlewareFunc) error {
+func (ro *Router) WrapAllRequestHandlers(mws ...Middleware) error {
 	var err = traverseAndCall(
 		ro._Resources(),
 		func(_r _Responder) error {
-			var err = _r.WrapRequestHandler(mwfs...)
+			var err = _r.WrapRequestHandler(mws...)
 			if errors.Is(err, ErrDormantHost) {
 				return nil
 			}
@@ -1516,9 +1492,9 @@ func (ro *Router) WrapAllRequestHandlers(mwfs ...MiddlewareFunc) error {
 // custom", "*" or "!".
 func (ro *Router) WrapAllHandlersOf(
 	methods string,
-	mwfs ...MiddlewareFunc,
+	mws ...Middleware,
 ) error {
-	var err = wrapEveryHandlerOf(methods, ro._Resources(), mwfs...)
+	var err = wrapEveryHandlerOf(methods, ro._Resources(), mws...)
 	if err != nil {
 		return newErr("%w", err)
 	}
@@ -1600,5 +1576,5 @@ func (ro *Router) passRequest(
 		return ro.r.handleOrPassRequest(w, r, args)
 	}
 
-	return notFoundResourceHandler.ServeHTTP(w, r, args)
+	return notFoundResourceHandler(w, r, args)
 }

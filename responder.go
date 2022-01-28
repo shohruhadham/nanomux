@@ -96,12 +96,11 @@ type _Responder interface {
 	Implementation() Impl
 
 	SetHandlerFor(methods string, handler Handler) error
-	SetHandlerFuncFor(methods string, handlerFunc HandlerFunc) error
 	HandlerOf(method string) Handler
 
-	WrapSegmentHandler(mwfs ...MiddlewareFunc) error
-	WrapRequestHandler(mwfs ...MiddlewareFunc) error
-	WrapHandlerOf(methods string, mwfs ...MiddlewareFunc) error
+	WrapSegmentHandler(mws ...Middleware) error
+	WrapRequestHandler(mws ...Middleware) error
+	WrapHandlerOf(methods string, mws ...Middleware) error
 
 	// -------------------------
 
@@ -111,26 +110,25 @@ type _Responder interface {
 	SetImplementationAt(pathTmplStr string, impl Impl) error
 	ImplementationAt(pathTmplStr string) (Impl, error)
 
-	SetPathHandlerFor(methods, pathTmplStr string, handler Handler) error
-	SetPathHandlerFuncFor(
+	SetPathHandlerFor(
 		methods,
 		pathTmplStr string,
-		handler HandlerFunc,
+		handler Handler,
 	) error
 
 	PathHandlerOf(method, pathTmplStr string) (Handler, error)
 
-	WrapPathSegmentHandler(pathTmplStr string, mwfs ...MiddlewareFunc) error
-	WrapPathRequestHandler(pathTmplStr string, mwfs ...MiddlewareFunc) error
-	WrapPathHandlerOf(methods, pathTmplStr string, mwfs ...MiddlewareFunc) error
+	WrapPathSegmentHandler(pathTmplStr string, mws ...Middleware) error
+	WrapPathRequestHandler(pathTmplStr string, mws ...Middleware) error
+	WrapPathHandlerOf(methods, pathTmplStr string, mws ...Middleware) error
 
 	// -------------------------
 
 	ConfigureSubtree(config Config)
 
-	WrapSubtreeSegmentHandlers(mwfs ...MiddlewareFunc) error
-	WrapSubtreeRequestHandlers(mwfs ...MiddlewareFunc) error
-	WrapSubtreeHandlersOf(methods string, mwfs ...MiddlewareFunc) error
+	WrapSubtreeSegmentHandlers(mws ...Middleware) error
+	WrapSubtreeRequestHandlers(mws ...Middleware) error
+	WrapSubtreeHandlersOf(methods string, mws ...Middleware) error
 
 	// -------------------------
 
@@ -156,8 +154,8 @@ type _ResponderBase struct {
 	wildcardResource *Resource
 
 	*_RequestHandlerBase
-	segmentHandler HandlerFunc
-	requestHandler HandlerFunc
+	segmentHandler Handler
+	requestHandler Handler
 
 	cfs        _ConfigFlags
 	sharedData interface{}
@@ -1448,7 +1446,8 @@ func (rb *_ResponderBase) Implementation() Impl {
 
 // -------------------------
 
-// SetHandlerFor sets the handler as a request handler for HTTP methods.
+// SetHandlerFor sets the handler function as a request handler for the
+// HTTP methods.
 //
 // The argument methods is a case-insensitive list of HTTP methods separated
 // by a comma and/or space. An exclamation mark "!" denotes the handler of the
@@ -1459,6 +1458,7 @@ func (rb *_ResponderBase) SetHandlerFor(
 	methods string,
 	handler Handler,
 ) error {
+
 	if rb._RequestHandlerBase == nil {
 		var rhb = &_RequestHandlerBase{}
 		var err = rhb.setHandlerFor(methods, handler)
@@ -1480,25 +1480,6 @@ func (rb *_ResponderBase) SetHandlerFor(
 		if err != nil {
 			return newErr("%w", err)
 		}
-	}
-	return nil
-}
-
-// SetHandlerFuncFor sets the handler function as a request handler for the
-// HTTP methods.
-//
-// The argument methods is a case-insensitive list of HTTP methods separated
-// by a comma and/or space. An exclamation mark "!" denotes the handler of the
-// not allowed HTTP methods and must be used alone. Which means that setting the
-// not allowed HTTP methods' handler must happen in a separate call. Examples of
-// methods: "get", "PUT POST", "get, custom" or "!".
-func (rb *_ResponderBase) SetHandlerFuncFor(
-	methods string,
-	handlerFunc HandlerFunc,
-) error {
-	var err = rb.SetHandlerFor(methods, handlerFunc)
-	if err != nil {
-		return newErr("%w", err)
 	}
 
 	return nil
@@ -1530,12 +1511,12 @@ func (rb *_ResponderBase) HandlerOf(method string) Handler {
 // resource for the next path segment, the handler for a not-found resource is
 // called. The host's segment handler calls the request handler if the request
 // was made to the host.
-func (rb *_ResponderBase) WrapSegmentHandler(mwfs ...MiddlewareFunc) error {
-	if len(mwfs) == 0 {
+func (rb *_ResponderBase) WrapSegmentHandler(mws ...Middleware) error {
+	if len(mws) == 0 {
 		return newErr("%w", ErrNoMiddleware)
 	}
 
-	for i, mw := range mwfs {
+	for i, mw := range mws {
 		if mw == nil {
 			return newErr("%w at index %d", ErrNilArgument, i)
 		}
@@ -1552,8 +1533,8 @@ func (rb *_ResponderBase) WrapSegmentHandler(mwfs ...MiddlewareFunc) error {
 // The request handler calls the HTTP method handler of the resource depending
 // on the request's method. Unlike the segment handler, the request handler is
 // called only when the resource is going to handle the request.
-func (rb *_ResponderBase) WrapRequestHandler(mwfs ...MiddlewareFunc) error {
-	if len(mwfs) == 0 {
+func (rb *_ResponderBase) WrapRequestHandler(mws ...Middleware) error {
+	if len(mws) == 0 {
 		return newErr("%w", ErrNoMiddleware)
 	}
 
@@ -1565,7 +1546,7 @@ func (rb *_ResponderBase) WrapRequestHandler(mwfs ...MiddlewareFunc) error {
 		return newErr("%w", ErrDormantResource)
 	}
 
-	for i, mw := range mwfs {
+	for i, mw := range mws {
 		if mw == nil {
 			return newErr("%w at index %d", ErrNilArgument, i)
 		}
@@ -1589,7 +1570,7 @@ func (rb *_ResponderBase) WrapRequestHandler(mwfs ...MiddlewareFunc) error {
 // custom", "*" or "!".
 func (rb *_ResponderBase) WrapHandlerOf(
 	methods string,
-	mwfs ...MiddlewareFunc,
+	mws ...Middleware,
 ) error {
 	if rb._RequestHandlerBase == nil {
 		if _, ok := rb.derived.(*Host); ok {
@@ -1599,7 +1580,7 @@ func (rb *_ResponderBase) WrapHandlerOf(
 		return newErr("%w", ErrDormantResource)
 	}
 
-	var err = rb.wrapHandlerOf(methods, mwfs...)
+	var err = rb.wrapHandlerOf(methods, mws...)
 	if err != nil {
 		return newErr("%w", err)
 	}
@@ -1692,8 +1673,8 @@ func (rb *_ResponderBase) ImplementationAt(pathTmplStr string) (Impl, error) {
 
 // -------------------------
 
-// SetPathHandlerFor sets the HTTP methods' handler for a resource at the path.
-// If the resource doesn't exist, it will be created.
+// SetPathHandlerFor sets the HTTP methods' handler function for a
+// resource at the path. If the resource doesn't exist, it will be created.
 //
 // The scheme and trailing slash property values in the path template must be
 // compatible with the existing resource's properties, otherwise the function
@@ -1708,36 +1689,6 @@ func (rb *_ResponderBase) ImplementationAt(pathTmplStr string) (Impl, error) {
 func (rb *_ResponderBase) SetPathHandlerFor(
 	methods, pathTmplStr string,
 	handler Handler,
-) error {
-	var r, err = rb.Resource(pathTmplStr)
-	if err != nil {
-		return newErr("%w", err)
-	}
-
-	err = r.SetHandlerFor(methods, handler)
-	if err != nil {
-		return newErr("%w", err)
-	}
-
-	return nil
-}
-
-// SetPathHandlerFuncFor sets the HTTP methods' handler function for a
-// resource at the path. If the resource doesn't exist, it will be created.
-//
-// The scheme and trailing slash property values in the path template must be
-// compatible with the existing resource's properties, otherwise the function
-// returns an error. A newly created resource is configured with the values in
-// the path template.
-//
-// The argument methods is a case-insensitive list of HTTP methods separated
-// by a comma and/or space. An exclamation mark "!" denotes the handler of the
-// not allowed HTTP methods and must be used alone. Which means that setting the
-// not allowed HTTP methods' handler must happen in a separate call. Examples of
-// methods: "get", "PUT POST", "get, custom" or "!".
-func (rb *_ResponderBase) SetPathHandlerFuncFor(
-	methods, pathTmplStr string,
-	handler HandlerFunc,
 ) error {
 	var r, err = rb.Resource(pathTmplStr)
 	if err != nil {
@@ -1795,7 +1746,7 @@ func (rb *_ResponderBase) PathHandlerOf(method, pathTmplStr string) (
 // error.
 func (rb *_ResponderBase) WrapPathSegmentHandler(
 	pathTmplStr string,
-	mwfs ...MiddlewareFunc,
+	mws ...Middleware,
 ) error {
 	var r, err = rb.RegisteredResource(pathTmplStr)
 	if err != nil {
@@ -1806,7 +1757,7 @@ func (rb *_ResponderBase) WrapPathSegmentHandler(
 		return newErr("%w", ErrNonExistentResource)
 	}
 
-	err = r.WrapSegmentHandler(mwfs...)
+	err = r.WrapSegmentHandler(mws...)
 	if err != nil {
 		return newErr("%w", err)
 	}
@@ -1827,7 +1778,7 @@ func (rb *_ResponderBase) WrapPathSegmentHandler(
 // error.
 func (rb *_ResponderBase) WrapPathRequestHandler(
 	pathTmplStr string,
-	mwfs ...MiddlewareFunc,
+	mws ...Middleware,
 ) error {
 	var r, err = rb.RegisteredResource(pathTmplStr)
 	if err != nil {
@@ -1838,7 +1789,7 @@ func (rb *_ResponderBase) WrapPathRequestHandler(
 		return newErr("%w", ErrNonExistentResource)
 	}
 
-	err = r.WrapRequestHandler(mwfs...)
+	err = r.WrapRequestHandler(mws...)
 	if err != nil {
 		return newErr("%w", err)
 	}
@@ -1861,7 +1812,7 @@ func (rb *_ResponderBase) WrapPathRequestHandler(
 // returns an error.
 func (rb *_ResponderBase) WrapPathHandlerOf(
 	methods, pathTmplStr string,
-	mwfs ...MiddlewareFunc,
+	mws ...Middleware,
 ) error {
 	var r, err = rb.RegisteredResource(pathTmplStr)
 	if err != nil {
@@ -1872,7 +1823,7 @@ func (rb *_ResponderBase) WrapPathHandlerOf(
 		return newErr("%w", err)
 	}
 
-	err = r.WrapHandlerOf(methods, mwfs...)
+	err = r.WrapHandlerOf(methods, mws...)
 	if err != nil {
 		return newErr("%w", err)
 	}
@@ -1905,12 +1856,12 @@ func (rb *_ResponderBase) ConfigureSubtree(config Config) {
 // called. The host's segment handler calls the request handler if the request
 // was made to the host.
 func (rb *_ResponderBase) WrapSubtreeSegmentHandlers(
-	mwfs ...MiddlewareFunc,
+	mws ...Middleware,
 ) error {
 	var err = traverseAndCall(
 		rb._Resources(),
 		func(_r _Responder) error {
-			return _r.WrapSegmentHandler(mwfs...)
+			return _r.WrapSegmentHandler(mws...)
 		},
 	)
 
@@ -1929,12 +1880,12 @@ func (rb *_ResponderBase) WrapSubtreeSegmentHandlers(
 // on the request's method. Unlike the segment handler, the request handler is
 // called only when the resource is going to handle the request.
 func (rb *_ResponderBase) WrapSubtreeRequestHandlers(
-	mwfs ...MiddlewareFunc,
+	mws ...Middleware,
 ) error {
 	var err = traverseAndCall(
 		rb._Resources(),
 		func(_r _Responder) error {
-			var err = _r.WrapRequestHandler(mwfs...)
+			var err = _r.WrapRequestHandler(mws...)
 			// Subtree below hosts cannot return the ErrDormantHost.
 			// It's enough to check the ErrDormantResource.
 			if errors.Is(err, ErrDormantResource) {
@@ -1964,9 +1915,9 @@ func (rb *_ResponderBase) WrapSubtreeRequestHandlers(
 // custom", "*" or "!".
 func (rb *_ResponderBase) WrapSubtreeHandlersOf(
 	methods string,
-	mwfs ...MiddlewareFunc,
+	mws ...Middleware,
 ) error {
-	var err = wrapEveryHandlerOf(methods, rb._Resources(), mwfs...)
+	var err = wrapEveryHandlerOf(methods, rb._Resources(), mws...)
 	if err != nil {
 		return newErr("%w", err)
 	}
@@ -1988,7 +1939,7 @@ func (rb *_ResponderBase) _Resources() []_Responder {
 
 func (rb *_ResponderBase) setRequestHandlerBase(rhb *_RequestHandlerBase) {
 	rb._RequestHandlerBase = rhb
-	rb.requestHandler = HandlerFunc(rhb.handleRequest)
+	rb.requestHandler = rhb.handleRequest
 }
 
 func (rb *_ResponderBase) requestHandlerBase() *_RequestHandlerBase {
@@ -2063,7 +2014,7 @@ func (rb *_ResponderBase) passRequestToChildResource(
 		return false
 	}
 
-	var handled = notFoundResourceHandler.ServeHTTP(w, r, args)
+	var handled = notFoundResourceHandler(w, r, args)
 
 	args.currentPathSegmentIdx = currentPathSegmentIdx
 	return handled

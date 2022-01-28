@@ -11,16 +11,16 @@ import (
 
 // --------------------------------------------------
 
-type MiddlewareFunc func(next Handler) HandlerFunc
+type Middleware func(next Handler) Handler
 
-// MwFn converts the middleware that takes an http.Handler and returns an
-// http.Handler to the MiddlewareFunc.
-func MwFn(mw func(http.Handler) http.Handler) MiddlewareFunc {
-	return func(next Handler) HandlerFunc {
+// Mw converts the middleware that takes an http.Handler and returns an
+// http.Handler to the Middleware.
+func Mw(mw func(http.Handler) http.Handler) Middleware {
+	return func(next Handler) Handler {
 		var h http.Handler = http.HandlerFunc(
 			func(w http.ResponseWriter, r *http.Request) {
 				var args = r.Context().Value(argsKey).(*Args)
-				args.handled = next.ServeHTTP(w, r, args)
+				args.handled = next(w, r, args)
 			},
 		)
 
@@ -43,7 +43,7 @@ func MwFn(mw func(http.Handler) http.Handler) MiddlewareFunc {
 func wrapEveryHandlerOf(
 	methods string,
 	_rs []_Responder,
-	mwfs ...MiddlewareFunc,
+	mws ...Middleware,
 ) error {
 	var ms = toUpperSplitByCommaSpace(methods)
 	if len(ms) == 0 {
@@ -56,7 +56,7 @@ func wrapEveryHandlerOf(
 			if _r.canHandleRequest() {
 				var rhb = _r.requestHandlerBase()
 				for _, m := range ms {
-					var err = rhb.wrapHandlerOf(m, mwfs...)
+					var err = rhb.wrapHandlerOf(m, mws...)
 					if err != nil {
 						// If the _Resource can handle a request, then
 						// ErrNoHandlerExists is returned only when there
