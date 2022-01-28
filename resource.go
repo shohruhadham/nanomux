@@ -158,12 +158,12 @@ func CreateDormantResourceUsingConfig(
 //
 // The Impl is, in a sense, the implementation of the resource. It is an
 // instance of a type with methods to handle HTTP requests. Methods must have
-// the signature of the HandlerFunc and must start with the "Handle"
-// prefix. The remaining part of any such method's name is considered an HTTP
-// method. For example, HandleGet and HandleCustom are considered the handlers
-// of the GET and CUSTOM HTTP methods, respectively. If the value of the impl
-// has the HandleNotAllowedMethod method, then it's used as the handler of the
-// not allowed methods.
+// the signature of the Handler and must start with the "Handle" prefix. The
+// remaining part of any such method's name is considered an HTTP method. For
+// example, HandleGet and HandleCustom are considered the handlers of the GET
+// and CUSTOM HTTP methods, respectively. If the value of the impl has the
+// HandleNotAllowedMethod method, then it's used as the handler of the not
+// allowed HTTP methods.
 //
 // Example:
 // 	type ExampleResource struct{}
@@ -213,12 +213,12 @@ func CreateResource(urlTmplStr string, impl Impl) (*Resource, error) {
 //
 // The Impl is, in a sense, the implementation of the resource. It is an
 // instance of a type with methods to handle HTTP requests. Methods must have
-// the signature of the HandlerFunc and must start with the "Handle"
-// prefix. The remaining part of any such method's name is considered an HTTP
-// method. For example, HandleGet and HandleCustom are considered the handlers
-// of the GET and CUSTOM HTTP methods, respectively. If the value of the impl
-// has the HandleNotAllowedMethod method, then it's used as the handler of the
-// not allowed methods.
+// the signature of the Handler and must start with the "Handle" prefix. The
+// remaining part of any such method's name is considered an HTTP method. For
+// example, HandleGet and HandleCustom are considered the handlers of the GET
+// and CUSTOM HTTP methods, respectively. If the value of the impl has the
+// HandleNotAllowedMethod method, then it's used as the handler of the not
+// allowed HTTP methods.
 //
 // Example:
 // 	type ExampleResource struct{}
@@ -334,12 +334,12 @@ func NewDormantResourceUsingConfig(urlTmplStr string, config Config) *Resource {
 //
 // The Impl is, in a sense, the implementation of the resource. It is an
 // instance of a type with methods to handle HTTP requests. Methods must have
-// the signature of the HandlerFunc and must start with the "Handle"
-// prefix. The remaining part of any such method's name is considered an HTTP
-// method. For example, HandleGet and HandleCustom are considered the handlers
-// of the GET and CUSTOM HTTP methods, respectively. If the value of the impl
-// has the HandleNotAllowedMethod method, then it's used as the handler of the
-// not allowed methods.
+// the signature of the Handler and must start with the "Handle" prefix. The
+// remaining part of any such method's name is considered an HTTP method. For
+// example, HandleGet and HandleCustom are considered the handlers of the GET
+// and CUSTOM HTTP methods, respectively. If the value of the impl has the
+// HandleNotAllowedMethod method, then it's used as the handler of the not
+// allowed HTTP methods.
 //
 // Example:
 // 	type ExampleResource struct{}
@@ -388,12 +388,12 @@ func NewResource(urlTmplStr string, impl Impl) *Resource {
 //
 // The Impl is, in a sense, the implementation of the resource. It is an
 // instance of a type with methods to handle HTTP requests. Methods must have
-// the signature of the HandlerFunc and must start with the "Handle"
-// prefix. The remaining part of any such method's name is considered an HTTP
-// method. For example, HandleGet and HandleCustom are considered the handlers
-// of the GET and CUSTOM HTTP methods, respectively. If the value of the impl
-// has the HandleNotAllowedMethod method, then it's used as the handler of the
-// not allowed methods.
+// the signature of the Handler and must start with the "Handle" prefix. The
+// remaining part of any such method's name is considered an HTTP method. For
+// example, HandleGet and HandleCustom are considered the handlers of the GET
+// and CUSTOM HTTP methods, respectively. If the value of the impl has the
+// HandleNotAllowedMethod method, then it's used as the handler of the not
+// allowed HTTP methods.
 //
 // Example:
 // 	type ExampleResource struct{}
@@ -527,7 +527,7 @@ func (rb *Resource) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	notFoundResourceHandler.ServeHTTP(w, r, args)
+	notFoundResourceHandler(w, r, args)
 	putArgsInThePool(args)
 }
 
@@ -579,13 +579,13 @@ func (rb *Resource) handleOrPassRequest(
 		// If rb is a subtree handler that cannot handle a request, this
 		// prevents other subtree handlers above the hierarchy from handling
 		// the request.
-		return notFoundResourceHandler.ServeHTTP(w, r, args)
+		return notFoundResourceHandler(w, r, args)
 	}
 
 	var newURL *url.URL
 	if r.TLS == nil && rb.IsSecure() {
 		if !rb.RedirectsInsecureRequest() {
-			return notFoundResourceHandler.ServeHTTP(w, r, args)
+			return notFoundResourceHandler(w, r, args)
 		}
 
 		newURL = cloneRequestURL(r)
@@ -603,7 +603,7 @@ func (rb *Resource) handleOrPassRequest(
 	if lastSegment && !rb.IsLenientOnTrailingSlash() {
 		if rb.HasTrailingSlash() && !args.pathHasTrailingSlash() {
 			if rb.IsStrictOnTrailingSlash() {
-				return notFoundResourceHandler.ServeHTTP(w, r, args)
+				return notFoundResourceHandler(w, r, args)
 			}
 
 			if newURL == nil {
@@ -613,7 +613,7 @@ func (rb *Resource) handleOrPassRequest(
 			newURL.Path += "/"
 		} else if !rb.HasTrailingSlash() && args.pathHasTrailingSlash() {
 			if rb.IsStrictOnTrailingSlash() {
-				return notFoundResourceHandler.ServeHTTP(w, r, args)
+				return notFoundResourceHandler(w, r, args)
 			}
 
 			if newURL == nil {
@@ -625,7 +625,7 @@ func (rb *Resource) handleOrPassRequest(
 	}
 
 	if newURL != nil {
-		return permanentRedirect(
+		return permanentRedirectHandler(
 			w,
 			r,
 			newURL.String(),

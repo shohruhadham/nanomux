@@ -9,6 +9,8 @@ import (
 	"testing"
 )
 
+// --------------------------------------------------
+
 func TestSimilarity_Err(t *testing.T) {
 	var cases = []struct {
 		name    string

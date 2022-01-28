@@ -4,12 +4,10 @@
 package nanomux
 
 import (
-	"fmt"
 	"net/http"
 	"net/url"
 	"path"
 	"regexp"
-	"runtime"
 	"strings"
 	"sync"
 )
@@ -597,13 +595,13 @@ func (args *Args) Get(key interface{}) interface{} {
 type _ArgsKey struct{}
 
 // argsKey can be used to retrieve *Args from the request's context in the
-// http.Handler or http.HandlerFunc after the conversion to the Handler or
-// HandlerFunc with the HR and HrFn functions.
+// http.Handler or http.HandlerFunc after the conversion to the Handler with
+// the HR or FnHr functions.
 var argsKey interface{} = _ArgsKey{}
 
 // ArgsFrom is a function to retrieve the argument *Args in the http.Handler
-// or http.HandlerFunc after the conversion to the Handler or HandlerFunc
-// with the Hr and HrFn functions.
+// or http.HandlerFunc after the conversion to the Handler with the Hr or FnHr
+// functions.
 func ArgsFrom(r *http.Request) *Args {
 	var args, _ = r.Context().Value(argsKey).(*Args)
 	return args
@@ -657,32 +655,6 @@ func getArgsFromThePool(url *url.URL, _r _Responder) *Args {
 	args._r = _r
 
 	return args
-}
-
-// --------------------------------------------------
-
-func newErr(description string, args ...interface{}) error {
-	if pc, _, _, ok := runtime.Caller(1); ok {
-		if fn := runtime.FuncForPC(pc); fn != nil {
-			var strb strings.Builder
-			strb.WriteString("-> [")
-
-			var fnName = fn.Name()
-			var idx = strings.LastIndexByte(fnName, '.')
-			if idx < 0 {
-				strb.WriteString(fnName)
-			} else {
-				strb.WriteString(fnName[idx+1:])
-			}
-
-			strb.WriteString("] ")
-			strb.WriteString(description)
-
-			return fmt.Errorf(strb.String(), args...)
-		}
-	}
-
-	return fmt.Errorf(description, args...)
 }
 
 // --------------------------------------------------

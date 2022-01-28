@@ -124,12 +124,12 @@ func CreateDormantHostUsingConfig(
 //
 // The Impl is, in a sense, the implementation of the host. It is an instance
 // of a type with methods to handle HTTP requests. Methods must have the
-// signature of the HandlerFunc and must start with the "Handle" prefix.
+// signature of the Handler and must start with the "Handle" prefix.
 // The remaining part of any such method's name is considered an HTTP method.
 // For example, HandleGet and HandleCustom are considered the handlers of the
 // GET and CUSTOM HTTP methods, respectively. If the value of the impl has the
 // HandleNotAllowedMethod method, then it's used as the handler of the not
-// allowed methods.
+// allowed HTTP methods.
 //
 // Example:
 // 	type ExampleHost struct{}
@@ -160,12 +160,12 @@ func CreateHost(hostTmplStr string, impl Impl) (*Host, error) {
 //
 // The Impl is, in a sense, the implementation of the host. It is an instance
 // of a type with methods to handle HTTP requests. Methods must have the
-// signature of the HandlerFunc and must start with the "Handle" prefix.
+// signature of the Handler and must start with the "Handle" prefix.
 // The remaining part of any such method's name is considered an HTTP method.
 // For example, HandleGet and HandleCustom are considered the handlers of the
 // GET and CUSTOM HTTP methods, respectively. If the value of the impl has the
 // HandleNotAllowedMethod method, then it's used as the handler of the not
-// allowed methods.
+// allowed HTTP methods.
 //
 // Example:
 // 	type ExampleHost struct{}
@@ -240,12 +240,12 @@ func NewDormantHostUsingConfig(hostTmplStr string, config Config) *Host {
 //
 // The Impl is, in a sense, the implementation of the host. It is an instance
 // of a type with methods to handle HTTP requests. Methods must have the
-// signature of the HandlerFunc and must start with the "Handle" prefix.
+// signature of the Handler and must start with the "Handle" prefix.
 // The remaining part of any such method's name is considered an HTTP method.
 // For example, HandleGet and HandleCustom are considered the handlers of the
 // GET and CUSTOM HTTP methods, respectively. If the value of the impl has the
 // HandleNotAllowedMethod method, then it's used as the handler of the not
-// allowed methods.
+// allowed HTTP methods.
 //
 // Example:
 // 	type ExampleHost struct{}
@@ -275,12 +275,12 @@ func NewHost(hostTmplStr string, impl Impl) *Host {
 //
 // The Impl is, in a sense, the implementation of the host. It is an instance
 // of a type with methods to handle HTTP requests. Methods must have the
-// signature of the HandlerFunc and must start with the "Handle" prefix.
+// signature of the Handler and must start with the "Handle" prefix.
 // The remaining part of any such method's name is considered an HTTP method.
 // For example, HandleGet and HandleCustom are considered the handlers of the
 // GET and CUSTOM HTTP methods, respectively. If the value of the impl has the
 // HandleNotAllowedMethod method, then it's used as the handler of the not
-// allowed methods.
+// allowed HTTP methods.
 //
 // Example:
 // 	type ExampleHost struct{}
@@ -340,7 +340,7 @@ func (hb *Host) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	notFoundResourceHandler.ServeHTTP(w, r, args)
+	notFoundResourceHandler(w, r, args)
 	putArgsInThePool(args)
 }
 
@@ -381,18 +381,18 @@ func (hb *Host) handleOrPassRequest(
 		args._r = hb.derived
 
 		if !hb.IsSubtreeHandler() {
-			return notFoundResourceHandler.ServeHTTP(w, r, args)
+			return notFoundResourceHandler(w, r, args)
 		}
 	}
 
 	if !hb.canHandleRequest() {
-		return notFoundResourceHandler.ServeHTTP(w, r, args)
+		return notFoundResourceHandler(w, r, args)
 	}
 
 	var newURL *url.URL
 	if r.TLS == nil && hb.IsSecure() {
 		if !hb.RedirectsInsecureRequest() {
-			return notFoundResourceHandler.ServeHTTP(w, r, args)
+			return notFoundResourceHandler(w, r, args)
 		}
 
 		newURL = cloneRequestURL(r)
@@ -411,7 +411,7 @@ func (hb *Host) handleOrPassRequest(
 	if len(args.path) < 2 && !hb.IsLenientOnTrailingSlash() {
 		if hb.HasTrailingSlash() && args.path != "/" {
 			if hb.IsStrictOnTrailingSlash() {
-				return notFoundResourceHandler.ServeHTTP(w, r, args)
+				return notFoundResourceHandler(w, r, args)
 			}
 
 			if newURL == nil {
@@ -421,7 +421,7 @@ func (hb *Host) handleOrPassRequest(
 			newURL.Path += "/"
 		} else if !hb.HasTrailingSlash() && args.path == "/" {
 			if hb.IsStrictOnTrailingSlash() {
-				return notFoundResourceHandler.ServeHTTP(w, r, args)
+				return notFoundResourceHandler(w, r, args)
 			}
 
 			if newURL == nil {
@@ -433,7 +433,7 @@ func (hb *Host) handleOrPassRequest(
 	}
 
 	if newURL != nil {
-		return permanentRedirect(
+		return permanentRedirectHandler(
 			w,
 			r,
 			newURL.String(),

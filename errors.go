@@ -3,7 +3,13 @@
 
 package nanomux
 
-import "fmt"
+import (
+	"fmt"
+	"runtime"
+	"strings"
+)
+
+// --------------------------------------------------
 
 var (
 	// ErrNilArgument is returned when one of the function arguments is nil.
@@ -166,3 +172,29 @@ var (
 	ErrDifferentValueNames = fmt.Errorf("different value names")
 	ErrDifferentNames      = fmt.Errorf("different names")
 )
+
+// --------------------------------------------------
+
+func newErr(description string, args ...interface{}) error {
+	if pc, _, _, ok := runtime.Caller(1); ok {
+		if fn := runtime.FuncForPC(pc); fn != nil {
+			var strb strings.Builder
+			strb.WriteString("-> [")
+
+			var fnName = fn.Name()
+			var idx = strings.LastIndexByte(fnName, '.')
+			if idx < 0 {
+				strb.WriteString(fnName)
+			} else {
+				strb.WriteString(fnName[idx+1:])
+			}
+
+			strb.WriteString("] ")
+			strb.WriteString(description)
+
+			return fmt.Errorf(strb.String(), args...)
+		}
+	}
+
+	return fmt.Errorf(description, args...)
+}

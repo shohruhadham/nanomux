@@ -10,8 +10,11 @@ import (
 	"testing"
 )
 
+// --------------------------------------------------
+
 func setHandlers(t *testing.T, h *Host) {
-	if err := h.SetHandlerFor("get post custom", HandlerFunc(
+	if err := h.SetHandlerFor(
+		"get post custom",
 		func(w http.ResponseWriter, r *http.Request, args *Args) bool {
 			var hasValue, ok = args.ResponderSharedData().(bool)
 			if ok && hasValue {
@@ -53,7 +56,7 @@ func setHandlers(t *testing.T, h *Host) {
 			w.Write([]byte(strb.String()))
 			return true
 		},
-	)); err != nil {
+	); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -759,7 +762,7 @@ func TestHostBase_ServeHTTP(t *testing.T) {
 		})
 	}
 
-	var customMethodMw = func(next Handler) HandlerFunc {
+	var customMethodMw = func(next Handler) Handler {
 		return func(
 			w http.ResponseWriter,
 			r *http.Request,
@@ -782,7 +785,7 @@ func TestHostBase_ServeHTTP(t *testing.T) {
 		}
 	}
 
-	var notAlloweddMethodsMw = func(next Handler) HandlerFunc {
+	var notAlloweddMethodsMw = func(next Handler) Handler {
 		return func(
 			w http.ResponseWriter,
 			r *http.Request,
