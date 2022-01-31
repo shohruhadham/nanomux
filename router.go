@@ -228,6 +228,45 @@ func (ro *Router) registered_Responder(urlTmplStr string) (
 
 // -------------------------
 
+// SetSharedDataAt sets the shared data for the existing host or resource at the
+// URL.
+//
+// The scheme and trailing slash properties of the host or resource are compared
+// with the values given in the URL template. If there is a difference, the
+// method returns an error.
+func (ro *Router) SetSharedDataAt(urlTmplStr string, data interface{}) error {
+	var _r, _, err = ro.registered_Responder(urlTmplStr)
+	if err != nil {
+		return newErr("%w", err)
+	}
+
+	if _r == nil {
+		return newErr("%w", ErrNonExistentResource)
+	}
+
+	_r.SetSharedData(data)
+	return nil
+}
+
+// SharedDataAt returns the shared data of the existing host or resource at the
+// URL.
+//
+// The scheme and trailing slash properties of the host or resource are compared
+// with the values given in the URL template. If there is a difference, the
+// method returns an error. On error, the returned config is not valid.
+func (ro *Router) SharedDataAt(urlTmplStr string) (interface{}, error) {
+	var _r, _, err = ro.registered_Responder(urlTmplStr)
+	if err != nil {
+		return Config{}, newErr("%w", err)
+	}
+
+	if _r == nil {
+		return Config{}, newErr("%w", ErrNonExistentResource)
+	}
+
+	return _r.SharedData(), nil
+}
+
 // SetConfigurationAt sets the config for the existing host or resource at the
 // URL. If the host or resource was configured before, it will be reconfigured.
 //
@@ -1412,6 +1451,17 @@ func (ro *Router) WrapRequestPasser(mws ...Middleware) error {
 }
 
 // -------------------------
+
+// SetSharedDataForAll sets the shared data for all the hosts and resources.
+func (ro *Router) SetSharedDataForAll(data interface{}) {
+	traverseAndCall(
+		ro._Responders(),
+		func(_r _Responder) error {
+			_r.SetSharedData(data)
+			return nil
+		},
+	)
+}
 
 // SetConfigurationForAll sets the config for all the hosts and resources.
 func (ro *Router) SetConfigurationForAll(config Config) {
