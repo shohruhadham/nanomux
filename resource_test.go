@@ -397,17 +397,20 @@ func TestResourceBase_configFlags(t *testing.T) {
 	}
 }
 
-func TestResourceBase_Configure(t *testing.T) {
+func TestResourceBase_Configuring(t *testing.T) {
 	var r = NewDormantResourceUsingConfig("/", Config{SubtreeHandler: true})
-	r.Configure(Config{RedirectInsecureRequest: true, HandleThePathAsIs: true})
-	if r.Config() != (Config{
+	r.SetConfiguration(
+		Config{RedirectInsecureRequest: true, HandleThePathAsIs: true},
+	)
+
+	if r.Configuration() != (Config{
 		Secure:                  true,
 		RedirectInsecureRequest: true,
 		LeniencyOnTrailingSlash: true,
 		LeniencyOnUncleanPath:   true,
 		HandleThePathAsIs:       true,
 	}) {
-		t.Fatalf("ResourceBase_Configure() has failed.")
+		t.Fatalf("ResourceBase_Configuring() has failed.")
 	}
 }
 
@@ -2632,7 +2635,7 @@ func TestResourceBase_HasAnyChildResources(t *testing.T) {
 	}
 }
 
-func TestResourceBase_SetImplementation(t *testing.T) {
+func TestResourceBase_SetImpl(t *testing.T) {
 	var r = NewDormantResource("/")
 	var impl = &implType{}
 
@@ -2641,12 +2644,12 @@ func TestResourceBase_SetImplementation(t *testing.T) {
 
 	var err = r.SetImplementation(impl)
 	if err != nil {
-		t.Fatalf("ResourceBase.SetImplementation() err = %v, want nil", err)
+		t.Fatalf("ResourceBase.SetImpl() err = %v, want nil", err)
 	}
 
 	if n := len(r._RequestHandlerBase.mhPairs); n != nHandlers {
 		t.Fatalf(
-			"ResourceBase.SetImplementation() len(handlers) = %d, want %d",
+			"ResourceBase.SetImpl() len(handlers) = %d, want %d",
 			n,
 			nHandlers,
 		)
@@ -2654,12 +2657,12 @@ func TestResourceBase_SetImplementation(t *testing.T) {
 
 	if r._RequestHandlerBase.notAllowedHTTPMethodsHandler == nil {
 		t.Fatalf(
-			"ResourceBase.SetImplementation() failed to set not allowed methods' handler",
+			"ResourceBase.SetImpl() failed to set not allowed methods' handler",
 		)
 	}
 }
 
-func TestResourceBase_Implementation(t *testing.T) {
+func TestResourceBase_Impl(t *testing.T) {
 	var r = NewDormantResource("/")
 	var rh = &implType{}
 
@@ -2846,20 +2849,20 @@ func TestResourceBase_HandlerOf(t *testing.T) {
 	}
 }
 
-func TestResourceBase_WrapSegmentHandler(t *testing.T) {
+func TestResourceBase_WrapRequestPasser(t *testing.T) {
 	var (
 		r    = NewDormantResource("static")
 		strb strings.Builder
 	)
 
-	r.segmentHandler = Handler(
+	r.requestPasser = Handler(
 		func(http.ResponseWriter, *http.Request, *Args) bool {
 			strb.WriteByte('A')
 			return true
 		},
 	)
 
-	var err = r.WrapSegmentHandler(
+	var err = r.WrapRequestPasser(
 		func(next Handler) Handler {
 			return func(
 				w http.ResponseWriter,
@@ -2883,17 +2886,17 @@ func TestResourceBase_WrapSegmentHandler(t *testing.T) {
 	)
 
 	if err != nil {
-		t.Fatalf("ResourceBase.WrapSegmentHandler() = %v, want nil", err)
+		t.Fatalf("ResourceBase.WrapRequestPasser() = %v, want nil", err)
 	}
 
-	r.segmentHandler(nil, nil, nil)
+	r.requestPasser(nil, nil, nil)
 	if strb.String() != "CBA" {
 		t.Fatalf(
-			"ResourceBase.WrapSegmentHandler() failed to wrap resource's segment handler",
+			"ResourceBase.WrapRequestPasser() failed to wrap resource's request passer",
 		)
 	}
 
-	err = r.WrapSegmentHandler(
+	err = r.WrapRequestPasser(
 		func(next Handler) Handler {
 			return func(
 				w http.ResponseWriter,
@@ -2907,14 +2910,14 @@ func TestResourceBase_WrapSegmentHandler(t *testing.T) {
 	)
 
 	if err != nil {
-		t.Fatalf("ResourceBase.WrapSegmentHandler() = %v, want nil", err)
+		t.Fatalf("ResourceBase.WrapRequestPasser() = %v, want nil", err)
 	}
 
 	strb.Reset()
-	r.segmentHandler(nil, nil, nil)
+	r.requestPasser(nil, nil, nil)
 	if strb.String() != "DCBA" {
 		t.Fatalf(
-			"ResourceBase.WrapSegmentHandler() failed to wrap resource's segment handler",
+			"ResourceBase.WrapRequestPasser() failed to wrap resource's request passer",
 		)
 	}
 }
@@ -3088,7 +3091,7 @@ func TestResourceBase_WrapHandlerOf(t *testing.T) {
 	}
 }
 
-func TestResourceBase_ConfigurePath(t *testing.T) {
+func TestResourceBase_SetConfigurationAt(t *testing.T) {
 	var root = NewDormantResource("/")
 	var r00, err = root.Resource("r00")
 	if err != nil {
@@ -3134,10 +3137,10 @@ func TestResourceBase_ConfigurePath(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			var err = root.ConfigurePath(c.path, config)
+			var err = root.SetConfigurationAt(c.path, config)
 			if (err != nil) != c.wantErr {
 				t.Fatalf(
-					"ResourceBase.ConfigurePath() = %v, wantErr = %t",
+					"ResourceBase.SetConfigurationAt() = %v, wantErr = %t",
 					err,
 					c.wantErr,
 				)
@@ -3147,14 +3150,14 @@ func TestResourceBase_ConfigurePath(t *testing.T) {
 				return
 			}
 
-			if c.r.Config() != config {
-				t.Fatalf("ResourceBase.ConfigurePath() has failed")
+			if c.r.Configuration() != config {
+				t.Fatalf("ResourceBase.SetConfigurationAt() has failed")
 			}
 		})
 	}
 }
 
-func TestResourceBase_PathConfig(t *testing.T) {
+func TestResourceBase_ConfigurationAt(t *testing.T) {
 	var root = NewDormantResource("/")
 
 	var config = Config{
@@ -3188,16 +3191,16 @@ func TestResourceBase_PathConfig(t *testing.T) {
 					t.Fatal(err)
 				}
 
-				err = root.ConfigurePath(c.path, config)
+				err = root.SetConfigurationAt(c.path, config)
 				if (err != nil) != c.wantErr {
 					t.Fatal(err)
 				}
 			}
 
-			var gotConfig, err = root.PathConfig(c.pathToCheck)
+			var gotConfig, err = root.ConfigurationAt(c.pathToCheck)
 			if (err != nil) != c.wantErr {
 				t.Fatalf(
-					"ResourceBase.PathConfig() = %v, wantErr = %t",
+					"ResourceBase.ConfigurationAt() = %v, wantErr = %t",
 					err,
 					c.wantErr,
 				)
@@ -3205,14 +3208,14 @@ func TestResourceBase_PathConfig(t *testing.T) {
 
 			if !c.wantErr {
 				if gotConfig != config {
-					t.Fatalf("ResourceBase.PathConfig() has failed")
+					t.Fatalf("ResourceBase.ConfigurationAt() has failed")
 				}
 			}
 		})
 	}
 }
 
-func TestResourceBase_SetImplementationAt(t *testing.T) {
+func TestResourceBase_SetImplemenetationAt(t *testing.T) {
 	var root = NewDormantResource("/")
 	var impl = &implType{}
 	var ms = toUpperSplitByCommaSpace(rhTypeHTTPMethods)
@@ -3468,7 +3471,7 @@ func TestResourceBase_PathHandlerOf(t *testing.T) {
 	}
 }
 
-func TestResourceBase_WrapPathSegmentHandler(t *testing.T) {
+func TestResourceBase_WrapRequestPasserAt(t *testing.T) {
 	var root = NewDormantResource("/")
 
 	var strb strings.Builder
@@ -3529,10 +3532,10 @@ func TestResourceBase_WrapPathSegmentHandler(t *testing.T) {
 				}
 			}
 
-			err = root.WrapPathSegmentHandler(c.path, mws...)
+			err = root.WrapRequestPasserAt(c.path, mws...)
 			if (err != nil) != c.wantErr {
 				t.Fatalf(
-					"ResourceBase.WrapPathSegmentHandler() err = %v, wantErr = %t",
+					"ResourceBase.WrapRequestPasserAt() err = %v, wantErr = %t",
 					err,
 					c.wantErr,
 				)
@@ -3546,7 +3549,7 @@ func TestResourceBase_WrapPathSegmentHandler(t *testing.T) {
 
 				var str = strb.String()
 				if str != c.wantStr {
-					t.Fatalf("ResourceBase.WrapPathSegmentHandler() gotStr = %s, want = %s",
+					t.Fatalf("ResourceBase.WrapRequestPasserAt() gotStr = %s, want = %s",
 						str,
 						c.wantStr,
 					)
@@ -3556,7 +3559,7 @@ func TestResourceBase_WrapPathSegmentHandler(t *testing.T) {
 	}
 }
 
-func TestResourceBase_WrapPathRequestHandler(t *testing.T) {
+func TestResourceBase_WrapRequestHandlerAt(t *testing.T) {
 	var root = NewDormantResource("/")
 
 	var strb strings.Builder
@@ -3615,7 +3618,7 @@ func TestResourceBase_WrapPathRequestHandler(t *testing.T) {
 				}
 			}
 
-			err = root.WrapPathRequestHandler(c.path, mws...)
+			err = root.WrapRequestHandlerAt(c.path, mws...)
 			if (err != nil) != c.wantErr {
 				t.Fatalf(
 					"ResourceBase.WrapPathRequestHandler() err = %v, wantErr = %t",
@@ -3788,7 +3791,7 @@ func TestResourceBasse_WrapPathHandlerOf(t *testing.T) {
 	}
 }
 
-func TestResourceBase_ConfigureSubtree(t *testing.T) {
+func TestResourceBase_SetConfigurationForSubtree(t *testing.T) {
 	var root = NewDormantResource("/")
 	var config = Config{RedirectInsecureRequest: true, HandleThePathAsIs: true}
 
@@ -3814,7 +3817,7 @@ func TestResourceBase_ConfigureSubtree(t *testing.T) {
 		}
 	}
 
-	root.ConfigureSubtree(config)
+	root.SetConfigurationForSubtree(config)
 
 	// Because the RedirectInsecureRequest and HandleThePathAsIs are true, the
 	// returned config's Secure, LeniencyOnTslash and LeniencyOnUncleanPath
@@ -3833,7 +3836,7 @@ func TestResourceBase_ConfigureSubtree(t *testing.T) {
 			t.Fatal(ErrNonExistentResource)
 		}
 
-		var gotConfig = r.Config()
+		var gotConfig = r.Configuration()
 		if gotConfig != config {
 			t.Fatalf(
 				"ResourceBase.ConfigureSubtree has failed. Got config = %v, want = %v",
@@ -3854,14 +3857,14 @@ func TestResourceBase_ConfigureSubtree(t *testing.T) {
 				t.Fatal(ErrNonExistentResource)
 			}
 
-			if r.Config() != config {
+			if r.Configuration() != config {
 				t.Fatalf("ResourceBase.ConfigureSubtree() has failed")
 			}
 		})
 	}
 }
 
-func TestResourceBase_WrapSubtreeSegmentHandlers(t *testing.T) {
+func TestResourceBase_WrapSubtreeRequestPassers(t *testing.T) {
 	var root = NewDormantResource("/")
 	var cases = []struct{ name, urlTmpl, requestURL, result string }{
 		{
@@ -3934,10 +3937,10 @@ func TestResourceBase_WrapSubtreeSegmentHandlers(t *testing.T) {
 		},
 	}
 
-	err = root.WrapSubtreeSegmentHandlers(mws...)
+	err = root.WrapSubtreeRequestPassers(mws...)
 	if err != nil {
 		t.Fatalf(
-			"ResourceBase.WrapSubtreeSegmentHandlers() err = %v, want nil",
+			"ResourceBase.WrapSubtreeRequestPassers() err = %v, want nil",
 			err,
 		)
 	}
@@ -3950,7 +3953,7 @@ func TestResourceBase_WrapSubtreeSegmentHandlers(t *testing.T) {
 		root.ServeHTTP(rr, r)
 		if result := strb.String(); result != c.result {
 			t.Fatalf(
-				"ResourceBase.WrapSubtreeSegmentHandlers() %q result = %s, want %s",
+				"ResourceBase.WrapSubtreeRequestPassers() %q result = %s, want %s",
 				c.name,
 				result,
 				c.result,
@@ -4288,7 +4291,7 @@ func TestResourceBase_WrapSubtreeHandlersOf(t *testing.T) {
 	}
 }
 
-func TestResourceBase__Resources(t *testing.T) {
+func TestResourceBase__Responders(t *testing.T) {
 	var (
 		r   = NewDormantResource("/")
 		rs  = make([]*Resource, 5)
@@ -4320,7 +4323,7 @@ func TestResourceBase__Resources(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var gotRs = r._Resources()
+	var gotRs = r._Responders()
 	if len(gotRs) != 5 {
 		t.Fatalf("ResourceBase._Resources(): len(got) = %d, want 5", len(gotRs))
 	}

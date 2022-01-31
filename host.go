@@ -30,7 +30,7 @@ func createDormantHost(tmpl *Template) (*Host, error) {
 	var h = &Host{}
 	h.derived = h
 	h.tmpl = tmpl
-	h.segmentHandler = h.passRequestToChildResource
+	h.requestPasser = h.passRequest
 	return h, nil
 }
 
@@ -82,7 +82,7 @@ func createHost(tmplStr string, impl Impl, config *Config) (*Host, error) {
 
 	h.derived = h
 	h.tmpl = tmpl
-	h.segmentHandler = h.passRequestToChildResource
+	h.requestPasser = h.passRequest
 	return h, nil
 }
 
@@ -358,7 +358,7 @@ func (hb *Host) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // redirecting it to a URL with the matching trailing slash.
 //
 // When the request's URL contains path segments, the function tries to pass the
-// request to a child resource by calling the host's segment handler. If there
+// request to a child resource by calling the host's request passer. If there
 // is no matching child resource and the host was configured as a subtree
 // handler, the request is handled by the host itself, otherwise a "404 Not
 // Found" status code is returned.
@@ -373,7 +373,7 @@ func (hb *Host) handleOrPassRequest(
 		}
 
 		args.nextPathSegment() // First call returns '/'.
-		if hb.segmentHandler(w, r, args) {
+		if hb.requestPasser(w, r, args) {
 			return true
 		}
 

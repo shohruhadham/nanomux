@@ -505,7 +505,7 @@ func (args *Args) HostPathValues() HostPathValues {
 // RemainingPath returns the escaped remaining path of the request's URL
 // that's below the current responder's segment. The remaining path doesn't
 // include the host, even when the method is called from the middleware of
-// the router's segment handler.
+// the router's request passer.
 func (args *Args) RemainingPath() string {
 	if args.reachedTheLastPathSegment() {
 		return ""
@@ -683,7 +683,7 @@ func traverseAndCall(rs []_Responder, f func(_Responder) error) error {
 				return err
 			}
 
-			irs = crs[i]._Resources()
+			irs = crs[i]._Responders()
 			if irs != nil {
 				n.next = &node{rs: irs}
 				n = n.next

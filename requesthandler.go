@@ -12,10 +12,36 @@ import (
 
 // --------------------------------------------------
 
+// Handler is the type of function used for handling HTTP requests depending
+// on their HTTP method.
 type Handler func(w http.ResponseWriter, r *http.Request, args *Args) bool
 
-// Hr converts an http.Handler to a Handler.
+// Hr converts an http.Handler to a nanomux.Handler. Hr must be used when the
+// http.Handler doesn't need an *Args argument.
 func Hr(h http.Handler) Handler {
+	return func(w http.ResponseWriter, r *http.Request, args *Args) bool {
+		h.ServeHTTP(w, r)
+		return true
+	}
+}
+
+// FnHr converts an http.HandlerFunc to a nanomux.Handler. FnHr must be used
+// when the htpt.HandlerFunc doesn't need an *Args argument.
+func FnHr(hf http.HandlerFunc) Handler {
+	return func(w http.ResponseWriter, r *http.Request, args *Args) bool {
+		hf(w, r)
+		return true
+	}
+}
+
+// HrWithArgs converts an http.Handler to a nanomux.Handler. HrWithArgs returns
+// a handler that inserts the *Args argument into the request's context. The
+// *Args argument can be retrieved from the request with the ArgsFrom function.
+//
+// When the http.Handler doesn't use the *Args argument, then the Hr converter
+// must be used instead. Because the handler returned from the Hr converter
+// is comparatively faster.
+func HrWithArgs(h http.Handler) Handler {
 	return func(w http.ResponseWriter, r *http.Request, args *Args) bool {
 		var c = context.WithValue(r.Context(), argsKey, args)
 		r = r.WithContext(c)
@@ -24,8 +50,15 @@ func Hr(h http.Handler) Handler {
 	}
 }
 
-// FnHr converts an http.HandlerFunc to a Handler.
-func FnHr(hf http.HandlerFunc) Handler {
+// FnHrWithArgs converts an http.HandlerFunc to a nanomux.Handler.
+// FnHrWithArgs returns a handler that inserts the *Args argument into the
+// request's context. The *Args argument can be retrieved from the request
+// with the ArgsFrom function.
+//
+// When the http.HandlerFunc doesn't use the *Args argument, then the FnHr
+// converter must be used instead. Because the handler returned from the
+// FnHr converter is comparatively faster.
+func FnHrWithArgs(hf http.HandlerFunc) Handler {
 	return func(w http.ResponseWriter, r *http.Request, args *Args) bool {
 		var c = context.WithValue(r.Context(), argsKey, args)
 		r = r.WithContext(c)

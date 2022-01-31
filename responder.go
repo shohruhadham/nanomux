@@ -34,8 +34,8 @@ type _Responder interface {
 	configFlags() _ConfigFlags
 	configCompatibility(secure, tslash bool, cfs *_ConfigFlags) error
 
-	Configure(config Config)
-	Config() Config
+	SetConfiguration(config Config)
+	Configuration() Config
 
 	IsSubtreeHandler() bool
 	IsSecure() bool
@@ -98,41 +98,36 @@ type _Responder interface {
 	SetHandlerFor(methods string, handler Handler) error
 	HandlerOf(method string) Handler
 
-	WrapSegmentHandler(mws ...Middleware) error
+	WrapRequestPasser(mws ...Middleware) error
 	WrapRequestHandler(mws ...Middleware) error
 	WrapHandlerOf(methods string, mws ...Middleware) error
 
 	// -------------------------
 
-	ConfigurePath(pathTmplStr string, config Config) error
-	PathConfig(pathTmplStr string) (Config, error)
+	SetConfigurationAt(pathTmplStr string, config Config) error
+	ConfigurationAt(pathTmplStr string) (Config, error)
 
 	SetImplementationAt(pathTmplStr string, impl Impl) error
 	ImplementationAt(pathTmplStr string) (Impl, error)
 
-	SetPathHandlerFor(
-		methods,
-		pathTmplStr string,
-		handler Handler,
-	) error
-
+	SetPathHandlerFor(methods, pathTmplStr string, handler Handler) error
 	PathHandlerOf(method, pathTmplStr string) (Handler, error)
 
-	WrapPathSegmentHandler(pathTmplStr string, mws ...Middleware) error
-	WrapPathRequestHandler(pathTmplStr string, mws ...Middleware) error
+	WrapRequestPasserAt(pathTmplStr string, mws ...Middleware) error
+	WrapRequestHandlerAt(pathTmplStr string, mws ...Middleware) error
 	WrapPathHandlerOf(methods, pathTmplStr string, mws ...Middleware) error
 
 	// -------------------------
 
-	ConfigureSubtree(config Config)
+	SetConfigurationForSubtree(config Config)
 
-	WrapSubtreeSegmentHandlers(mws ...Middleware) error
+	WrapSubtreeRequestPassers(mws ...Middleware) error
 	WrapSubtreeRequestHandlers(mws ...Middleware) error
 	WrapSubtreeHandlersOf(methods string, mws ...Middleware) error
 
 	// -------------------------
 
-	_Resources() []_Responder
+	_Responders() []_Responder
 	setRequestHandlerBase(rhb *_RequestHandlerBase)
 	requestHandlerBase() *_RequestHandlerBase
 
@@ -141,8 +136,8 @@ type _Responder interface {
 
 // --------------------------------------------------
 
-// _ResponderBase implements the _Resource interface and provides the HostBase
-// and ResourceBase types with common functionality.
+// _ResponderBase implements the _Resource interface and provides the Host and
+// Resource types with common functionality.
 type _ResponderBase struct {
 	derived _Responder // Keeps the reference to the embedding struct.
 	impl    Impl
@@ -154,7 +149,7 @@ type _ResponderBase struct {
 	wildcardResource *Resource
 
 	*_RequestHandlerBase
-	segmentHandler Handler
+	requestPasser  Handler
 	requestHandler Handler
 
 	cfs        _ConfigFlags
@@ -344,14 +339,14 @@ func (rb *_ResponderBase) configCompatibility(
 	return nil
 }
 
-// Configure configures the host or resource with config.
-// If the host or resource has been configured before, it's reconfigured.
-func (rb *_ResponderBase) Configure(config Config) {
+// SetConfiguration sets the config for the host or resource. If the host
+// or resource has been configured before, it's reconfigured.
+func (rb *_ResponderBase) SetConfiguration(config Config) {
 	rb.updateConfigFlags(flagActive | config.asFlags())
 }
 
-// Config returns the configuration of the host or resource.
-func (rb *_ResponderBase) Config() Config {
+// Configuration returns the configuration of the host or resource.
+func (rb *_ResponderBase) Configuration() Config {
 	return rb.cfs.asConfig()
 }
 
@@ -1437,9 +1432,9 @@ func (rb *_ResponderBase) SetImplementation(impl Impl) error {
 	return nil
 }
 
-// Implementation returns the implementation of the host or resource.
-// If the host or resource wasn't created from an Impl or if they have no
-// Impl set, nil is returned.
+// Implementation returns the implementation of the host or resource. If the
+// host or resource wasn't created from an Impl or if they have no Impl set,
+// nil is returned.
 func (rb *_ResponderBase) Implementation() Impl {
 	return rb.impl
 }
@@ -1449,11 +1444,11 @@ func (rb *_ResponderBase) Implementation() Impl {
 // SetHandlerFor sets the handler function as a request handler for the
 // HTTP methods.
 //
-// The argument methods is a case-insensitive list of HTTP methods separated
-// by a comma and/or space. An exclamation mark "!" denotes the handler of the
-// not allowed HTTP methods and must be used alone. Which means that setting the
-// not allowed HTTP methods' handler must happen in a separate call. Examples of
-// methods: "get", "PUT POST", "get, custom" or "!".
+// The argument methods is a list of HTTP methods separated by a comma and/or
+// space. An exclamation mark "!" denotes the handler of the not allowed HTTP
+// methods and must be used alone. Which means that setting the not allowed
+// HTTP methods' handler must happen in a separate call. Examples of methods:
+// "GET", "PUT, POST", "SHARE, LOCK" or "!".
 func (rb *_ResponderBase) SetHandlerFor(
 	methods string,
 	handler Handler,
@@ -1489,7 +1484,7 @@ func (rb *_ResponderBase) SetHandlerFor(
 // resource or the handler, doesn't exist, nil is returned.
 //
 // The argument method is an HTTP method. An exclamation mark "!" can be used
-// to get the handler of HTTP methods that are not allowed. Examples: "get",
+// to get the handler of HTTP methods that are not allowed. Examples: "GET",
 // "POST" or "!".
 func (rb *_ResponderBase) HandlerOf(method string) Handler {
 	if rb._RequestHandlerBase == nil {
@@ -1501,17 +1496,13 @@ func (rb *_ResponderBase) HandlerOf(method string) Handler {
 
 // -------------------------
 
-// WrapSegmentHandler wraps the resource's segment handler with the middlewares
-// in their passed order.
+// WrapRequestPasser wraps the request passer of the host or resource with the
+// middlewares in their passed order.
 //
-// The segment handler is called when the request passes through the resource.
-// It calls the request handler of its own resource if the resource is the last
-// resource in the request's URL. Or, it finds the next resource that matches
-// the next path segment and passes the request to it. If there is no matching
-// resource for the next path segment, the handler for a not-found resource is
-// called. The host's segment handler calls the request handler if the request
-// was made to the host.
-func (rb *_ResponderBase) WrapSegmentHandler(mws ...Middleware) error {
+// The request passer is responsible for finding the next resource that matches
+// the next path segment and passing the request to it. If there is no matching
+// resource, the handler for a not-found resource is called.
+func (rb *_ResponderBase) WrapRequestPasser(mws ...Middleware) error {
 	if len(mws) == 0 {
 		return newErr("%w", ErrNoMiddleware)
 	}
@@ -1521,7 +1512,7 @@ func (rb *_ResponderBase) WrapSegmentHandler(mws ...Middleware) error {
 			return newErr("%w at index %d", ErrNilArgument, i)
 		}
 
-		rb.segmentHandler = mw(rb.segmentHandler)
+		rb.requestPasser = mw(rb.requestPasser)
 	}
 
 	return nil
@@ -1531,7 +1522,7 @@ func (rb *_ResponderBase) WrapSegmentHandler(mws ...Middleware) error {
 // in their passed order.
 //
 // The request handler calls the HTTP method handler of the resource depending
-// on the request's method. Unlike the segment handler, the request handler is
+// on the request's method. Unlike the request passer, the request handler is
 // called only when the resource is going to handle the request.
 func (rb *_ResponderBase) WrapRequestHandler(mws ...Middleware) error {
 	if len(mws) == 0 {
@@ -1561,13 +1552,13 @@ func (rb *_ResponderBase) WrapRequestHandler(mws ...Middleware) error {
 // their passed order. If the handler doesn't exist for any given method, the
 // method returns an error.
 //
-// The argument methods is a case-insensitive list of HTTP methods separated
-// by a comma and/or space. An exclamation mark "!" denotes the handler of the
-// not allowed HTTP methods, and an asterisk "*" denotes all the handlers of
-// HTTP methods in use. Both must be used alone. Which means that wrapping the
-// not allowed HTTP methods' handler and all handlers of HTTP methods in use
-// must happen in separate calls. Examples of methods: "get", "PUT POST", "get,
-// custom", "*" or "!".
+// The argument methods is a list of HTTP methods separated by a comma and/or
+// space. An exclamation mark "!" denotes the handler of the not allowed HTTP
+// methods, and an asterisk "*" denotes all the handlers of HTTP methods in
+// use. Both must be used alone. Which means that wrapping the not allowed HTTP
+// methods' handler and all handlers of HTTP methods in use must happen in
+// separate calls. Examples of methods: "GET", "PUT POST", "SHARE, LOCK", "*"
+// or "!".
 func (rb *_ResponderBase) WrapHandlerOf(
 	methods string,
 	mws ...Middleware,
@@ -1590,9 +1581,9 @@ func (rb *_ResponderBase) WrapHandlerOf(
 
 // -------------------------
 
-// ConfigurePath configures the existing resource at the path. If the resource
-// was configured before, it will be reconfigured.
-func (rb *_ResponderBase) ConfigurePath(
+// SetConfigurationAt sets the config for the existing resource at the path.
+// If the resource was configured before, it will be reconfigured.
+func (rb *_ResponderBase) SetConfigurationAt(
 	pathTmplStr string,
 	config Config,
 ) error {
@@ -1605,12 +1596,13 @@ func (rb *_ResponderBase) ConfigurePath(
 		return newErr("%w", ErrNonExistentResource)
 	}
 
-	r.Configure(config)
+	r.SetConfiguration(config)
 	return nil
 }
 
-// PathConfig returns the configuration of the existing resource.
-func (rb *_ResponderBase) PathConfig(pathTmplStr string) (Config, error) {
+// ConfigurationAt returns the configuration of the existing resource at the
+// path.
+func (rb *_ResponderBase) ConfigurationAt(pathTmplStr string) (Config, error) {
 	var r, err = rb.RegisteredResource(pathTmplStr)
 	if err != nil {
 		return Config{}, newErr("%w", err)
@@ -1620,7 +1612,7 @@ func (rb *_ResponderBase) PathConfig(pathTmplStr string) (Config, error) {
 		return Config{}, newErr("%w", ErrNonExistentResource)
 	}
 
-	return r.Config(), nil
+	return r.Configuration(), nil
 }
 
 // -------------------------
@@ -1673,19 +1665,19 @@ func (rb *_ResponderBase) ImplementationAt(pathTmplStr string) (Impl, error) {
 
 // -------------------------
 
-// SetPathHandlerFor sets the HTTP methods' handler function for a
-// resource at the path. If the resource doesn't exist, it will be created.
+// SetPathHandlerFor sets the HTTP methods' handler function for a resource
+// at the path. If the resource doesn't exist, it will be created.
+//
+// The argument methods is a list of HTTP methods separated by a comma and/or
+// space. An exclamation mark "!" denotes the handler of the not allowed HTTP
+// methods and must be used alone. Which means that setting the not allowed
+// HTTP methods' handler must happen in a separate call. Examples of methods:
+// "GET", "PUT, POST", "SHARE, LOCK" or "!".
 //
 // The scheme and trailing slash property values in the path template must be
 // compatible with the existing resource's properties, otherwise the function
 // returns an error. A newly created resource is configured with the values in
 // the path template.
-//
-// The argument methods is a case-insensitive list of HTTP methods separated
-// by a comma and/or space. An exclamation mark "!" denotes the handler of the
-// not allowed HTTP methods and must be used alone. Which means that setting the
-// not allowed HTTP methods' handler must happen in a separate call. Examples of
-// methods: "get", "PUT POST", "get, custom" or "!".
 func (rb *_ResponderBase) SetPathHandlerFor(
 	methods, pathTmplStr string,
 	handler Handler,
@@ -1706,13 +1698,13 @@ func (rb *_ResponderBase) SetPathHandlerFor(
 // PathHandlerOf returns the HTTP method's handler of the resource at the path.
 // If the resource doesn't exist, nil is returned.
 //
+// The argument method is an HTTP method. An exclamation mark "!" can be used
+// to get the handler of HTTP methods that are not allowed. Examples: "GET",
+// "POST" or "!".
+//
 // The scheme and trailing slash property values in the path template must be
 // compatible with the resource's properties, otherwise the function returns
 // an error.
-//
-// The argument method is an HTTP method. An exclamation mark "!" can be used
-// to get the handler of HTTP methods that are not allowed. Examples: "get",
-// "POST" or "!".
 func (rb *_ResponderBase) PathHandlerOf(method, pathTmplStr string) (
 	Handler,
 	error,
@@ -1729,22 +1721,18 @@ func (rb *_ResponderBase) PathHandlerOf(method, pathTmplStr string) (
 	return r.HandlerOf(method), nil
 }
 
-// WrapPathSegmentHandler wraps the segment handler of the resource at the path.
-// Handler is wrapped in the middlewares' passed order. If the resource doesn't
-// exist, an error is returned.
+// WrapRequestPasserAt wraps the request passer of the resource at the path.
+// The request passer is wrapped in the middlewares' passed order. If the
+// resource doesn't exist, an error is returned.
 //
-// The segment handler is called when the request passes through the resource.
-// It calls the request handler of its own resource if the resource is the last
-// resource in the request's URL. Or, it finds the next resource that matches
-// the next path segment and passes the request to it. If there is no matching
-// resource for the next path segment, the handler for a not-found resource is
-// called. The host's segment handler calls the request handler if the request
-// was made to the host.
+// The request passer is responsible for finding the next resource that matches
+// the next path segment and passing the request to it. If there is no matching
+// resource, the handler for a not-found resource is called.
 //
 // The scheme and trailing slash property values in the URL template must be
 // compatible with the resource's properties, otherwise the method returns an
 // error.
-func (rb *_ResponderBase) WrapPathSegmentHandler(
+func (rb *_ResponderBase) WrapRequestPasserAt(
 	pathTmplStr string,
 	mws ...Middleware,
 ) error {
@@ -1757,7 +1745,7 @@ func (rb *_ResponderBase) WrapPathSegmentHandler(
 		return newErr("%w", ErrNonExistentResource)
 	}
 
-	err = r.WrapSegmentHandler(mws...)
+	err = r.WrapRequestPasser(mws...)
 	if err != nil {
 		return newErr("%w", err)
 	}
@@ -1765,18 +1753,18 @@ func (rb *_ResponderBase) WrapPathSegmentHandler(
 	return nil
 }
 
-// WrapPathRequestHandler wraps the request handler of the resource at the path.
+// WrapRequestHandlerAt wraps the request handler of the resource at the path.
 // Handler is wrapped in the middlewares' passed order. If the resource doesn't
 // exist, an error is returned.
 //
 // The request handler calls the HTTP method handler of the resource depending
-// on the request's method. Unlike the segment handler, the request handler is
+// on the request's method. Unlike the request passer, the request handler is
 // called only when the resource is going to handle the request.
 //
 // The scheme and trailing slash property values in the URL template must be
 // compatible with the resource's properties, otherwise the method returns an
 // error.
-func (rb *_ResponderBase) WrapPathRequestHandler(
+func (rb *_ResponderBase) WrapRequestHandlerAt(
 	pathTmplStr string,
 	mws ...Middleware,
 ) error {
@@ -1800,13 +1788,13 @@ func (rb *_ResponderBase) WrapPathRequestHandler(
 // WrapPathHandlerOf wraps the handlers of HTTP methods of the resource at the
 // path. Handlers are wrapped in the middlewares' passed order.
 //
-// The argument methods is a case-insensitive list of HTTP methods separated
-// by a comma and/or space. An exclamation mark "!" denotes the handler of the
-// not allowed HTTP methods, and an asterisk "*" denotes all the handlers of
-// HTTP methods in use. Both must be used alone. Which means that wrapping the
-// not allowed HTTP methods' handler and all handlers of HTTP methods in use
-// must happen in separate calls. Examples of methods: "get", "PUT POST", "get,
-// custom", "*" or "!".
+// The argument methods is a list of HTTP methods separated by a comma and/or
+// space. An exclamation mark "!" denotes the handler of the not allowed HTTP
+// methods, and an asterisk "*" denotes all the handlers of HTTP methods in
+// use. Both must be used alone. Which means that wrapping the not allowed HTTP
+// methods' handler and all handlers of HTTP methods in use must happen in
+// separate calls. Examples of methods: "GET", "PUT POST", "SHARE, LOCK", "*"
+// or "!".
 //
 // If the resource or the handler of any HTTP method doesn't exist, the method
 // returns an error.
@@ -1833,35 +1821,32 @@ func (rb *_ResponderBase) WrapPathHandlerOf(
 
 // -------------------------
 
-// ConfigureSubtree configures all the resources below in the hierarchy.
-func (rb *_ResponderBase) ConfigureSubtree(config Config) {
+// SetConfigurationForSubtree sets the config for all the resources below in the
+// hierarchy.
+func (rb *_ResponderBase) SetConfigurationForSubtree(config Config) {
 	traverseAndCall(
-		rb._Resources(),
+		rb._Responders(),
 		func(_r _Responder) error {
-			_r.Configure(config)
+			_r.SetConfiguration(config)
 			return nil
 		},
 	)
 }
 
-// WrapSubtreeSegmentHandlers wraps the segment handlers of the resources
-// in the hierarchy below the receiver resource. Handlers are wrapped in the
-// middlewares' passed order.
+// WrapSubtreeRequestPassers wraps the request passers of the resources
+// in the hierarchy below the receiver resource. The request passers are
+// wrapped in the middlewares' passed order.
 //
-// The segment handler is called when the request passes through the resource.
-// It calls the request handler of its own resource if the resource is the last
-// resource in the request's URL. Or, it finds the next resource that matches
-// the next path segment and passes the request to it. If there is no matching
-// resource for the next path segment, the handler for a not-found resource is
-// called. The host's segment handler calls the request handler if the request
-// was made to the host.
-func (rb *_ResponderBase) WrapSubtreeSegmentHandlers(
+// The request passer is responsible for finding the next resource that matches
+// the next path segment and passing the request to it. If there is no matching
+// resource, the handler for a not-found resource is called.
+func (rb *_ResponderBase) WrapSubtreeRequestPassers(
 	mws ...Middleware,
 ) error {
 	var err = traverseAndCall(
-		rb._Resources(),
+		rb._Responders(),
 		func(_r _Responder) error {
-			return _r.WrapSegmentHandler(mws...)
+			return _r.WrapRequestPasser(mws...)
 		},
 	)
 
@@ -1877,13 +1862,13 @@ func (rb *_ResponderBase) WrapSubtreeSegmentHandlers(
 // middlewares' passed order.
 //
 // The request handler calls the HTTP method handler of the resource depending
-// on the request's method. Unlike the segment handler, the request handler is
+// on the request's method. Unlike the request passer, the request handler is
 // called only when the resource is going to handle the request.
 func (rb *_ResponderBase) WrapSubtreeRequestHandlers(
 	mws ...Middleware,
 ) error {
 	var err = traverseAndCall(
-		rb._Resources(),
+		rb._Responders(),
 		func(_r _Responder) error {
 			var err = _r.WrapRequestHandler(mws...)
 			// Subtree below hosts cannot return the ErrDormantHost.
@@ -1906,18 +1891,18 @@ func (rb *_ResponderBase) WrapSubtreeRequestHandlers(
 // WrapSubtreeHandlersOf wraps the HTTP method handlers of the resources in
 // the hierarchy below the receiver resource.
 //
-// The argument methods is a case-insensitive list of HTTP methods separated
-// by a comma and/or space. An exclamation mark "!" denotes the handler of the
-// not allowed HTTP methods, and an asterisk "*" denotes all the handlers of
-// HTTP methods in use. Both must be used alone. Which means that wrapping the
-// not allowed HTTP methods' handler and all handlers of HTTP methods in use
-// must happen in separate calls. Examples of methods: "get", "PUT POST", "get,
-// custom", "*" or "!".
+// The argument methods is a list of HTTP methods separated by a comma and/or
+// space. An exclamation mark "!" denotes the handler of the not allowed HTTP
+// methods, and an asterisk "*" denotes all the handlers of HTTP methods in
+// use. Both must be used alone. Which means that wrapping the not allowed HTTP
+// methods' handler and all handlers of HTTP methods in use must happen in
+// separate calls. Examples of methods: "GET", "PUT POST", "SHARE, LOCK", "*"
+// or "!".
 func (rb *_ResponderBase) WrapSubtreeHandlersOf(
 	methods string,
 	mws ...Middleware,
 ) error {
-	var err = wrapEveryHandlerOf(methods, rb._Resources(), mws...)
+	var err = wrapEveryHandlerOf(methods, rb._Responders(), mws...)
 	if err != nil {
 		return newErr("%w", err)
 	}
@@ -1927,8 +1912,8 @@ func (rb *_ResponderBase) WrapSubtreeHandlersOf(
 
 // -------------------------
 
-// _Resources returns all the direct child resources.
-func (rb *_ResponderBase) _Resources() []_Responder {
+// _Responders returns all the direct child resources.
+func (rb *_ResponderBase) _Responders() []_Responder {
 	var rhs []_Responder
 	for _, rh := range rb.ChildResources() {
 		rhs = append(rhs, rh)
@@ -1948,10 +1933,11 @@ func (rb *_ResponderBase) requestHandlerBase() *_RequestHandlerBase {
 
 // -------------------------
 
-// passRequestToChildResource is the segment handler of the host and resource.
+// passRequest is the request passer of the host and resource.
 // It passes the request to the next child resource if the child resource's
-// template matches the next path segment of the request's URL.
-func (rb *_ResponderBase) passRequestToChildResource(
+// template matches the next path segment of the request's URL. If there is
+// no matching resource, the handler for a not-found resource is called.
+func (rb *_ResponderBase) passRequest(
 	w http.ResponseWriter,
 	r *http.Request,
 	args *Args,
@@ -1973,10 +1959,9 @@ func (rb *_ResponderBase) passRequestToChildResource(
 	if len(ps) > 0 {
 		if sr := rb.staticResources[ps]; sr != nil {
 			args._r = sr.derived
-			var handled = sr.handleOrPassRequest(w, r, args)
-
+			args.handled = sr.handleOrPassRequest(w, r, args)
 			args.currentPathSegmentIdx = currentPathSegmentIdx
-			return handled
+			return args.handled
 		}
 
 		for _, pr := range rb.patternResources {
@@ -1988,10 +1973,9 @@ func (rb *_ResponderBase) passRequestToChildResource(
 
 			if matched {
 				args._r = pr.derived
-				var handled = pr.handleOrPassRequest(w, r, args)
-
+				args.handled = pr.handleOrPassRequest(w, r, args)
 				args.currentPathSegmentIdx = currentPathSegmentIdx
-				return handled
+				return args.handled
 			}
 		}
 
@@ -2002,10 +1986,9 @@ func (rb *_ResponderBase) passRequestToChildResource(
 			)
 
 			args._r = rb.wildcardResource.derived
-			var handled = rb.wildcardResource.handleOrPassRequest(w, r, args)
-
+			args.handled = rb.wildcardResource.handleOrPassRequest(w, r, args)
 			args.currentPathSegmentIdx = currentPathSegmentIdx
-			return handled
+			return args.handled
 		}
 	}
 
@@ -2014,8 +1997,7 @@ func (rb *_ResponderBase) passRequestToChildResource(
 		return false
 	}
 
-	var handled = notFoundResourceHandler(w, r, args)
-
+	args.handled = notFoundResourceHandler(w, r, args)
 	args.currentPathSegmentIdx = currentPathSegmentIdx
-	return handled
+	return args.handled
 }
