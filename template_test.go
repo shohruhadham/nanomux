@@ -61,12 +61,12 @@ func TestTemplate_Content(t *testing.T) {
 	}{
 		{
 			"static",
-			&Template{slices: []_TemplateSlice{{staticStr: "static template"}}},
+			&Template{slices: []_TemplateSegment{{staticStr: "static template"}}},
 			"static template",
 		},
 		{
 			"pattern",
-			&Template{slices: []_TemplateSlice{
+			&Template{slices: []_TemplateSegment{
 				{
 					valuePattern: &_ValuePattern{
 						name: "pattern",
@@ -78,7 +78,7 @@ func TestTemplate_Content(t *testing.T) {
 		},
 		{
 			"static pattern",
-			&Template{slices: []_TemplateSlice{
+			&Template{slices: []_TemplateSegment{
 				{staticStr: "static "},
 				{
 					valuePattern: &_ValuePattern{
@@ -91,7 +91,7 @@ func TestTemplate_Content(t *testing.T) {
 		},
 		{
 			"pattern static",
-			&Template{slices: []_TemplateSlice{
+			&Template{slices: []_TemplateSegment{
 				{
 					valuePattern: &_ValuePattern{
 						name: "pattern",
@@ -104,7 +104,7 @@ func TestTemplate_Content(t *testing.T) {
 		},
 		{
 			"static pattern static",
-			&Template{slices: []_TemplateSlice{
+			&Template{slices: []_TemplateSegment{
 				{staticStr: "static{slice}"},
 				{
 					valuePattern: &_ValuePattern{
@@ -118,7 +118,7 @@ func TestTemplate_Content(t *testing.T) {
 		},
 		{
 			"pattern static pattern",
-			&Template{slices: []_TemplateSlice{
+			&Template{slices: []_TemplateSegment{
 				{
 					valuePattern: &_ValuePattern{
 						name: `pattern:{slice}`,
@@ -137,7 +137,7 @@ func TestTemplate_Content(t *testing.T) {
 		},
 		{
 			"pattern static wildcard pattern",
-			&Template{slices: []_TemplateSlice{
+			&Template{slices: []_TemplateSegment{
 				{
 					valuePattern: &_ValuePattern{
 						name: `pattern:{1}`,
@@ -177,13 +177,13 @@ func TestTemplate_UnescapedContent(t *testing.T) {
 		{
 			"static",
 			&Template{
-				slices: []_TemplateSlice{{staticStr: "$static{template}"}},
+				slices: []_TemplateSegment{{staticStr: "$static{template}"}},
 			},
 			"$static{template}",
 		},
 		{
 			"pattern",
-			&Template{slices: []_TemplateSlice{
+			&Template{slices: []_TemplateSegment{
 				{
 					valuePattern: &_ValuePattern{
 						name: "pattern:1",
@@ -195,7 +195,7 @@ func TestTemplate_UnescapedContent(t *testing.T) {
 		},
 		{
 			"static pattern",
-			&Template{slices: []_TemplateSlice{
+			&Template{slices: []_TemplateSegment{
 				{staticStr: "{static} "},
 				{
 					valuePattern: &_ValuePattern{
@@ -208,7 +208,7 @@ func TestTemplate_UnescapedContent(t *testing.T) {
 		},
 		{
 			"pattern static",
-			&Template{slices: []_TemplateSlice{
+			&Template{slices: []_TemplateSegment{
 				{
 					valuePattern: &_ValuePattern{
 						name: "{pattern:name}",
@@ -221,7 +221,7 @@ func TestTemplate_UnescapedContent(t *testing.T) {
 		},
 		{
 			"static pattern static",
-			&Template{slices: []_TemplateSlice{
+			&Template{slices: []_TemplateSegment{
 				{staticStr: "static{slice}"},
 				{
 					valuePattern: &_ValuePattern{
@@ -235,7 +235,7 @@ func TestTemplate_UnescapedContent(t *testing.T) {
 		},
 		{
 			"pattern static pattern",
-			&Template{slices: []_TemplateSlice{
+			&Template{slices: []_TemplateSegment{
 				{
 					valuePattern: &_ValuePattern{
 						name: `pattern:{slice}`,
@@ -254,7 +254,7 @@ func TestTemplate_UnescapedContent(t *testing.T) {
 		},
 		{
 			"pattern static wildcard pattern",
-			&Template{slices: []_TemplateSlice{
+			&Template{slices: []_TemplateSegment{
 				{staticStr: "$"},
 				{
 					valuePattern: &_ValuePattern{
@@ -298,12 +298,12 @@ func TestTemplate_IsStatic(t *testing.T) {
 	}{
 		{
 			"static template",
-			&Template{slices: []_TemplateSlice{{staticStr: "static template"}}},
+			&Template{slices: []_TemplateSegment{{staticStr: "static template"}}},
 			true,
 		},
 		{
 			"pattern template",
-			&Template{slices: []_TemplateSlice{{
+			&Template{slices: []_TemplateSegment{{
 				valuePattern: &_ValuePattern{
 					"pattern",
 					regexp.MustCompile(`\d{3}`),
@@ -313,7 +313,7 @@ func TestTemplate_IsStatic(t *testing.T) {
 		},
 		{
 			"wildcard template",
-			&Template{slices: []_TemplateSlice{{
+			&Template{slices: []_TemplateSegment{{
 				valuePattern: &_ValuePattern{name: "wildcard"},
 			}}},
 			false,
@@ -352,7 +352,7 @@ func TestTemplate_IsWildCard(t *testing.T) {
 func TestTemplate_SimilarityWith(t *testing.T) {
 	var tmpl = &Template{
 		name: "tmpl",
-		slices: []_TemplateSlice{
+		slices: []_TemplateSegment{
 			{valuePattern: &_ValuePattern{"id1", regexp.MustCompile(`\d{3}`)}},
 			{staticStr: ", "},
 			{valuePattern: &_ValuePattern{"id2", regexp.MustCompile(`\d{2}`)}},
@@ -369,14 +369,14 @@ func TestTemplate_SimilarityWith(t *testing.T) {
 	}{
 		{
 			"different #1",
-			&Template{name: "tmpl", slices: []_TemplateSlice{
+			&Template{name: "tmpl", slices: []_TemplateSegment{
 				{staticStr: "green-energy"},
 			}},
 			Different,
 		},
 		{
 			"different #2",
-			&Template{name: "tmpl", slices: []_TemplateSlice{
+			&Template{name: "tmpl", slices: []_TemplateSegment{
 				{
 					valuePattern: &_ValuePattern{
 						"id",
@@ -391,7 +391,7 @@ func TestTemplate_SimilarityWith(t *testing.T) {
 			"different #3",
 			&Template{
 				name: "tmpl",
-				slices: []_TemplateSlice{
+				slices: []_TemplateSegment{
 					{staticStr: "name: "},
 					{valuePattern: &_ValuePattern{name: "name"}},
 					{valuePattern: &_ValuePattern{
@@ -410,7 +410,7 @@ func TestTemplate_SimilarityWith(t *testing.T) {
 		},
 		{
 			"different #4",
-			&Template{name: "tmpl", slices: []_TemplateSlice{
+			&Template{name: "tmpl", slices: []_TemplateSegment{
 				{valuePattern: &_ValuePattern{name: "forest name"}},
 			}},
 			Different,
@@ -419,7 +419,7 @@ func TestTemplate_SimilarityWith(t *testing.T) {
 			"different value names #1",
 			&Template{
 				name: "tmpl",
-				slices: []_TemplateSlice{
+				slices: []_TemplateSegment{
 					{valuePattern: &_ValuePattern{
 						"id-1",
 						regexp.MustCompile(`\d{3}`),
@@ -440,7 +440,7 @@ func TestTemplate_SimilarityWith(t *testing.T) {
 			"different value names #2",
 			&Template{
 				name: "tmpl",
-				slices: []_TemplateSlice{
+				slices: []_TemplateSegment{
 					{valuePattern: &_ValuePattern{
 						"id1",
 						regexp.MustCompile(`\d{3}`),
@@ -461,7 +461,7 @@ func TestTemplate_SimilarityWith(t *testing.T) {
 			"different names",
 			&Template{
 				name: "template",
-				slices: []_TemplateSlice{
+				slices: []_TemplateSegment{
 					{valuePattern: &_ValuePattern{
 						"id1",
 						regexp.MustCompile(`\d{3}`),
@@ -482,7 +482,7 @@ func TestTemplate_SimilarityWith(t *testing.T) {
 			"the same",
 			&Template{
 				name: "tmpl",
-				slices: []_TemplateSlice{
+				slices: []_TemplateSegment{
 					{valuePattern: &_ValuePattern{
 						"id1",
 						regexp.MustCompile(`\d{3}`),
@@ -629,7 +629,7 @@ func TestTemplate_Apply(t *testing.T) {
 	}{
 		{
 			"static",
-			&Template{slices: []_TemplateSlice{{staticStr: "green-energy"}}},
+			&Template{slices: []_TemplateSegment{{staticStr: "green-energy"}}},
 			TemplateValues{{"key", "value"}},
 			false,
 			"green-energy",
@@ -637,7 +637,7 @@ func TestTemplate_Apply(t *testing.T) {
 		},
 		{
 			"wildcard",
-			&Template{slices: []_TemplateSlice{
+			&Template{slices: []_TemplateSegment{
 				{valuePattern: &_ValuePattern{name: "river"}},
 			}},
 			TemplateValues{{"river", "Sir-Daryo"}},
@@ -647,7 +647,7 @@ func TestTemplate_Apply(t *testing.T) {
 		},
 		{
 			"pattern",
-			&Template{slices: []_TemplateSlice{
+			&Template{slices: []_TemplateSegment{
 				{valuePattern: &_ValuePattern{
 					name: "id",
 					re:   regexp.MustCompile(`\d{3}`),
@@ -660,7 +660,7 @@ func TestTemplate_Apply(t *testing.T) {
 		},
 		{
 			"pattern pattern",
-			&Template{slices: []_TemplateSlice{
+			&Template{slices: []_TemplateSegment{
 				{valuePattern: &_ValuePattern{
 					name: "name",
 					re:   regexp.MustCompile(`[A-Za-z]{3}`),
@@ -677,7 +677,7 @@ func TestTemplate_Apply(t *testing.T) {
 		},
 		{
 			"static pattern static pattern",
-			&Template{slices: []_TemplateSlice{
+			&Template{slices: []_TemplateSegment{
 				{staticStr: "name: "},
 				{valuePattern: &_ValuePattern{
 					name: "name",
@@ -696,7 +696,7 @@ func TestTemplate_Apply(t *testing.T) {
 		},
 		{
 			"static pattern static wildcard",
-			&Template{slices: []_TemplateSlice{
+			&Template{slices: []_TemplateSegment{
 				{staticStr: "name: "},
 				{valuePattern: &_ValuePattern{
 					name: "name",
@@ -714,7 +714,7 @@ func TestTemplate_Apply(t *testing.T) {
 		},
 		{
 			"static pattern static wildcard static pattern",
-			&Template{slices: []_TemplateSlice{
+			&Template{slices: []_TemplateSegment{
 				{staticStr: "id: "},
 				{valuePattern: &_ValuePattern{
 					name: "id",
@@ -741,7 +741,7 @@ func TestTemplate_Apply(t *testing.T) {
 		},
 		{
 			"wildcard static pattern",
-			&Template{slices: []_TemplateSlice{
+			&Template{slices: []_TemplateSegment{
 				{valuePattern: &_ValuePattern{
 					name: "galaxy",
 				}},
@@ -758,7 +758,7 @@ func TestTemplate_Apply(t *testing.T) {
 		},
 		{
 			"static pattern static wildcard static pattern",
-			&Template{slices: []_TemplateSlice{
+			&Template{slices: []_TemplateSegment{
 				{staticStr: "id: "},
 				{valuePattern: &_ValuePattern{
 					name: "id",
@@ -781,7 +781,7 @@ func TestTemplate_Apply(t *testing.T) {
 		},
 		{
 			"static pattern static wildcard static pattern",
-			&Template{slices: []_TemplateSlice{
+			&Template{slices: []_TemplateSegment{
 				{staticStr: "id: "},
 				{valuePattern: &_ValuePattern{
 					name: "id",
@@ -832,7 +832,7 @@ func TestTemplate_String(t *testing.T) {
 			"static",
 			&Template{
 				name:   "static",
-				slices: []_TemplateSlice{{staticStr: "static"}},
+				slices: []_TemplateSegment{{staticStr: "static"}},
 			},
 			"$static:static",
 		},
@@ -840,7 +840,7 @@ func TestTemplate_String(t *testing.T) {
 			"wildcard",
 			&Template{
 				name: "wildcard",
-				slices: []_TemplateSlice{
+				slices: []_TemplateSegment{
 					{valuePattern: &_ValuePattern{name: "galaxy"}},
 				},
 			},
@@ -850,7 +850,7 @@ func TestTemplate_String(t *testing.T) {
 			"pattern",
 			&Template{
 				name: "pattern",
-				slices: []_TemplateSlice{
+				slices: []_TemplateSegment{
 					{
 						valuePattern: &_ValuePattern{
 							"id",
@@ -865,7 +865,7 @@ func TestTemplate_String(t *testing.T) {
 			"pattern pattern",
 			&Template{
 				name: "pattern(2x)",
-				slices: []_TemplateSlice{
+				slices: []_TemplateSegment{
 					{
 						valuePattern: &_ValuePattern{
 							"name",
@@ -886,7 +886,7 @@ func TestTemplate_String(t *testing.T) {
 			"static pattern static pattern",
 			&Template{
 				name: "static: pattern (2x)",
-				slices: []_TemplateSlice{
+				slices: []_TemplateSegment{
 					{staticStr: "name: "},
 					{
 						valuePattern: &_ValuePattern{
@@ -910,7 +910,7 @@ func TestTemplate_String(t *testing.T) {
 			"static wildcard static pattern static",
 			&Template{
 				name: "$template",
-				slices: []_TemplateSlice{
+				slices: []_TemplateSegment{
 					{staticStr: `name{first}: `},
 					{
 						valuePattern: &_ValuePattern{name: "name::first"},
@@ -1040,7 +1040,7 @@ func TestTemplate_staticSlice(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.tmplStr, func(t *testing.T) {
-			var staticStr, leftTmplStr, err = staticSlice(c.tmplStr)
+			var staticStr, leftTmplStr, err = staticSegment(c.tmplStr)
 
 			if (err != nil) != c.wantErr {
 				t.Fatalf(
@@ -1128,7 +1128,7 @@ func TestTemplate_dynamicSlice(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.tmplStr, func(t *testing.T) {
-			var valueName, pattern, leftTmplStr, err = dynamicSlice(
+			var valueName, pattern, leftTmplStr, err = dynamicSegment(
 				c.tmplStr,
 			)
 
@@ -1165,7 +1165,7 @@ func TestTemplate_dynamicSlice(t *testing.T) {
 
 func TestTemplate_appendDynamicSliceTo(t *testing.T) {
 	var (
-		tss           []_TemplateSlice
+		tss           []_TemplateSegment
 		wildCardIdx   = -1
 		valuePatterns = make(_ValuePatterns, 0, 1)
 	)
@@ -1174,13 +1174,13 @@ func TestTemplate_appendDynamicSliceTo(t *testing.T) {
 		name            string
 		vName           string
 		pattern         string
-		wantTss         []_TemplateSlice
+		wantTss         []_TemplateSegment
 		wantWildCardIdx int
 		wantErr         bool
 	}{
 		{
 			"name #1", "name", "[A-Za-z]{2,8}",
-			[]_TemplateSlice{
+			[]_TemplateSegment{
 				{
 					valuePattern: &_ValuePattern{
 						"name",
@@ -1192,7 +1192,7 @@ func TestTemplate_appendDynamicSliceTo(t *testing.T) {
 		},
 		{
 			"id #1", "id", `\d{3}`,
-			[]_TemplateSlice{
+			[]_TemplateSegment{
 				{
 					valuePattern: &_ValuePattern{
 						"name",
@@ -1210,7 +1210,7 @@ func TestTemplate_appendDynamicSliceTo(t *testing.T) {
 		},
 		{
 			"name #2", "name", "",
-			[]_TemplateSlice{
+			[]_TemplateSegment{
 				{
 					valuePattern: &_ValuePattern{
 						"name",
@@ -1234,7 +1234,7 @@ func TestTemplate_appendDynamicSliceTo(t *testing.T) {
 		},
 		{
 			"id #2", "id", "",
-			[]_TemplateSlice{
+			[]_TemplateSegment{
 				{
 					valuePattern: &_ValuePattern{
 						"name",
@@ -1264,7 +1264,7 @@ func TestTemplate_appendDynamicSliceTo(t *testing.T) {
 		},
 		{
 			"address #1", "address", "",
-			[]_TemplateSlice{
+			[]_TemplateSegment{
 				{
 					valuePattern: &_ValuePattern{
 						"name",
@@ -1295,7 +1295,7 @@ func TestTemplate_appendDynamicSliceTo(t *testing.T) {
 		},
 		{
 			"color #1", "color", "(red|green|blue)",
-			[]_TemplateSlice{
+			[]_TemplateSegment{
 				{
 					valuePattern: &_ValuePattern{
 						"name",
@@ -1332,7 +1332,7 @@ func TestTemplate_appendDynamicSliceTo(t *testing.T) {
 		},
 		{
 			"name #3", "name", "",
-			[]_TemplateSlice{
+			[]_TemplateSegment{
 				{
 					valuePattern: &_ValuePattern{
 						"name",
@@ -1375,7 +1375,7 @@ func TestTemplate_appendDynamicSliceTo(t *testing.T) {
 		},
 		{
 			"id #3", "id", "",
-			[]_TemplateSlice{
+			[]_TemplateSegment{
 				{
 					valuePattern: &_ValuePattern{
 						"name",
@@ -1429,7 +1429,7 @@ func TestTemplate_appendDynamicSliceTo(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			var err error
-			tss, valuePatterns, wildCardIdx, err = appendDynamicSliceTo(
+			tss, valuePatterns, wildCardIdx, err = appendDynamicSegmentTo(
 				tss,
 				c.vName, c.pattern,
 				valuePatterns,
@@ -1484,20 +1484,20 @@ func TestTemplate_parse(t *testing.T) {
 	var cases = []struct {
 		name            string
 		tmplStr         string
-		wantTmplSlcs    []_TemplateSlice
+		wantTmplSlcs    []_TemplateSegment
 		wantWildCardIdx int
 		wantErr         bool
 	}{
 		{
 			"static",
 			`static\{slice\}`,
-			[]_TemplateSlice{{staticStr: `static{slice}`}},
+			[]_TemplateSegment{{staticStr: `static{slice}`}},
 			-1, false,
 		},
 		{
 			"pattern",
 			`{valueName:pattern}`,
-			[]_TemplateSlice{
+			[]_TemplateSegment{
 				{
 					valuePattern: &_ValuePattern{
 						name: "valueName",
@@ -1510,7 +1510,7 @@ func TestTemplate_parse(t *testing.T) {
 		{
 			"wildcard",
 			`{wildcard\:slice}`,
-			[]_TemplateSlice{
+			[]_TemplateSegment{
 				{valuePattern: &_ValuePattern{name: "wildcard:slice"}},
 			},
 			0, false,
@@ -1518,7 +1518,7 @@ func TestTemplate_parse(t *testing.T) {
 		{
 			"static pattern",
 			`static\{slice\} {\:valueName\::pattern}`,
-			[]_TemplateSlice{
+			[]_TemplateSegment{
 				{staticStr: `static{slice} `},
 				{valuePattern: &_ValuePattern{
 					name: `:valueName:`,
@@ -1530,7 +1530,7 @@ func TestTemplate_parse(t *testing.T) {
 		{
 			"static wildcard pattern",
 			`static{\:wildcard\:}{valueName:pattern}`,
-			[]_TemplateSlice{
+			[]_TemplateSegment{
 				{staticStr: "static"},
 				{valuePattern: &_ValuePattern{name: ":wildcard:"}},
 				{valuePattern: &_ValuePattern{
@@ -1543,7 +1543,7 @@ func TestTemplate_parse(t *testing.T) {
 		{
 			"wildcard static pattern",
 			`{wildcard}static{valueName:pattern}`,
-			[]_TemplateSlice{
+			[]_TemplateSegment{
 				{valuePattern: &_ValuePattern{name: "wildcard"}},
 				{staticStr: "static"},
 				{valuePattern: &_ValuePattern{
@@ -1556,7 +1556,7 @@ func TestTemplate_parse(t *testing.T) {
 		{
 			"static pattern wildcard",
 			`static{value {name}:pattern}{wildcard}`,
-			[]_TemplateSlice{
+			[]_TemplateSegment{
 				{staticStr: "static"},
 				{valuePattern: &_ValuePattern{
 					name: "value {name}",
@@ -1569,7 +1569,7 @@ func TestTemplate_parse(t *testing.T) {
 		{
 			"pattern pattern static",
 			`{valueName1:pattern1}{valueName2:pattern2} static`,
-			[]_TemplateSlice{
+			[]_TemplateSegment{
 				{valuePattern: &_ValuePattern{
 					name: "valueName1",
 					re:   regexp.MustCompile("^pattern1"),
@@ -1585,7 +1585,7 @@ func TestTemplate_parse(t *testing.T) {
 		{
 			"pattern pattern wildcard static pattern pattern static pattern",
 			`{valueName1:pattern1}{valueName2:pattern2}{wildcard} static1 {valueName1}{valueName3:pattern3} static2:{valueName2}`,
-			[]_TemplateSlice{
+			[]_TemplateSegment{
 				{valuePattern: &_ValuePattern{
 					name: "valueName1",
 					re:   regexp.MustCompile("^pattern1"),
@@ -1684,7 +1684,7 @@ func TestTemplate_TryToParse(t *testing.T) {
 			"$name:static",
 			&Template{
 				name:        "name",
-				slices:      []_TemplateSlice{{staticStr: "static"}},
+				slices:      []_TemplateSegment{{staticStr: "static"}},
 				wildCardIdx: -1,
 			},
 			false,
@@ -1694,7 +1694,7 @@ func TestTemplate_TryToParse(t *testing.T) {
 			"{wildcard}",
 			&Template{
 				name: "wildcard",
-				slices: []_TemplateSlice{
+				slices: []_TemplateSegment{
 					{valuePattern: &_ValuePattern{name: "wildcard"}},
 				},
 				wildCardIdx: 0,
@@ -1706,7 +1706,7 @@ func TestTemplate_TryToParse(t *testing.T) {
 			"static1 {wildcard} static2",
 			&Template{
 				name: "wildcard",
-				slices: []_TemplateSlice{
+				slices: []_TemplateSegment{
 					{staticStr: "static1 "},
 					{valuePattern: &_ValuePattern{name: "wildcard"}},
 					{staticStr: " static2"},
@@ -1720,7 +1720,7 @@ func TestTemplate_TryToParse(t *testing.T) {
 			"static1 {name:pattern} static2",
 			&Template{
 				name: "name",
-				slices: []_TemplateSlice{
+				slices: []_TemplateSegment{
 					{staticStr: "static1 "},
 					{valuePattern: &_ValuePattern{
 						name: "name",
@@ -1737,7 +1737,7 @@ func TestTemplate_TryToParse(t *testing.T) {
 			"$name:{wildcard}",
 			&Template{
 				name: "name",
-				slices: []_TemplateSlice{
+				slices: []_TemplateSegment{
 					{valuePattern: &_ValuePattern{name: "wildcard"}},
 				},
 				wildCardIdx: 0,
@@ -1749,7 +1749,7 @@ func TestTemplate_TryToParse(t *testing.T) {
 			`static\{slice\} {\:valueName\::pattern}`,
 			&Template{
 				name: ":valueName:",
-				slices: []_TemplateSlice{
+				slices: []_TemplateSegment{
 					{staticStr: "static{slice} "},
 					{valuePattern: &_ValuePattern{
 						name: `:valueName:`,
@@ -1765,7 +1765,7 @@ func TestTemplate_TryToParse(t *testing.T) {
 			`$name:static{\:wildcard\:}{valueName:pattern}`,
 			&Template{
 				name: "name",
-				slices: []_TemplateSlice{
+				slices: []_TemplateSegment{
 					{staticStr: "static"},
 					{valuePattern: &_ValuePattern{name: ":wildcard:"}},
 					{valuePattern: &_ValuePattern{
@@ -1782,7 +1782,7 @@ func TestTemplate_TryToParse(t *testing.T) {
 			`$$\:name:{wildcard}static{valueName:pattern}`,
 			&Template{
 				name: "$:name",
-				slices: []_TemplateSlice{
+				slices: []_TemplateSegment{
 					{valuePattern: &_ValuePattern{name: "wildcard"}},
 					{staticStr: "static"},
 					{valuePattern: &_ValuePattern{
@@ -1798,7 +1798,7 @@ func TestTemplate_TryToParse(t *testing.T) {
 			"static pattern wildcard",
 			`static{value {name}:pattern}{wildcard}`,
 			&Template{
-				slices: []_TemplateSlice{
+				slices: []_TemplateSegment{
 					{staticStr: "static"},
 					{valuePattern: &_ValuePattern{
 						name: "value {name}",
@@ -1814,7 +1814,7 @@ func TestTemplate_TryToParse(t *testing.T) {
 			"pattern pattern static",
 			`{valueName1:pattern1}{valueName1} static`,
 			&Template{
-				slices: []_TemplateSlice{
+				slices: []_TemplateSegment{
 					{valuePattern: &_ValuePattern{
 						name: "valueName1",
 						re:   regexp.MustCompile("^pattern1"),
@@ -1879,7 +1879,7 @@ func TestTemplate_Parse(t *testing.T) {
 			"$name:static",
 			&Template{
 				name:        "name",
-				slices:      []_TemplateSlice{{staticStr: "static"}},
+				slices:      []_TemplateSegment{{staticStr: "static"}},
 				wildCardIdx: -1,
 			},
 			false,
@@ -1889,7 +1889,7 @@ func TestTemplate_Parse(t *testing.T) {
 			"{wildcard}",
 			&Template{
 				name: "wildcard",
-				slices: []_TemplateSlice{
+				slices: []_TemplateSegment{
 					{valuePattern: &_ValuePattern{name: "wildcard"}},
 				},
 				wildCardIdx: 0,
@@ -1901,7 +1901,7 @@ func TestTemplate_Parse(t *testing.T) {
 			"static1 {wildcard} static2",
 			&Template{
 				name: "wildcard",
-				slices: []_TemplateSlice{
+				slices: []_TemplateSegment{
 					{staticStr: "static1 "},
 					{valuePattern: &_ValuePattern{name: "wildcard"}},
 					{staticStr: " static2"},
@@ -1915,7 +1915,7 @@ func TestTemplate_Parse(t *testing.T) {
 			"static1 {name:pattern} static2",
 			&Template{
 				name: "name",
-				slices: []_TemplateSlice{
+				slices: []_TemplateSegment{
 					{staticStr: "static1 "},
 					{valuePattern: &_ValuePattern{
 						name: "name",
@@ -1932,7 +1932,7 @@ func TestTemplate_Parse(t *testing.T) {
 			"$name:{wildcard}",
 			&Template{
 				name: "name",
-				slices: []_TemplateSlice{
+				slices: []_TemplateSegment{
 					{valuePattern: &_ValuePattern{name: "wildcard"}},
 				},
 				wildCardIdx: 0,
@@ -1944,7 +1944,7 @@ func TestTemplate_Parse(t *testing.T) {
 			`static\{slice\} {\:valueName\::pattern}`,
 			&Template{
 				name: ":valueName:",
-				slices: []_TemplateSlice{
+				slices: []_TemplateSegment{
 					{staticStr: "static{slice} "},
 					{valuePattern: &_ValuePattern{
 						name: `:valueName:`,
@@ -1960,7 +1960,7 @@ func TestTemplate_Parse(t *testing.T) {
 			`$name:static{\:wildcard\:}{valueName:pattern}`,
 			&Template{
 				name: "name",
-				slices: []_TemplateSlice{
+				slices: []_TemplateSegment{
 					{staticStr: "static"},
 					{valuePattern: &_ValuePattern{name: ":wildcard:"}},
 					{valuePattern: &_ValuePattern{
@@ -1977,7 +1977,7 @@ func TestTemplate_Parse(t *testing.T) {
 			`$$\:name:{wildcard}static{valueName:pattern}`,
 			&Template{
 				name: "$:name",
-				slices: []_TemplateSlice{
+				slices: []_TemplateSegment{
 					{valuePattern: &_ValuePattern{name: "wildcard"}},
 					{staticStr: "static"},
 					{valuePattern: &_ValuePattern{
@@ -1993,7 +1993,7 @@ func TestTemplate_Parse(t *testing.T) {
 			"static pattern wildcard",
 			`static{value {name}:pattern}{wildcard}`,
 			&Template{
-				slices: []_TemplateSlice{
+				slices: []_TemplateSegment{
 					{staticStr: "static"},
 					{valuePattern: &_ValuePattern{
 						name: "value {name}",
@@ -2009,7 +2009,7 @@ func TestTemplate_Parse(t *testing.T) {
 			"pattern pattern static",
 			`{valueName1:pattern1}{valueName1} static`,
 			&Template{
-				slices: []_TemplateSlice{
+				slices: []_TemplateSegment{
 					{valuePattern: &_ValuePattern{
 						name: "valueName1",
 						re:   regexp.MustCompile("^pattern1"),

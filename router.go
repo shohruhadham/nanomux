@@ -12,19 +12,19 @@ import (
 
 // --------------------------------------------------
 
-// Router is an HTTP request multiplexer. It dispatches the incoming requests to
+// Router is an HTTP request multiplexer. It passes the incoming requests to
 // their matching host or resources.
 type Router struct {
 	staticHosts  map[string]*Host
 	patternHosts []*Host
 	r            *Resource
 
-	segmentHandler Handler
+	requestPasser Handler
 }
 
 func NewRouter() *Router {
 	var ro = &Router{}
-	ro.segmentHandler = ro.passRequest
+	ro.requestPasser = ro.passRequest
 	return ro
 }
 
@@ -228,13 +228,13 @@ func (ro *Router) registered_Responder(urlTmplStr string) (
 
 // -------------------------
 
-// ConfigureURL configures the existing host or resource. If the host or
-// resource was configured before, it will be reconfigured.
+// SetConfigurationAt sets the config for the existing host or resource at the
+// URL. If the host or resource was configured before, it will be reconfigured.
 //
 // The scheme and trailing slash properties of the host or resource are compared
 // with the values given in the URL template. If there is a difference, the
 // method returns an error.
-func (ro *Router) ConfigureURL(urlTmplStr string, config Config) error {
+func (ro *Router) SetConfigurationAt(urlTmplStr string, config Config) error {
 	var _r, _, err = ro.registered_Responder(urlTmplStr)
 	if err != nil {
 		return newErr("%w", err)
@@ -244,16 +244,17 @@ func (ro *Router) ConfigureURL(urlTmplStr string, config Config) error {
 		return newErr("%w", ErrNonExistentResource)
 	}
 
-	_r.Configure(config)
+	_r.SetConfiguration(config)
 	return nil
 }
 
-// URLConfig returns the configuration of the existing host or resource.
+// ConfigurationAt returns the configuration of the existing host or resource
+// at the URL.
 //
 // The scheme and trailing slash properties of the host or resource are compared
 // with the values given in the URL template. If there is a difference, the
 // method returns an error. On error, the returned config is not valid.
-func (ro *Router) URLConfig(urlTmplStr string) (Config, error) {
+func (ro *Router) ConfigurationAt(urlTmplStr string) (Config, error) {
 	var _r, _, err = ro.registered_Responder(urlTmplStr)
 	if err != nil {
 		return Config{}, newErr("%w", err)
@@ -263,13 +264,13 @@ func (ro *Router) URLConfig(urlTmplStr string) (Config, error) {
 		return Config{}, newErr("%w", ErrNonExistentResource)
 	}
 
-	return _r.Config(), nil
+	return _r.Configuration(), nil
 }
 
-// SetImplementationAt sets the request handlers for a host or resource from
-// the passed impl. If the host or resource doesn't exist, the method creates
-// it. The host or resource keeps the impl for future retrieval. Old handlers
-// of the existing host or resource are discarded.
+// SetImplementationAt sets the request handlers for a host or resource at the
+// URL from the passed impl. If the host or resource doesn't exist, the method
+// creates it. The host or resource keeps the impl for future retrieval. Old
+// handlers of the existing host or resource are discarded.
 //
 // The scheme and trailing slash property values in the URL template must be
 // compatible with the existing host or resource's properties, otherwise the
@@ -289,9 +290,9 @@ func (ro *Router) SetImplementationAt(urlTmplStr string, impl Impl) error {
 	return nil
 }
 
-// ImplementationAt returns the implementation of the host or resource.
-// If the host or resource doesn't exist or they were not created from an
-// Impl or they have no Impl set, nil is returned.
+// ImplementationAt returns the implementation of the host or resource at the
+// URL. If the host or resource doesn't exist or they were not created from
+// an Impl or they have no Impl set, nil is returned.
 //
 // The scheme and trailing slash property values in the URL template must be
 // compatible with the host or resource's properties, otherwise the method
@@ -309,14 +310,14 @@ func (ro *Router) ImplementationAt(urlTmplStr string) (Impl, error) {
 	return nil, nil
 }
 
-// SetURLHandlerFor sets HTTP methods' handler function for a host or
-// resource. If the host or resource doesn't exist, it will be created.
+// SetURLHandlerFor sets HTTP methods' handler function for a host or resource
+// at the URL. If the host or resource doesn't exist, it will be created.
 //
-// The argument methods is a case-insensitive list of HTTP methods separated
-// by a comma and/or space. An exclamation mark "!" denotes the handler of the
-// not allowed HTTP methods and must be used alone. Which means that setting the
-// not allowed HTTP methods' handler must happen in a separate call. Examples of
-// methods: "get", "PUT POST", "get, custom" or "!".
+// The argument methods is a list of HTTP methods separated by a comma and/or
+// space. An exclamation mark "!" denotes the handler of the not allowed HTTP
+// methods and must be used alone. Which means that setting the not allowed
+// HTTP methods' handler must happen in a separate call. Examples of methods:
+// "GET", "PUT, POST", "SHARE, LOCK" or "!".
 //
 // The scheme and trailing slash property values in the URL template must be
 // compatible with the existing host or resource's properties, otherwise the
@@ -341,16 +342,17 @@ func (ro *Router) SetURLHandlerFor(
 	return nil
 }
 
-// URLHandlerOf returns the HTTP method's handler of the host or resource.
-// If the host or resource, or the handler, doesn't exist, nil is returned.
+// URLHandlerOf returns the HTTP method's handler of the host or resource at
+// the URL. If the host or resource, or the handler, doesn't exist, nil is
+// returned.
+//
+// The argument method is an HTTP method. An exclamation mark "!" can be used
+// to get the handler of HTTP methods that are not allowed. Examples: "GET",
+// "POST" or "!".
 //
 // The scheme and trailing slash property values in the URL template must be
 // compatible with the host or resource's properties, otherwise the method
 // returns an error.
-//
-// The argument method is an HTTP method. An exclamation mark "!" can be used
-// to get the handler of HTTP methods that are not allowed. Examples: "get",
-// "POST" or "!".
 func (ro *Router) URLHandlerOf(method string, urlTmplStr string) (
 	Handler,
 	error,
@@ -367,21 +369,18 @@ func (ro *Router) URLHandlerOf(method string, urlTmplStr string) (
 	return nil, nil
 }
 
-// WrapURLSegmentHandler wraps the segment handler of the host or resource.
-// The handler is wrapped in the middlewares' passed order. If the host or
-// resource doesn't exist, an error is returned.
+// WrapRequestPasserAt wraps the request passer of the host or resource at the
+// URL. The request passer is wrapped in the middlewares' passed order. If the
+// host or resource doesn't exist, an error is returned.
 //
-// The segment handler is called when the request passes through the host or
-// resource. It calls the request handler of its own host or resource if the
-// host or resource is the last segment in the request's URL. Or, it finds the
-// next resource that matches the next path segment and passes the request to
-// it. If there is no matching resource for the next path segment, the handler
-// for a not-found resource is called.
+// The request passer is responsible for finding the next resource that matches
+// the next path segment and passing the request to it. If there is no matching
+// resource, the handler for a not-found resource is called.
 //
 // The scheme and trailing slash property values in the URL template must be
 // compatible with the host or resource's properties, otherwise the method
 // returns an error.
-func (ro *Router) WrapURLSegmentHandler(
+func (ro *Router) WrapRequestPasserAt(
 	urlTmplStr string,
 	mws ...Middleware,
 ) error {
@@ -391,7 +390,7 @@ func (ro *Router) WrapURLSegmentHandler(
 	}
 
 	if r != nil {
-		if err = r.WrapSegmentHandler(mws...); err != nil {
+		if err = r.WrapRequestPasser(mws...); err != nil {
 			return newErr("%w", err)
 		}
 
@@ -407,19 +406,19 @@ func (ro *Router) WrapURLSegmentHandler(
 	return newErr("%w %q", err, urlTmplStr)
 }
 
-// WrapURLRequestHandler wraps the request handler of the host or resource.
-// The handler is wrapped in the middlewares' passed order. If the host or
-// resource doesn't exist, an error is returned.
+// WrapRequestHandlerAt wraps the request handler of the host or resource
+// at the URL. The handler is wrapped in the middlewares' passed order. If
+// the host or resource doesn't exist, an error is returned.
 //
 // The request handler calls the HTTP method handler of the host or resource
-// depending on the request's method. Unlike the segment handler, the request
+// depending on the request's method. Unlike the request passer, the request
 // handler is called only when the host or resource is going to handle the
 // request.
 //
 // The scheme and trailing slash property values in the URL template must be
 // compatible with the host or resource's properties, otherwise the method
 // returns an error.
-func (ro *Router) WrapURLRequestHandler(
+func (ro *Router) WrapRequestHandlerAt(
 	urlTmplStr string,
 	mws ...Middleware,
 ) error {
@@ -446,17 +445,17 @@ func (ro *Router) WrapURLRequestHandler(
 }
 
 // WrapURLHandlerOf wraps the handlers of the HTTP methods of the host or
-// resource. Handlers are wrapped in the middlewares' passed order. If the
-// host or resource, or the handler of any HTTP method, doesn't exist, the
-// method returns an error.
+// resource at the URL. Handlers are wrapped in the middlewares' passed order.
+// If the host or resource, or the handler of any HTTP method, doesn't exist,
+// the method returns an error.
 //
-// The argument methods is a case-insensitive list of HTTP methods separated
-// by a comma and/or space. An exclamation mark "!" denotes the handler of the
-// not allowed HTTP methods, and an asterisk "*" denotes all the handlers of
-// HTTP methods in use. Both must be used alone. Which means that wrapping the
-// not allowed HTTP methods' handler and all handlers of HTTP methods in use
-// must happen in separate calls. Examples of methods: "get", "PUT POST", "get,
-// custom", "*" or "!".
+// The argument methods is a list of HTTP methods separated by a comma and/or
+// space. An exclamation mark "!" denotes the handler of the not allowed HTTP
+// methods, and an asterisk "*" denotes all the handlers of HTTP methods in
+// use. Both must be used alone. Which means that wrapping the not allowed HTTP
+// methods' handler and all handlers of HTTP methods in use must happen in
+// separate calls. Examples of methods: "GET", "PUT POST", "SHARE, LOCK", "*"
+// or "!".
 //
 // The scheme and trailing slash property values in the URL template must be
 // compatible with the host or resource's properties, otherwise the method
@@ -1393,10 +1392,10 @@ func (ro *Router) RootResource() *Resource {
 
 // -------------------------
 
-// WrapSegmentHandler wraps the router's segment handler with the middlewares
-// in their passed order. The router's segment handler is responsible for
+// WrapRequestPasser wraps the router's request passer with the middlewares
+// in their passed order. The router's request passer is responsible for
 // passing the request to the matching host or the root resource.
-func (ro *Router) WrapSegmentHandler(mws ...Middleware) error {
+func (ro *Router) WrapRequestPasser(mws ...Middleware) error {
 	if len(mws) == 0 {
 		return newErr("%w", ErrNoMiddleware)
 	}
@@ -1406,7 +1405,7 @@ func (ro *Router) WrapSegmentHandler(mws ...Middleware) error {
 			return newErr("%w at index %d", ErrNoMiddleware, i)
 		}
 
-		ro.segmentHandler = mw(ro.segmentHandler)
+		ro.requestPasser = mw(ro.requestPasser)
 	}
 
 	return nil
@@ -1414,31 +1413,28 @@ func (ro *Router) WrapSegmentHandler(mws ...Middleware) error {
 
 // -------------------------
 
-// ConfigureAll configures all the hosts and resources with the config.
-func (ro *Router) ConfigureAll(config Config) {
+// SetConfigurationForAll sets the config for all the hosts and resources.
+func (ro *Router) SetConfigurationForAll(config Config) {
 	traverseAndCall(
-		ro._Resources(),
+		ro._Responders(),
 		func(_r _Responder) error {
-			_r.Configure(config)
+			_r.SetConfiguration(config)
 			return nil
 		},
 	)
 }
 
-// WrapAllSegmentHandlers wraps all the segment handlers of all the hosts and
-// resources. Handlers are wrapped in the middlewares' passed order.
+// WrapAllRequestPassers wraps all the request passers of all the hosts and
+// resources. The request passers are wrapped in the middlewares' passed order.
 //
-// The segment handler is called when the request passes through the host or
-// resource. It calls the request handler of its own host or resource if the
-// host or resource is the last segment in the request's URL. Or, it finds the
-// next resource that matches the next path segment and passes the request to
-// it. If there is no matching resource for the next path segment, the handler
-// for a not-found resource is called.
-func (ro *Router) WrapAllSegmentHandlers(mws ...Middleware) error {
+// The request passer is responsible for finding the next resource that matches
+// the next path segment and passing the request to it. If there is no matching
+// resource, the handler for a not-found resource is called.
+func (ro *Router) WrapAllRequestPassers(mws ...Middleware) error {
 	var err = traverseAndCall(
-		ro._Resources(),
+		ro._Responders(),
 		func(_r _Responder) error {
-			return _r.WrapSegmentHandler(mws...)
+			return _r.WrapRequestPasser(mws...)
 		},
 	)
 
@@ -1453,12 +1449,12 @@ func (ro *Router) WrapAllSegmentHandlers(mws ...Middleware) error {
 // resources. Handlers are wrapped in the middlewares' passed order.
 //
 // The request handler calls the HTTP method handler of the host or resource
-// depending on the request's method. Unlike the segment handler, the request
+// depending on the request's method. Unlike the request passer, the request
 // handler is called only when the host or resource is going to handle the
 // request.
 func (ro *Router) WrapAllRequestHandlers(mws ...Middleware) error {
 	var err = traverseAndCall(
-		ro._Resources(),
+		ro._Responders(),
 		func(_r _Responder) error {
 			var err = _r.WrapRequestHandler(mws...)
 			if errors.Is(err, ErrDormantHost) {
@@ -1483,18 +1479,18 @@ func (ro *Router) WrapAllRequestHandlers(mws ...Middleware) error {
 // WrapAllHandlersOf wraps the handlers of the HTTP methods of all the hosts and
 // resources. Handlers are wrapped in the middlewares' passed order.
 //
-// The argument methods is a case-insensitive list of HTTP methods separated
-// by a comma and/or space. An exclamation mark "!" denotes the handler of the
-// not allowed HTTP methods, and an asterisk "*" denotes all the handlers of
-// HTTP methods in use. Both must be used alone. Which means that wrapping the
-// not allowed HTTP methods' handler and all handlers of HTTP methods in use
-// must happen in separate calls. Examples of methods: "get", "PUT POST", "get,
-// custom", "*" or "!".
+// The argument methods is a list of HTTP methods separated by a comma and/or
+// space. An exclamation mark "!" denotes the handler of the not allowed HTTP
+// methods, and an asterisk "*" denotes all the handlers of HTTP methods in
+// use. Both must be used alone. Which means that wrapping the not allowed HTTP
+// methods' handler and all handlers of HTTP methods in use must happen in
+// separate calls. Examples of methods: "GET", "PUT POST", "SHARE, LOCK", "*"
+// or "!".
 func (ro *Router) WrapAllHandlersOf(
 	methods string,
 	mws ...Middleware,
 ) error {
-	var err = wrapEveryHandlerOf(methods, ro._Resources(), mws...)
+	var err = wrapEveryHandlerOf(methods, ro._Responders(), mws...)
 	if err != nil {
 		return newErr("%w", err)
 	}
@@ -1504,8 +1500,8 @@ func (ro *Router) WrapAllHandlersOf(
 
 // -------------------------
 
-// _Resources returns all the existing hosts and the root resource.
-func (ro *Router) _Resources() []_Responder {
+// _Responders returns all the existing hosts and the root resource.
+func (ro *Router) _Responders() []_Responder {
 	var hrs []_Responder
 	for _, hr := range ro.staticHosts {
 		hrs = append(hrs, hr)
@@ -1526,11 +1522,11 @@ func (ro *Router) _Resources() []_Responder {
 
 func (ro *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var args = getArgs(r.URL, nil)
-	ro.segmentHandler(w, r, args)
+	ro.requestPasser(w, r, args)
 	putArgsInThePool(args)
 }
 
-// passRequest is the segment handler of the router. It passes the request
+// passRequest is the request passer of the Router. It passes the request
 // to the first matching host or the root resource if there is no matching host.
 func (ro *Router) passRequest(
 	w http.ResponseWriter,
@@ -1552,7 +1548,8 @@ func (ro *Router) passRequest(
 
 		if h := ro.staticHosts[host]; h != nil {
 			args._r = h.derived
-			return h.handleOrPassRequest(w, r, args)
+			args.handled = h.handleOrPassRequest(w, r, args)
+			return args.handled
 		}
 
 		for _, ph := range ro.patternHosts {
@@ -1564,7 +1561,8 @@ func (ro *Router) passRequest(
 
 			if matched {
 				args._r = ph.derived
-				return ph.handleOrPassRequest(w, r, args)
+				args.handled = ph.handleOrPassRequest(w, r, args)
+				return args.handled
 			}
 		}
 	}
@@ -1573,8 +1571,10 @@ func (ro *Router) passRequest(
 		args.nextPathSegment() // Returns '/'.
 
 		args._r = ro.r.derived
-		return ro.r.handleOrPassRequest(w, r, args)
+		args.handled = ro.r.handleOrPassRequest(w, r, args)
+		return args.handled
 	}
 
-	return notFoundResourceHandler(w, r, args)
+	args.handled = notFoundResourceHandler(w, r, args)
+	return args.handled
 }

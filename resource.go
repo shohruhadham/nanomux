@@ -25,7 +25,7 @@ func createDormantResource(tmpl *Template) (*Resource, error) {
 	var rb = &Resource{}
 	rb.derived = rb
 	rb.tmpl = tmpl
-	rb.segmentHandler = rb.passRequestToChildResource
+	rb.requestPasser = rb.passRequest
 	return rb, nil
 }
 
@@ -91,7 +91,7 @@ func createResource(
 
 	r.derived = r
 	r.tmpl = tmpl
-	r.segmentHandler = r.passRequestToChildResource
+	r.requestPasser = r.passRequest
 	return r, nil
 }
 
@@ -544,7 +544,7 @@ func (rb *Resource) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 //
 // When the request's URL contains path segments below the resource's path
 // segment, the method tries to pass the request to a child resource by calling
-// its resource's segment handler. If there is no matching child resource
+// its resource's request passer. If there is no matching child resource
 // and the resource was configured as a subtree handler, the request is handled
 // by the resource itself, otherwise a "404 Not Found" status code is returned.
 func (rb *Resource) handleOrPassRequest(
@@ -564,7 +564,7 @@ func (rb *Resource) handleOrPassRequest(
 	if !args.reachedTheLastPathSegment() {
 		lastSegment = false
 
-		if rb.segmentHandler(w, r, args) {
+		if rb.requestPasser(w, r, args) {
 			return true
 		}
 

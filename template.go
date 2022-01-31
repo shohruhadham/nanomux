@@ -15,11 +15,11 @@ import (
 type Similarity uint8
 
 const (
-	// Different templates have different static and pattern parts.
+	// Different templates have different segments.
 	Different Similarity = iota
 
-	// DifferentValueNames means templates have the same static and/or pattern
-	// parts but have different value names for their patterns.
+	// DifferentValueNames means templates have the same static and/or dynamic
+	// segments but with different value names.
 	DifferentValueNames
 
 	// DifferentNames means that the templates are identical except for their
@@ -83,8 +83,7 @@ func (vps _ValuePatterns) get(name string) (int, *_ValuePattern) {
 
 type _StringPair struct{ key, value string }
 
-// TemplateValues is a slice of key-value pairs (for 3-4 values, a slice is
-// lighter than a map).
+// TemplateValues is a slice of string key-value pairs.
 type TemplateValues []_StringPair
 
 // Set sets the value for the key. If the key doesn't exist, it's added to the
@@ -120,30 +119,38 @@ func (tmplVs TemplateValues) Get(key string) string {
 
 // --------------------------------------------------
 
-type _TemplateSlice struct {
-	staticStr    string         // Static slice of the template.
-	valuePattern *_ValuePattern // Name-pattern slice of the template.
+type _TemplateSegment struct {
+	staticStr    string         // Static segment of the template.
+	valuePattern *_ValuePattern // Dynamic segment of the template.
 }
 
 // --------------------------------------------------
 
 // Template represents the parsed template of the hosts and resources.
 //
-// The value-pattern and wildcard parts are the dynamic slices of the template.
-// If there is a single dynamic slice in the template and the template doesn't
-// have a name, the dynamic slice's name is used as the name of the template.
+// A template may have three segments: static, regexp, and wildcard. The
+// regexp segment must be between curly braces and its value name and pattern
+// separated by ":". The wildcard segment can only have a value name. There
+// can be only one wildcard segment in the template. The regexp and wildcard
+// segments are the dynamic segments of the template. Dynamic segments' names
+// are used as their value names.
 //
-// There can be only one wildcard dynamic slice in the template.
+// A template may have a name. Its template's name comes at the beginning of
+// the template. The name must come after the "$" sign and be followed by ":".
+// If there is a single dynamic segment in the template and the template
+// doesn't have a name, the dynamic segment's name is also used as the name
+// of the template.
 //
-// If the value-pattern part is repeated in the template, its pattern may be
-// omitted. When the template matches a string, its repeated value-pattern
-// must get the same value, otherwise the match fails.
+// If the regexp dynamic segment is repeated in the template, from the second
+// repetition, its pattern may be omitted. When the regexp matches a string, its
+// repetitions must get the same value, otherwise the match fails.
 //
-// The Colon ":" in the template name and the value name, as well as the curly
-// braces "{" and "}" in the static part, can be escaped with the backslash "\".
-// The escaped colon ":" is included in the name, and the escaped curly braces
-// "{" and "}" are included in the static part. If the static part at the
-// beginning of the template starts with the "$" sign, it must be escaped too.
+// The colon ":" in the template name and in the value name, as well as
+// the curly braces "{" and "}" in the static segments, can be escaped with
+// the backslash "\". The escaped colon ":" is included in the name, and the
+// escaped curly braces "{" and "}" are included in the static segment. If
+// the static segment at the beginning of the template starts with the "$"
+// sign, it must be escaped too.
 //
 // Some examples of the template forms:
 //
@@ -152,7 +159,7 @@ type _TemplateSlice struct {
 // 	$templateName:{wildcardName}{valueName1:pattern1}{valueName2:pattern2},
 // 	staticTemplate,
 // 	{valueName:pattern},
-// 	{wildcardName},
+// 	{wildcardSegmentName},
 // 	{valueName:pattern}staticPart{wildcardName}{valueName},
 // 	$templateName:staticPart1{wildCardName}staticPart2{valueName:pattern}
 // 	$templateName:staticPart,
@@ -162,7 +169,7 @@ type _TemplateSlice struct {
 // 	\$staticPart:1{wildcardName}staticPart:2
 type Template struct {
 	name        string
-	slices      []_TemplateSlice
+	slices      []_TemplateSegment
 	wildCardIdx int
 }
 
@@ -179,7 +186,8 @@ func (t *Template) Name() string {
 	return t.name
 }
 
-// ValueNames returns the value names given in the value-patterns.
+// ValueNames returns the value names given in the wildcard and regular
+// expression segments.
 func (t *Template) ValueNames() []string {
 	var vns []string
 	for _, slice := range t.slices {
@@ -191,7 +199,8 @@ func (t *Template) ValueNames() []string {
 	return vns
 }
 
-// HasValueName returns true if the template contains one of the names.
+// HasValueName returns true if one of the dynamic segments of the
+// template has one of the names.
 func (t *Template) HasValueName(names ...string) bool {
 	var (
 		tvalueNames  = t.ValueNames()
@@ -211,8 +220,8 @@ func (t *Template) HasValueName(names ...string) bool {
 }
 
 // Content returns the escaped content of the template without a name.
-// A pattern is omitted from a repeated value-pattern starting from the second
-// repitition.
+// The pattern is omitted from repeated regexp segments starting from
+// the second repetition.
 func (t *Template) Content() string {
 	var strb = strings.Builder{}
 
@@ -270,8 +279,8 @@ func (t *Template) Content() string {
 }
 
 // UnescapedContent returns the unescaped content of the template without a
-// name. A pattern is omitted from a repeated value-pattern starting from the
-// second repitition.
+// name. The pattern is omitted from repeated regexp segments starting from
+// the second repetition.
 func (t *Template) UnescapedContent() string {
 	var strb = strings.Builder{}
 	var vns map[string]bool
@@ -300,19 +309,18 @@ func (t *Template) UnescapedContent() string {
 	return strb.String()
 }
 
-// IsStatic returns true if the template doesn't have any patterns or a wildcard
-// part.
+// IsStatic returns true if the template doesn't have any dynamic segments.
 func (t *Template) IsStatic() bool {
 	return len(t.slices) == 1 && t.slices[0].staticStr != ""
 }
 
-// IsWildcard returns true if the template doesn't have any static or pattern
-// parts.
+// IsWildcard returns true if the template doesn't have any static or regular
+// expression segments.
 func (t *Template) IsWildcard() bool {
 	return len(t.slices) == 1 && t.wildCardIdx == 0
 }
 
-// HasPattern returns true if the template has any value-pattern parts.
+// HasPattern returns true if the template has any regular expression segments.
 func (t *Template) HasPattern() bool {
 	var lslices = len(t.slices)
 	for i := 0; i < lslices; i++ {
@@ -411,12 +419,11 @@ func (t *Template) SimilarityWith(anotherT *Template) Similarity {
 }
 
 // Match returns true if the string matches the template. If the template has
-// value-pattern parts, Match also returns the values of those matched patterns.
-// The names of the patterns in the template are used as keys for the values.
-//
-// The values map is returned as is when the template doesn't match. If
-// the template matches, the values of the matches are added to the map
-// and returned.
+// wildcard or regular expression segments, the method adds the slices of the
+// argument string that match those segments to the values argument and returns
+// it. The names of the wildcard and regular expression segments in the template
+// are used as keys for the values. The values argument is returned as is when
+// the template doesn't match.
 func (t *Template) Match(
 	str string,
 	values TemplateValues,
@@ -507,9 +514,9 @@ func (t *Template) Match(
 	return true, values
 }
 
-// Apply puts the values in the place of patterns if they match.
-// When ignoreMissing is true, Apply ignores the missing values for the
-// patterns instead of returning an error.
+// Apply puts the values in the place of the wildcard segment and regular
+// expression segments if they match. When ignoreMissing is true, Apply
+// ignores the missing values for the segments instead of returning an error.
 func (t *Template) Apply(values TemplateValues, ignoreMissing bool) (
 	string,
 	error,
@@ -551,8 +558,8 @@ func (t *Template) Apply(values TemplateValues, ignoreMissing bool) (
 	return strb.String(), nil
 }
 
-// String returns the template's string. A pattern is omitted from a repeated
-// value-pattern starting from the second repitition.
+// String returns the template's string. The pattern is omitted from
+// repeated regexp segments starting from the second repetition.
 func (t *Template) String() string {
 	var strb = strings.Builder{}
 	if t.name != "" {
@@ -633,9 +640,9 @@ func templateNameAndContent(tmplStr string) (
 	return
 }
 
-// staticSlice returns the static slice at the beginning of the template.
-// If the template doesn't start with a static slice, it's returned as is.
-func staticSlice(tmplStrSlc string) (
+// staticSegment returns the static segment at the beginning of the template.
+// If the template doesn't start with a static segment, it's returned as is.
+func staticSegment(tmplStrSlc string) (
 	staticStr string,
 	leftTmplStrSlc string,
 	err error,
@@ -684,10 +691,10 @@ func staticSlice(tmplStrSlc string) (
 	return
 }
 
-// dynamicSlice returns the dynamic slice's value name and pattern at the
+// dynamicSegment returns the dynamic segment's value name and pattern at the
 // beginning of the template. If the template doesn't start with a dynamic
-// slice, it's returned as is.
-func dynamicSlice(tmplStrSlc string) (
+// segment, it's returned as is.
+func dynamicSegment(tmplStrSlc string) (
 	valueName, pattern, leftTmplStrSlc string,
 	err error,
 ) {
@@ -771,7 +778,7 @@ func dynamicSlice(tmplStrSlc string) (
 
 				leftTmplStrSlc = tmplStrSlc[i+1:]
 
-				// Here we have a value name without a pattern.
+				// Here we have a value name without a regular expression.
 				return
 			}
 		}
@@ -779,7 +786,7 @@ func dynamicSlice(tmplStrSlc string) (
 		if sliceType == 1 {
 			if ch == '\\' {
 				i++
-				// Backslack in a pattern escapes any character.
+				// Backslack in a regular expression escapes any character.
 				continue
 			}
 
@@ -808,7 +815,7 @@ func dynamicSlice(tmplStrSlc string) (
 				}
 
 				if i == idx {
-					err = newErr("%w - empty pattern", ErrInvalidTemplate)
+					err = newErr("%w - empty regexp", ErrInvalidTemplate)
 					return
 				}
 
@@ -820,27 +827,27 @@ func dynamicSlice(tmplStrSlc string) (
 	}
 
 	if depth > 0 {
-		err = newErr("%w - incomplete dynamic slice", ErrInvalidTemplate)
+		err = newErr("%w - incomplete dynamic segment", ErrInvalidTemplate)
 	}
 
 	return
 }
 
-// appendDynamicSliceTo appends the value name and pattern to the list of
-// dynamic slices. Map valuePatterns contains the previously created
+// appendDynamicSegmentTo appends the value name and pattern to the list of
+// dynamic segments. The slice valuePatterns contains the previously created
 // _ValuePattern instances with value names as a key. If the value name is
-// repeated, appendDynamicSliceTo reuses the _ValuePattern instance instead
+// repeated, appendDynamicSegmentTo reuses the _ValuePattern instance instead
 // of creating a new one.
 //
 // If the passed argument wildCardIdx is the index of the previously detected
-// wild card, then it's returned as is. Otherwise, if the current dynamic slice
-// is a wild card, its index in the list is returned.
-func appendDynamicSliceTo(
-	tss []_TemplateSlice,
+// wild card, then it's returned as is. Otherwise, if the current dynamic
+// segment is a wildcard, its index in the list is returned.
+func appendDynamicSegmentTo(
+	tss []_TemplateSegment,
 	vName, pattern string,
 	valuePatterns _ValuePatterns,
 	wildcardIdx int,
-) ([]_TemplateSlice, _ValuePatterns, int, error) {
+) ([]_TemplateSegment, _ValuePatterns, int, error) {
 	if vpi, vp := valuePatterns.get(vName); vpi >= 0 {
 		if pattern != "" {
 			if wildcardIdx >= 0 {
@@ -860,7 +867,7 @@ func appendDynamicSliceTo(
 
 		// If a value-pattern pair already exists, we don't have to create a
 		// new one.
-		tss = append(tss, _TemplateSlice{valuePattern: vp})
+		tss = append(tss, _TemplateSegment{valuePattern: vp})
 		return tss, valuePatterns, wildcardIdx, nil
 	}
 
@@ -883,13 +890,13 @@ func appendDynamicSliceTo(
 		}
 
 		wildcardIdx = len(tss)
-		tss = append(tss, _TemplateSlice{
+		tss = append(tss, _TemplateSegment{
 			valuePattern: &_ValuePattern{name: vName},
 		})
 
-		// As the wildcard slice has been appended, existing value-patterns
+		// As the wildcard segment has been appended, existing value-patterns
 		// must be modified so when they are reused, the template can match the
-		// string from the end to the wildcard slice.
+		// string from the end to the wildcard segment.
 		for _, vp := range valuePatterns {
 			var p = vp.re.String()
 			p = p[1:] + "$"
@@ -917,17 +924,16 @@ func appendDynamicSliceTo(
 	}
 
 	var vp = &_ValuePattern{name: vName, re: re}
-	tss = append(tss, _TemplateSlice{valuePattern: vp})
+	tss = append(tss, _TemplateSegment{valuePattern: vp})
 	valuePatterns.set(vName, vp)
 
 	return tss, valuePatterns, wildcardIdx, nil
 }
 
-// $name:static{key1:pattern}static{key2:pattern}{key1}{key3}
-// parse parses the template string and returns the template slices and the
-// index of the wildcard slice.
+// parse parses the template string and returns the template segments and the
+// index of the wildcard segment.
 func parse(tmplStr string) (
-	tmplSlcs []_TemplateSlice,
+	tmplSlcs []_TemplateSegment,
 	wildcardIdx int,
 	err error,
 ) {
@@ -937,7 +943,7 @@ func parse(tmplStr string) (
 
 	var (
 		tmplStrSlc = tmplStr
-		tss        = []_TemplateSlice{}
+		tss        = []_TemplateSegment{}
 
 		valuePatterns = make(_ValuePatterns, 0, 1)
 	)
@@ -946,13 +952,13 @@ func parse(tmplStr string) (
 
 	for len(tmplStrSlc) > 0 {
 		var staticStr string
-		staticStr, tmplStrSlc, err = staticSlice(tmplStrSlc)
+		staticStr, tmplStrSlc, err = staticSegment(tmplStrSlc)
 		if err != nil {
 			return nil, -1, err
 		}
 
 		if staticStr != "" {
-			tss = append(tss, _TemplateSlice{staticStr: staticStr})
+			tss = append(tss, _TemplateSegment{staticStr: staticStr})
 		}
 
 		if tmplStrSlc == "" {
@@ -960,12 +966,12 @@ func parse(tmplStr string) (
 		}
 
 		var vName, pattern string
-		vName, pattern, tmplStrSlc, err = dynamicSlice(tmplStrSlc)
+		vName, pattern, tmplStrSlc, err = dynamicSegment(tmplStrSlc)
 		if err != nil {
 			return nil, -1, err
 		}
 
-		tss, valuePatterns, wildcardIdx, err = appendDynamicSliceTo(
+		tss, valuePatterns, wildcardIdx, err = appendDynamicSegmentTo(
 			tss,
 			vName, pattern,
 			valuePatterns,
@@ -977,13 +983,13 @@ func parse(tmplStr string) (
 		}
 	}
 
-	tmplSlcs = make([]_TemplateSlice, len(tss))
+	tmplSlcs = make([]_TemplateSegment, len(tss))
 	copy(tmplSlcs, tss)
 
 	var lastIdx = len(tmplSlcs) - 1
 	var vp = tmplSlcs[lastIdx].valuePattern
 	if vp != nil && vp.re != nil && wildcardIdx < 0 {
-		// The last slice is a value-pattern slice. So, its pattern must be
+		// The last segment is a value-pattern segment. So, its regexp must be
 		// modified to match the end of the string.
 		var reStr = vp.re.String() + "$"
 		vp.re, err = regexp.Compile(reStr)
@@ -1023,9 +1029,9 @@ func TryToParse(tmplStr string) (*Template, error) {
 			for i, slc := range tmpl.slices {
 				if slc.valuePattern != nil {
 					if idx > -1 {
-						// If there is a single dynamic slice in the template
+						// If there is a single dynamic segment in the template
 						// and the template doesn't have a name, the dynamic
-						// slice's name is used as the name of the template.
+						// segment's name is used as the name of the template.
 						return tmpl, nil
 					}
 

@@ -242,7 +242,7 @@ func TestRouter_registered_Resource(t *testing.T) {
 	}
 }
 
-func TestRouter_ConfigureURL(t *testing.T) {
+func TestRouter_SetConfigurationAt(t *testing.T) {
 	var ro = NewRouter()
 	var config = Config{
 		RedirectInsecureRequest: true,
@@ -295,20 +295,20 @@ func TestRouter_ConfigureURL(t *testing.T) {
 				}
 			}
 
-			err = ro.ConfigureURL(c.url, config)
+			err = ro.SetConfigurationAt(c.url, config)
 			if (err != nil) != c.wantErr {
 				t.Fatalf(
-					"Router.ConfigureURL() = %v, wantErr = %t",
+					"Router.SetConfigurationAt() = %v, wantErr = %t",
 					err,
 					c.wantErr,
 				)
 			}
 
 			if _r != nil {
-				var _rConfig = _r.Config()
+				var _rConfig = _r.Configuration()
 				if _rConfig != wantConfig {
 					t.Fatalf(
-						"Router.ConfigurePath() config = %v, want = %v",
+						"Router.SetConfigurationAt() has set config %v, want %v",
 						_rConfig,
 						wantConfig,
 					)
@@ -318,7 +318,7 @@ func TestRouter_ConfigureURL(t *testing.T) {
 	}
 }
 
-func TestRouter_URLConfig(t *testing.T) {
+func TestRouter_ConfigurationAt(t *testing.T) {
 	var ro = NewRouter()
 	var config = Config{
 		RedirectInsecureRequest: true,
@@ -371,17 +371,17 @@ func TestRouter_URLConfig(t *testing.T) {
 					t.Fatal(err)
 				}
 
-				err = ro.ConfigureURL(c.url, config)
+				err = ro.SetConfigurationAt(c.url, config)
 				if (err != nil) != c.wantErr {
 					t.Fatal(err)
 				}
 			}
 
 			var _rConfig Config
-			_rConfig, err = ro.URLConfig(c.urlToCheck)
+			_rConfig, err = ro.ConfigurationAt(c.urlToCheck)
 			if (err != nil) != c.wantErr {
 				t.Fatalf(
-					"Router.URLConfig() = %v, wantErr = %t",
+					"Router.ConfigurationAt() = %v, wantErr = %t",
 					err,
 					c.wantErr,
 				)
@@ -390,7 +390,7 @@ func TestRouter_URLConfig(t *testing.T) {
 			if !c.wantErr {
 				if _rConfig != wantConfig {
 					t.Fatalf(
-						"Router.URLConfig() = %v, want = %v",
+						"Router.ConfigurationAt() = %v, want = %v",
 						_rConfig,
 						wantConfig,
 					)
@@ -852,7 +852,7 @@ func TestRouter_URLHandlerOf(t *testing.T) {
 	}
 }
 
-func TestRouter_WrapURLSegmentHandler(t *testing.T) {
+func TestRouter_WrapRequestPasserAt(t *testing.T) {
 	var ro = NewRouter()
 
 	var strb strings.Builder
@@ -893,7 +893,7 @@ func TestRouter_WrapURLSegmentHandler(t *testing.T) {
 		{
 			"example1.com r10",
 			"https://example1.com/r00/{r10:abc}/",
-			// Security has no effect on a segment handler.
+			// Security has no effect on the request passer.
 			"http://example1.com/r00/abc/",
 			"ab",
 			false,
@@ -935,10 +935,10 @@ func TestRouter_WrapURLSegmentHandler(t *testing.T) {
 				}
 			}
 
-			err = ro.WrapURLSegmentHandler(c.url, mws...)
+			err = ro.WrapRequestPasserAt(c.url, mws...)
 			if (err != nil) != c.wantErr {
 				t.Fatalf(
-					"Router.WrapURLSegmentHandler() err = %v, wantErr = %t",
+					"Router.WrapURLRequestPasser() err = %v, wantErr = %t",
 					err,
 					c.wantErr,
 				)
@@ -953,7 +953,7 @@ func TestRouter_WrapURLSegmentHandler(t *testing.T) {
 				var str = strb.String()
 				if str != c.wantStr {
 					t.Fatalf(
-						"Router.WrapURLSegmentHandler() gotStr = %s, want = %s",
+						"Router.WrapURLRequestPasser() gotStr = %s, want = %s",
 						str,
 						c.wantStr,
 					)
@@ -1060,7 +1060,7 @@ func TestRouter_WrapURLRequestHandler(t *testing.T) {
 				}
 			}
 
-			err = ro.WrapURLRequestHandler(c.url, mws...)
+			err = ro.WrapRequestHandlerAt(c.url, mws...)
 			if (err != nil) != c.wantErr {
 				t.Fatalf(
 					"Router.WrapURLRequestHandler() err = %v, wantErr = %t",
@@ -3064,14 +3064,14 @@ func TestRouter_WrapWith(t *testing.T) {
 		strb strings.Builder
 	)
 
-	ro.segmentHandler = Handler(
+	ro.requestPasser = Handler(
 		func(http.ResponseWriter, *http.Request, *Args) bool {
 			strb.WriteByte('A')
 			return true
 		},
 	)
 
-	var err = ro.WrapSegmentHandler(
+	var err = ro.WrapRequestPasser(
 		[]Middleware{
 			func(next Handler) Handler {
 				return func(
@@ -3100,14 +3100,14 @@ func TestRouter_WrapWith(t *testing.T) {
 		t.Fatalf("Router.WrapWith() = %v, want nil", err)
 	}
 
-	ro.segmentHandler(nil, nil, nil)
+	ro.requestPasser(nil, nil, nil)
 	if strb.String() != "CBA" {
 		t.Fatalf(
 			"Router.WrapWith() failed to wrap resource's httpHandler",
 		)
 	}
 
-	err = ro.WrapSegmentHandler(
+	err = ro.WrapRequestPasser(
 		[]Middleware{
 			func(next Handler) Handler {
 				return func(
@@ -3127,7 +3127,7 @@ func TestRouter_WrapWith(t *testing.T) {
 	}
 
 	strb.Reset()
-	ro.segmentHandler(nil, nil, nil)
+	ro.requestPasser(nil, nil, nil)
 	if strb.String() != "DCBA" {
 		t.Fatalf(
 			"Router.WrapWith() failed to wrap resource's httpHandler",
@@ -3135,7 +3135,7 @@ func TestRouter_WrapWith(t *testing.T) {
 	}
 }
 
-func TestRouter_ConfigureALL(t *testing.T) {
+func TestRouter_SetConfigurationForAll(t *testing.T) {
 	var ro = NewRouter()
 
 	var cases = []struct {
@@ -3187,16 +3187,17 @@ func TestRouter_ConfigureALL(t *testing.T) {
 		TrailingSlash:           true,
 	}
 
-	ro.ConfigureAll(config)
+	ro.SetConfigurationForAll(config)
 	config.Secure = true
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			var _r _Responder
 			_r, _, err = ro.registered_Responder(c.urlToCheck)
-			var _rConfig = _r.Config()
+			var _rConfig = _r.Configuration()
 			if _rConfig != config {
-				t.Fatalf("Router.ConfigureAll() config = %v, want = %v",
+				t.Fatalf(
+					"Router.SetConfigurationForAll() config = %v, want = %v",
 					_rConfig,
 					config,
 				)
@@ -3205,7 +3206,7 @@ func TestRouter_ConfigureALL(t *testing.T) {
 	}
 }
 
-func TestRouter_WrapAllSegmentHandlers(t *testing.T) {
+func TestRouter_WrapAllRequestPassers(t *testing.T) {
 	var ro = NewRouter()
 	var cases = []struct{ name, urlTmpl, requestURL, result string }{
 		{
@@ -3302,9 +3303,9 @@ func TestRouter_WrapAllSegmentHandlers(t *testing.T) {
 		},
 	}
 
-	err = ro.WrapAllSegmentHandlers(mws...)
+	err = ro.WrapAllRequestPassers(mws...)
 	if err != nil {
-		t.Fatalf("Router.WrapAllSegmentHandlers() err = %v, want nil", err)
+		t.Fatalf("Router.WrapAllRequestPassers() err = %v, want nil", err)
 	}
 
 	for _, c := range cases {
@@ -3316,7 +3317,7 @@ func TestRouter_WrapAllSegmentHandlers(t *testing.T) {
 			ro.ServeHTTP(rr, r)
 			if result := strb.String(); result != c.result {
 				t.Fatalf(
-					"Router.WrapAllSegmentHandlers() %q result = %s, want %s.",
+					"Router.WrapAllRequestPassers() %q result = %s, want %s.",
 					c.name,
 					result,
 					c.result,
@@ -3671,7 +3672,7 @@ func TestRouter__Resources(t *testing.T) {
 
 	rs[3] = ro.r
 
-	var gotRs = ro._Resources()
+	var gotRs = ro._Responders()
 	if len(gotRs) != 4 {
 		t.Fatalf("Router._Resources(): len(got) = %d, want 4", len(gotRs))
 	}
