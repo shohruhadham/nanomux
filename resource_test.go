@@ -2635,7 +2635,7 @@ func TestResourceBase_HasAnyChildResources(t *testing.T) {
 	}
 }
 
-func TestResourceBase_SetImpl(t *testing.T) {
+func TestResourceBase_SetImplementation(t *testing.T) {
 	var r = NewDormantResource("/")
 	var impl = &implType{}
 
@@ -2644,12 +2644,12 @@ func TestResourceBase_SetImpl(t *testing.T) {
 
 	var err = r.SetImplementation(impl)
 	if err != nil {
-		t.Fatalf("ResourceBase.SetImpl() err = %v, want nil", err)
+		t.Fatalf("ResourceBase.SetImplementation() err = %v, want nil", err)
 	}
 
 	if n := len(r._RequestHandlerBase.mhPairs); n != nHandlers {
 		t.Fatalf(
-			"ResourceBase.SetImpl() len(handlers) = %d, want %d",
+			"ResourceBase.SetImplementation() len(handlers) = %d, want %d",
 			n,
 			nHandlers,
 		)
@@ -2657,12 +2657,12 @@ func TestResourceBase_SetImpl(t *testing.T) {
 
 	if r._RequestHandlerBase.notAllowedHTTPMethodsHandler == nil {
 		t.Fatalf(
-			"ResourceBase.SetImpl() failed to set not allowed methods' handler",
+			"ResourceBase.SetImplementation() failed to set not allowed methods' handler",
 		)
 	}
 }
 
-func TestResourceBase_Impl(t *testing.T) {
+func TestResourceBase_Implementation(t *testing.T) {
 	var r = NewDormantResource("/")
 	var rh = &implType{}
 
@@ -3088,6 +3088,86 @@ func TestResourceBase_WrapHandlerOf(t *testing.T) {
 		t.Fatal(
 			"ResourceBase.WrapHandlerOf() failed to wrap the not allowed methods' handler",
 		)
+	}
+}
+
+func TestResourceBase_SetGetSharedDataAt(t *testing.T) {
+	var root = NewDormantResource("/")
+	var r00, err = root.Resource("r00")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var r10 *Resource
+	r10, err = r00.Resource("https:///{r10:abc}")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var r20 *Resource
+	r20, err = r10.Resource("{r20}/")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var r11 *Resource
+	r11, err = r00.Resource("r11")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var data = 1
+
+	var cases = []struct {
+		name, path string
+		r          *Resource
+		wantErr    bool
+	}{
+		{"r00", "r00", r00, false},
+		{"r10", "https:///r00/{r10:abc}", r10, false},
+		{"r20", "/r00/{r10:abc}/{r20}/", r20, false},
+		{"r11", "/r00/r11", r11, false},
+		{"r10 error", "/r00/{r10:abc}", r10, true},
+		{"non-existent", "/r00/{r12}", nil, true},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			var err = root.SetSharedDataAt(c.path, data)
+			if (err != nil) != c.wantErr {
+				t.Fatalf(
+					"ResourceBase.SetSharedDataAt() = %v, wantErr = %t",
+					err,
+					c.wantErr,
+				)
+			}
+
+			if c.r == nil {
+				return
+			}
+
+			if c.r.SharedData() != data {
+				t.Fatalf("ResourceBase.SetConfigurationAt() has failed")
+			}
+
+			var retrievedData interface{}
+			retrievedData, err = root.SharedDataAt(c.path)
+			if (err != nil) != c.wantErr {
+				t.Fatalf(
+					"ResourceBase.SharedDataAt() err = %v, wantErr = %v",
+					err,
+					c.wantErr,
+				)
+			}
+
+			if !c.wantErr && retrievedData != data {
+				t.Fatalf(
+					"ResourceBase.SharedDataAt() data = %v, want %v",
+					retrievedData,
+					data,
+				)
+			}
+		})
 	}
 }
 
@@ -3791,6 +3871,68 @@ func TestResourceBasse_WrapPathHandlerOf(t *testing.T) {
 	}
 }
 
+func TestResourceBase_SetSharedDataForSubtree(t *testing.T) {
+	var root = NewDormantResource("/")
+	var data = 1
+
+	var cases = []struct {
+		name, path string
+	}{
+		{"r00", "https:///r00"},
+		{"r10 #1", "/r00/{r10}/"},
+		{"r01", "{r01}"},
+		{"r10", "/{r01}/{r10:abc}/"},
+		{"r11", "{r01}/{r11}"},
+		{"r20", "https:///{r01}/r12/{r20:123}"},
+	}
+
+	for _, c := range cases {
+		var _, err = root.Resource(c.path)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	root.SetSharedDataForSubtree(data)
+
+	{
+		var r, err = root.RegisteredResource("https:///{r01}/r12")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if r == nil {
+			t.Fatal(ErrNonExistentResource)
+		}
+
+		var retrievedData = r.SharedData()
+		if retrievedData != 1 {
+			t.Fatalf(
+				"ResourceBase.SetSharedDataForSubtree() has failed. Retrieved data = %v, want %v,",
+				retrievedData,
+				data,
+			)
+		}
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			var r, err = root.RegisteredResource(c.path)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if r == nil {
+				t.Fatal(ErrNonExistentResource)
+			}
+
+			if r.SharedData() != data {
+				t.Fatalf("ResourceBase.SetSharedDataForSubtree() has failed")
+			}
+		})
+	}
+}
+
 func TestResourceBase_SetConfigurationForSubtree(t *testing.T) {
 	var root = NewDormantResource("/")
 	var config = Config{RedirectInsecureRequest: true, HandleThePathAsIs: true}
@@ -3839,7 +3981,7 @@ func TestResourceBase_SetConfigurationForSubtree(t *testing.T) {
 		var gotConfig = r.Configuration()
 		if gotConfig != config {
 			t.Fatalf(
-				"ResourceBase.ConfigureSubtree has failed. Got config = %v, want = %v",
+				"ResourceBase.SetConfigurationForSubtree has failed. Got config = %v, want = %v",
 				gotConfig,
 				config,
 			)
@@ -3858,7 +4000,7 @@ func TestResourceBase_SetConfigurationForSubtree(t *testing.T) {
 			}
 
 			if r.Configuration() != config {
-				t.Fatalf("ResourceBase.ConfigureSubtree() has failed")
+				t.Fatalf("ResourceBase.SetConfigurationForSubtree() has failed")
 			}
 		})
 	}

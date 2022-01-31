@@ -242,6 +242,92 @@ func TestRouter_registered_Resource(t *testing.T) {
 	}
 }
 
+func TestRouter_SetGetSharedDataAt(t *testing.T) {
+	var ro = NewRouter()
+	var data = 1
+
+	var cases = []struct {
+		name, url string
+		wantErr   bool
+	}{
+		{"host #1", "https://example.com", false},
+		{
+			"host #1 r00",
+			"http://example.com/{r00:abc}",
+			false,
+		},
+		{
+			"host #2 r10",
+			"http://example2.com/r00/{r10}/",
+			false,
+		},
+		{"r00", "r00", false},
+		{"r10", "https:///r00/{r10:abc}", false},
+		{
+			"r20",
+			"/r00/{r10:abc}/{r20}/",
+			false,
+		},
+		{"r11", "/r00/r11", false},
+		{"host #1 error", "http://example.com", true},
+		{"host #2 r10 error", "http://example2.com/r00/{r10}", true},
+		{"r10 error", "/r00/{r10:abc}", true},
+		{"r20 error", "/r00/{r10:abc}/{r20}", true},
+		{"non-existent", "/r00/{r12}", true},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			var _r _Responder
+			var err error
+
+			if !c.wantErr {
+				_r, err = ro._Responder(c.url)
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			err = ro.SetSharedDataAt(c.url, data)
+			if (err != nil) != c.wantErr {
+				t.Fatalf(
+					"Router.SetSharedDataAt() = %v, wantErr = %t",
+					err,
+					c.wantErr,
+				)
+			}
+
+			if _r != nil {
+				var retrievedData = _r.SharedData()
+				if retrievedData != data {
+					t.Fatalf(
+						"Router.SetSharedDataAt() has set data %v, want %v",
+						retrievedData,
+						data,
+					)
+				}
+
+				retrievedData = 0
+				retrievedData, err = ro.SharedDataAt(c.url)
+				if err != nil {
+					t.Fatalf(
+						"Router.SharedDataAt() err = %v, want nil",
+						err,
+					)
+				}
+
+				if retrievedData != data {
+					t.Fatalf(
+						"Router.SharedDataAt() data = %v, want %v",
+						retrievedData,
+						data,
+					)
+				}
+			}
+		})
+	}
+}
+
 func TestRouter_SetConfigurationAt(t *testing.T) {
 	var ro = NewRouter()
 	var config = Config{
@@ -3058,7 +3144,7 @@ func TestRouter_RegisteredResource(t *testing.T) {
 	}
 }
 
-func TestRouter_WrapWith(t *testing.T) {
+func TestRouter_WrapRequestPasser(t *testing.T) {
 	var (
 		ro   = NewRouter()
 		strb strings.Builder
@@ -3135,6 +3221,56 @@ func TestRouter_WrapWith(t *testing.T) {
 	}
 }
 
+func TestRouter_SetSharedDataForAll(t *testing.T) {
+	var ro = NewRouter()
+
+	var cases = []struct {
+		name, url string
+	}{
+		{"example1.com", "http://example1.com"},
+		{"example1.com h1r10", "https://example1.com/h1r00/{h1r10:abc}/"},
+		{"example1.com h1r11", "http://example1.com/h1r00/{h1r11}"},
+		{"example2.com h2r20", "https://example2.com/h2r00/{h2r10:123}/h2r20"},
+		{"r00", "https:///r00"},
+		{"r01", "{r01}"},
+		{"r10", "/{r01}/{r10:abc}/"},
+		{"r11", "{r01}/{r11}"},
+		{"r20", "https:///{r01}/r12/{r20:123}"},
+	}
+
+	var err error
+	var lc = len(cases)
+	for i := 0; i < lc; i++ {
+		_, err = ro._Responder(cases[i].url)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	var data = 1
+
+	ro.SetSharedDataForAll(data)
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			var _r _Responder
+			_r, _, err = ro.registered_Responder(c.url)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			var retrievedData = _r.SharedData()
+			if retrievedData != data {
+				t.Fatalf(
+					"Router.SetSharedDataForAll() data = %v, want = %v",
+					retrievedData,
+					data,
+				)
+			}
+		})
+	}
+}
+
 func TestRouter_SetConfigurationForAll(t *testing.T) {
 	var ro = NewRouter()
 
@@ -3194,6 +3330,10 @@ func TestRouter_SetConfigurationForAll(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			var _r _Responder
 			_r, _, err = ro.registered_Responder(c.urlToCheck)
+			if err != nil {
+				t.Fatal(err)
+			}
+
 			var _rConfig = _r.Configuration()
 			if _rConfig != config {
 				t.Fatalf(

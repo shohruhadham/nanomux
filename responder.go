@@ -104,6 +104,9 @@ type _Responder interface {
 
 	// -------------------------
 
+	SetSharedDataAt(pathTmplStr string, data interface{}) error
+	SharedDataAt(pathTmplStr string) (interface{}, error)
+
 	SetConfigurationAt(pathTmplStr string, config Config) error
 	ConfigurationAt(pathTmplStr string) (Config, error)
 
@@ -119,6 +122,7 @@ type _Responder interface {
 
 	// -------------------------
 
+	SetSharedDataForSubtree(data interface{})
 	SetConfigurationForSubtree(config Config)
 
 	WrapSubtreeRequestPassers(mws ...Middleware) error
@@ -1581,8 +1585,54 @@ func (rb *_ResponderBase) WrapHandlerOf(
 
 // -------------------------
 
+// SetSharedDataAt sets the shared data for the existing resource at the path.
+//
+// The scheme and trailing slash property values in the path template must be
+// compatible with the resource's properties, otherwise the method returns an
+// error.
+func (rb *_ResponderBase) SetSharedDataAt(
+	pathTmplStr string,
+	data interface{},
+) error {
+	var r, err = rb.RegisteredResource(pathTmplStr)
+	if err != nil {
+		return newErr("%w", err)
+	}
+
+	if r == nil {
+		return newErr("%w", ErrNonExistentResource)
+	}
+
+	r.SetSharedData(data)
+	return nil
+}
+
+// SharedDataAt returns the shared data of the existing resource at the path.
+//
+// The scheme and trailing slash property values in the path template must be
+// compatible with the resource's properties, otherwise the method returns an
+// error.
+func (rb *_ResponderBase) SharedDataAt(
+	pathTmplStr string,
+) (interface{}, error) {
+	var r, err = rb.RegisteredResource(pathTmplStr)
+	if err != nil {
+		return Config{}, newErr("%w", err)
+	}
+
+	if r == nil {
+		return Config{}, newErr("%w", ErrNonExistentResource)
+	}
+
+	return r.SharedData(), nil
+}
+
 // SetConfigurationAt sets the config for the existing resource at the path.
 // If the resource was configured before, it will be reconfigured.
+//
+// The scheme and trailing slash property values in the path template must be
+// compatible with the resource's properties, otherwise the method returns an
+// error.
 func (rb *_ResponderBase) SetConfigurationAt(
 	pathTmplStr string,
 	config Config,
@@ -1602,6 +1652,10 @@ func (rb *_ResponderBase) SetConfigurationAt(
 
 // ConfigurationAt returns the configuration of the existing resource at the
 // path.
+//
+// The scheme and trailing slash property values in the path template must be
+// compatible with the resource's properties, otherwise the method returns an
+// error.
 func (rb *_ResponderBase) ConfigurationAt(pathTmplStr string) (Config, error) {
 	var r, err = rb.RegisteredResource(pathTmplStr)
 	if err != nil {
@@ -1614,8 +1668,6 @@ func (rb *_ResponderBase) ConfigurationAt(pathTmplStr string) (Config, error) {
 
 	return r.Configuration(), nil
 }
-
-// -------------------------
 
 // SetImplementationAt sets the request handlers for a resource at the path
 // from the passed Impl. If the resource doesn't exist, the method creates it.
@@ -1662,8 +1714,6 @@ func (rb *_ResponderBase) ImplementationAt(pathTmplStr string) (Impl, error) {
 
 	return r.Implementation(), nil
 }
-
-// -------------------------
 
 // SetPathHandlerFor sets the HTTP methods' handler function for a resource
 // at the path. If the resource doesn't exist, it will be created.
@@ -1729,7 +1779,7 @@ func (rb *_ResponderBase) PathHandlerOf(method, pathTmplStr string) (
 // the next path segment and passing the request to it. If there is no matching
 // resource, the handler for a not-found resource is called.
 //
-// The scheme and trailing slash property values in the URL template must be
+// The scheme and trailing slash property values in the path template must be
 // compatible with the resource's properties, otherwise the method returns an
 // error.
 func (rb *_ResponderBase) WrapRequestPasserAt(
@@ -1798,6 +1848,10 @@ func (rb *_ResponderBase) WrapRequestHandlerAt(
 //
 // If the resource or the handler of any HTTP method doesn't exist, the method
 // returns an error.
+//
+// The scheme and trailing slash property values in the path template must be
+// compatible with the resource's properties, otherwise the method returns an
+// error.
 func (rb *_ResponderBase) WrapPathHandlerOf(
 	methods, pathTmplStr string,
 	mws ...Middleware,
@@ -1820,6 +1874,18 @@ func (rb *_ResponderBase) WrapPathHandlerOf(
 }
 
 // -------------------------
+
+// SetSharedDataForSubtree sets the shared data for all the resources below
+// in the hierarchy.
+func (rb *_ResponderBase) SetSharedDataForSubtree(data interface{}) {
+	traverseAndCall(
+		rb._Responders(),
+		func(_r _Responder) error {
+			_r.SetSharedData(data)
+			return nil
+		},
+	)
+}
 
 // SetConfigurationForSubtree sets the config for all the resources below in the
 // hierarchy.
