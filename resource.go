@@ -486,8 +486,8 @@ func (rb *Resource) Parent() *Resource {
 
 // -------------------------
 
-// IsRoot returns true if the resource is a root resource.
-func (rb *Resource) IsRoot() bool {
+// isRoot returns true if the resource is a root resource.
+func (rb *Resource) isRoot() bool {
 	return rb.tmpl == rootTmpl
 }
 

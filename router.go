@@ -924,7 +924,7 @@ func (ro *Router) Resource(urlTmplStr string) (*Resource, error) {
 	if hTmplStr != "" {
 		if pTmplStr == "/" {
 			// Hosts have trailing slash but not a root resource.
-			return nil, newErr("%w", ErrEmptyPathSegmentTemplate)
+			return nil, newErr("%w", ErrEmptyPathTemplate)
 		}
 
 		_r, newHost, _, _, err = ro.host(hTmplStr)
@@ -1160,7 +1160,7 @@ func (ro *Router) RegisterResource(r *Resource) error {
 
 	// Here, _r is either nil or has a valid pointer to a host.
 	if _r == nil {
-		if r.IsRoot() {
+		if r.isRoot() {
 			// The following if statement should never be true.
 			if urlt != nil && urlt.PrefixPath != "" {
 				return newErr("%w", ErrNonRouterParent)
@@ -1301,7 +1301,7 @@ func (ro *Router) RegisterResourceUnder(urlTmplStr string, r *Resource) error {
 
 	// Here, _r is either nil or has a valid pointer to a host.
 	if _r == nil {
-		if r.IsRoot() {
+		if r.isRoot() {
 			if pTmplStr == "" {
 				if err := ro.registerNewRoot(r); err != nil {
 					return newErr("%w", err)
@@ -1571,6 +1571,7 @@ func (ro *Router) _Responders() []_Responder {
 // -------------------------
 
 func (ro *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// fmt.Printf("\nhost: %s\nurl: %s", r.Host, r.URL)
 	var args = getArgs(r.URL, nil)
 	ro.requestPasser(w, r, args)
 	putArgsInThePool(args)

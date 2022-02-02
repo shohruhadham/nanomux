@@ -306,7 +306,7 @@ loop:
 	for p := _Parent(_r); p != nil; p = p.parent() {
 		switch p := p.(type) {
 		case *Resource:
-			if p.IsRoot() {
+			if p.isRoot() {
 				// Root "/" is added later when the segments are joined.
 				continue
 			}
@@ -347,7 +347,7 @@ loop:
 
 	switch rr := _r.(type) {
 	case *Resource:
-		if rr.IsSubtreeHandler() && !rr.IsRoot() {
+		if rr.IsSubtreeHandler() && !rr.isRoot() {
 			strb.WriteByte('/')
 		}
 	case *Host:
@@ -423,9 +423,9 @@ type Args struct {
 // getArgs returns an instance of Args adapted to the URL.
 func getArgs(url *url.URL, _r _Responder) *Args {
 	var args = getArgsFromThePool(url, _r)
-	if args.path != "" {
+	if len(args.path) > 1 {
 		var trailingSlash bool
-		if len(args.path) > 1 && args.path[len(args.path)-1] == '/' {
+		if args.path[len(args.path)-1] == '/' {
 			trailingSlash = true
 		}
 

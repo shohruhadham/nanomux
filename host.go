@@ -12,7 +12,9 @@ import (
 
 // --------------------------------------------------
 
-// Host represents the host as a resource.
+// Host represents the host component as a resource. When the Host type is
+// used, there is no need for a root resource. When HTTP method handlers are
+// set, the host responds to the requests made to the root path.
 type Host struct {
 	_ResponderBase
 }
@@ -86,10 +88,11 @@ func createHost(tmplStr string, impl Impl, config *Config) (*Host, error) {
 	return h, nil
 }
 
-// CreateDormantHost returns a new dormant host (without request handlers) from
-// the URL template. The template's scheme and trailing slash property values
-// are used to configure the host. The host's template must not be a wildcard
-// template.
+// CreateDormantHost returns a new dormant host (without HTTP method handlers).
+// The template's scheme and trailing slash values are used to configure the
+// host. The trailing slash is used only for path segments when the host is a
+// subtree handler and must respond to the request. It has no effect on the
+// host itself. The template cannot be a wildcard template.
 func CreateDormantHost(hostTmplStr string) (*Host, error) {
 	var h, err = createHost(hostTmplStr, nil, nil)
 	if err != nil {
@@ -99,11 +102,13 @@ func CreateDormantHost(hostTmplStr string) (*Host, error) {
 	return h, err
 }
 
-// CreateDormantHostUsingConfig returns a new dormant host (without request
-// handlers) from the URL template. The host is configured with the properties
-// in the config as well as the scheme and trailing slash property values of
-// the URL template (the config's Secure and TrailingSlash values are ignored
-// and may not be set). The host's template must not be a wildcard template.
+// CreateDormantHostUsingConfig returns a new dormant host (without HTTP method
+// handlers). The host is configured with the properties in the config as well
+// as the scheme and trailing slash values of the host template. The trailing
+// slash is used only for path segments when the host is a subtree handler and
+// must respond to the request. It has no effect on the host itself. The
+// config's Secure and TrailingSlash values are ignored and may not be set. The
+// host template cannot be a wildcard template.
 func CreateDormantHostUsingConfig(
 	hostTmplStr string,
 	config Config,
@@ -116,11 +121,11 @@ func CreateDormantHostUsingConfig(
 	return h, nil
 }
 
-// CreateHost returns a newly created host.
-//
-// The first argument URL template's scheme and trailing slash property values
-// are used to configure the new host. The template must not be a wildcard
-// template.
+// CreateHost returns a new host. The template's scheme and trailing slash
+// values are used to configure the host. The trailing slash is used only for
+// path segments when the host is a subtree handler and must respond to the
+// request. It has no effect on the host itself. The template cannot be a
+// wildcard template.
 //
 // The Impl is, in a sense, the implementation of the host. It is an instance
 // of a type with methods to handle HTTP requests. Methods must have the
@@ -153,10 +158,12 @@ func CreateHost(hostTmplStr string, impl Impl) (*Host, error) {
 	return h, nil
 }
 
-// CreateHost returns a newly created host. The host is configured with the
-// properties in the config as well as the scheme and trailing slash property
-// values of the URL template (the config's Secure and TrailingSlash values are
-// ignored and may not be set). The template must not be a wildcard template.
+// CreateHost returns a new host. The host is configured with the properties
+// in the config as well as the scheme and trailing slash values of the host
+// template. The trailing slash is used only for path segments when the host
+// is a subtree handler and must respond to the request. It has no effect on
+// the host itself. The config's Secure and TrailingSlash values are ignored
+// and may not be set. The host template cannot be a wildcard template.
 //
 // The Impl is, in a sense, the implementation of the host. It is an instance
 // of a type with methods to handle HTTP requests. Methods must have the
@@ -203,8 +210,10 @@ func CreateHostUsingConfig(
 // the URL template. Unlike CreateDormantHost, NewDormantHost panics on an
 // error.
 //
-// The template's scheme and trailing slash property values are used to
-// configure the host. The host's template must not be a wildcard template.
+// The template's scheme and trailing slash values are used to configure the
+// host. The trailing slash is used only for path segments when the host is a
+// subtree handler and must respond to the request. It has no effect on the
+// host itself. The template cannot be a wildcard template.
 func NewDormantHost(hostTmplStr string) *Host {
 	var h, err = CreateDormantHost(hostTmplStr)
 	if err != nil {
@@ -219,9 +228,11 @@ func NewDormantHost(hostTmplStr string) *Host {
 // NewDormantHostUsingConfig panics on an error.
 //
 // The host is configured with the properties in the config as well as the
-// scheme and trailing slash property values of the URL template (the config's
-// Secure and TrailingSlash values are ignored and may not be set). The host's
-// template must not be a wildcard template.
+// scheme and trailing slash values of the host template. The trailing slash
+// is used only for path segments when the host is a subtree handler and must
+// respond to the request. It has no effect on the host itself. The config's
+// Secure and TrailingSlash values are ignored and may not be set. The host
+// template cannot be a wildcard template.
 func NewDormantHostUsingConfig(hostTmplStr string, config Config) *Host {
 	var h, err = CreateDormantHostUsingConfig(hostTmplStr, config)
 	if err != nil {
@@ -231,12 +242,11 @@ func NewDormantHostUsingConfig(hostTmplStr string, config Config) *Host {
 	return h
 }
 
-// NewHost returns a newly created host. Unlike CreateHost, NewHost panics on
-// an error.
-//
-// The first argument URL template's scheme and trailing slash property values
-// are used to configure the new host. The template must not be a wildcard
-// template.
+// NewHost returns a new host. Unlike CreateHost, NewHost panics on an error.
+// The template's scheme and trailing slash values are used to configure the
+// host. The trailing slash is used only for path segments when the host is a
+// subtree handler and must respond to the request. It has no effect on the
+// host itself. The template cannot be a wildcard template.
 //
 // The Impl is, in a sense, the implementation of the host. It is an instance
 // of a type with methods to handle HTTP requests. Methods must have the
@@ -265,13 +275,15 @@ func NewHost(hostTmplStr string, impl Impl) *Host {
 	return h
 }
 
-// NewHostUsingConfig returns a newly created host. Unlike
-// CreateHostUsingConfig, NewHostUsingConfig panics on an error.
+// NewHostUsingConfig returns a new host. Unlike CreateHostUsingConfig,
+// NewHostUsingConfig panics on an error.
 //
-// The new host is configured with the properties in the config as well as
-// the scheme and trailing slash property values of the URL template (the
-// config's Secure and TrailingSlash values are ignored and may not be set).
-// The template must not be a wildcard template.
+// The host is configured with the properties in the config as well as the
+// scheme and trailing slash values of the host template. The trailing slash
+// is used only for path segments when the host is a subtree handler and must
+// respond to the request. It has no effect on the host itself. The config's
+// Secure and TrailingSlash values are ignored and may not be set. The host
+// template cannot be a wildcard template.
 //
 // The Impl is, in a sense, the implementation of the host. It is an instance
 // of a type with methods to handle HTTP requests. Methods must have the
@@ -345,23 +357,19 @@ func (hb *Host) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleOrPassRequest handles the request if the host's template matches the
-// host segment of the request's URL and the URL has an empty path or has only
-// a slash "/" (a slash is considered the trailing slash for the host, not a
-// root resource).
+// host segment of the request's URL and the URL has no path segments.
 //
 // If the host was configured to respond only when it's used under the HTTPs,
 // but instead is used under the HTTP, it drops the request, unless it was
 // configured to redirect insecure requests to the URL with the HTTPs.
 //
-// If the host was configured to drop a request on the unmatched presence or
-// absence of the trailing slash, the function drops the request instead of
-// redirecting it to a URL with the matching trailing slash.
-//
-// When the request's URL contains path segments, the function tries to pass the
+// When the request's URL contains path segments, the method tries to pass the
 // request to a child resource by calling the host's request passer. If there
 // is no matching child resource and the host was configured as a subtree
 // handler, the request is handled by the host itself, otherwise a "404 Not
-// Found" status code is returned.
+// Found" status code is returned. Only in this situation, the host's trailing
+// slash related configurations will be used. They work on the last path segment
+// of the request's URL and have no effect on the host itself.
 func (hb *Host) handleOrPassRequest(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -399,7 +407,8 @@ func (hb *Host) handleOrPassRequest(
 		newURL.Scheme = "https"
 	}
 
-	// Following checks unclean paths, like '////'.
+	// If the path was cleaned and the host doesn't allow unclean paths,
+	// then the request will be redirected.
 	if args.cleanPath && !hb.IsLenientOnUncleanPath() {
 		if newURL == nil {
 			newURL = cloneRequestURL(r)
@@ -408,27 +417,31 @@ func (hb *Host) handleOrPassRequest(
 		newURL.Path = args.path
 	}
 
-	if len(args.path) < 2 && !hb.IsLenientOnTrailingSlash() {
-		if hb.HasTrailingSlash() && args.path != "/" {
-			if hb.IsStrictOnTrailingSlash() {
-				return notFoundResourceHandler(w, r, args)
-			}
+	if hb.IsSubtreeHandler() {
+		// The path must have at least three characters for it to have
+		// a trailing slash.
+		if len(args.path) > 2 && !hb.IsLenientOnTrailingSlash() {
+			if hb.HasTrailingSlash() && args.path != "/" {
+				if hb.IsStrictOnTrailingSlash() {
+					return notFoundResourceHandler(w, r, args)
+				}
 
-			if newURL == nil {
-				newURL = cloneRequestURL(r)
-			}
+				if newURL == nil {
+					newURL = cloneRequestURL(r)
+				}
 
-			newURL.Path += "/"
-		} else if !hb.HasTrailingSlash() && args.path == "/" {
-			if hb.IsStrictOnTrailingSlash() {
-				return notFoundResourceHandler(w, r, args)
-			}
+				newURL.Path += "/"
+			} else if !hb.HasTrailingSlash() && args.path == "/" {
+				if hb.IsStrictOnTrailingSlash() {
+					return notFoundResourceHandler(w, r, args)
+				}
 
-			if newURL == nil {
-				newURL = cloneRequestURL(r)
-			}
+				if newURL == nil {
+					newURL = cloneRequestURL(r)
+				}
 
-			newURL.Path = newURL.Path[:len(newURL.Path)-1]
+				newURL.Path = newURL.Path[:len(newURL.Path)-1]
+			}
 		}
 	}
 

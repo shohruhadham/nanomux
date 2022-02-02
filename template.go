@@ -128,29 +128,28 @@ type _TemplateSegment struct {
 
 // Template represents the parsed template of the hosts and resources.
 //
-// A template may have three segments: static, regexp, and wildcard. The
-// regexp segment must be between curly braces and its value name and pattern
-// separated by ":". The wildcard segment can only have a value name. There
-// can be only one wildcard segment in the template. The regexp and wildcard
-// segments are the dynamic segments of the template. Dynamic segments' names
-// are used as their value names.
+// A template may have three kinds of segments: static, regexp, and wildcard.
+// The regexp segment must be between curly braces and its value name and
+// pattern separated by ":". The wildcard segment can only have a value name.
+// There can be only one wildcard segment in the template. The regexp and
+// wildcard segments are the dynamic segments of the template. Dynamic
+// segments' names are used as their value names.
 //
-// A template may have a name. Its template's name comes at the beginning of
-// the template. The name must come after the "$" sign and be followed by ":".
-// If there is a single dynamic segment in the template and the template
-// doesn't have a name, the dynamic segment's name is also used as the name
-// of the template.
+// A template may have a name. The name comes at the beginning of the template,
+// after the "$" sign and followed by ":". If there is a single dynamic segment
+// in the template and the template doesn't have a name, the dynamic segment's
+// name is used as the name of the template.
 //
 // If the regexp dynamic segment is repeated in the template, from the second
 // repetition, its pattern may be omitted. When the regexp matches a string, its
 // repetitions must get the same value, otherwise the match fails.
 //
-// The colon ":" in the template name and in the value name, as well as
-// the curly braces "{" and "}" in the static segments, can be escaped with
-// the backslash "\". The escaped colon ":" is included in the name, and the
-// escaped curly braces "{" and "}" are included in the static segment. If
-// the static segment at the beginning of the template starts with the "$"
-// sign, it must be escaped too.
+// The colon ":" in the template name and in the value name, as well as the
+// curly braces "{" and "}" in the static segments, can be escaped with the
+// backslash "\". The escaped colon ":" is included in the name, and the
+// escaped curly braces "{" and "}" are included in the static segment. If the
+// static segment at the beginning of the template must start with the "$"
+// sign, and the template doesn't need a name, the "$" sign must be escaped too.
 //
 // Some examples of the template forms:
 //
