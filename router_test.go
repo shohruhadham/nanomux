@@ -4074,9 +4074,9 @@ func TestRouter_ServeHTTP(t *testing.T) {
 			nil,
 			"CUSTOM",
 			"http://1.example1.com",
-			true,
 			false,
-			"CUSTOM http://1.example1.com/",
+			false,
+			"CUSTOM http://1.example1.com",
 		},
 		{
 			"ph1#2",
@@ -4110,9 +4110,9 @@ func TestRouter_ServeHTTP(t *testing.T) {
 			nil,
 			"POST",
 			"https://1.example1.com",
-			true,
 			false,
-			"POST https://1.example1.com/",
+			false,
+			"POST https://1.example1.com",
 		},
 		{
 			"ph1#6",
@@ -4167,9 +4167,9 @@ func TestRouter_ServeHTTP(t *testing.T) {
 			nil,
 			"POST",
 			"https://1.example2.com/",
-			true,
 			false,
-			"POST https://1.example2.com",
+			false,
+			"POST https://1.example2.com/",
 		},
 		{
 			"ph2#6",
@@ -4178,7 +4178,7 @@ func TestRouter_ServeHTTP(t *testing.T) {
 			"https://1.example2.com///..//.//",
 			true,
 			false,
-			"CUSTOM https://1.example2.com",
+			"CUSTOM https://1.example2.com/",
 		},
 	}
 
@@ -4747,76 +4747,5 @@ func BenchmarkRouterWithPatternRequest(b *testing.B) {
 func BenchmarkRouterWithWildcardRequest(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		ro.ServeHTTP(w, wr)
-	}
-}
-
-func BenchmarkMap(b *testing.B) {
-	var h = func(http.ResponseWriter, *http.Request, *Args) bool { return true }
-	var methods = []string{
-		"GET",
-		"POST",
-		"PUT",
-		"DELETE",
-		"TRACE",
-		"CONNECT",
-		"OPTIONS",
-		"HEAD",
-		"PATCH",
-	}
-
-	var m = map[string]Handler{
-		"GET":     h,
-		"POST":    h,
-		"PUT":     h,
-		"DELETE":  h,
-		"TRACE":   h,
-		"CONNECT": h,
-		"OPTIONS": h,
-		"HEAD":    h,
-		"PATCH":   h,
-	}
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		var method = methods[i%len(methods)]
-		var _ = m[method]
-	}
-}
-
-func BenchmarkSlice(b *testing.B) {
-	var h = Handler(
-		func(http.ResponseWriter, *http.Request, *Args) bool { return true },
-	)
-
-	var methods = []string{
-		"GET",
-		"POST",
-		"PUT",
-		"DELETE",
-		"TRACE",
-		"CONNECT",
-		"OPTIONS",
-		"HEAD",
-		"PATCH",
-	}
-
-	var slc = _MethodHandlerPairs{
-		{"GET", h},
-		{"POST", h},
-		{"PUT", h},
-		{"DELETE", h},
-		{"TRACE", h},
-		{"CONNECT", h},
-		{"OPTIONS", h},
-		{"HEAD", h},
-		{"PATCH", h},
-	}
-
-	slc.sort()
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		var method = methods[i%len(methods)]
-		var _, _ = slc.get(method)
 	}
 }

@@ -17,7 +17,7 @@ import (
 type _Responder interface {
 	Name() string
 	Template() *Template
-	URL(HostPathValues) (*url.URL, error)
+	URL(hpVs HostPathValues) (*url.URL, error)
 
 	Router() *Router
 
@@ -990,7 +990,7 @@ func (rb *_ResponderBase) Resource(pathTmplStr string) (*Resource, error) {
 		return nil, newErr("%w", err)
 	}
 
-	if hTmplStr != "" {
+	if hTmplStr != "" || pathTmplStr == "/" {
 		return nil, newErr("%w", ErrNonRouterParent)
 	}
 
@@ -1062,7 +1062,7 @@ func (rb *_ResponderBase) ResourceUsingConfig(
 		return nil, newErr("%w", err)
 	}
 
-	if hTmplStr != "" {
+	if hTmplStr != "" || pathTmplStr == "/" {
 		return nil, newErr("%w", ErrNonRouterParent)
 	}
 
@@ -1122,9 +1122,9 @@ func (rb *_ResponderBase) ResourceUsingConfig(
 // receiver resource, the argument resource will be registered under them.
 // Otherwise, new resources will be created for the missing path segments.
 //
-// If the argument resource's template collides with one of its siblings'
-// templates, RegisterResource checks which one has the request handlers set
-// and passes the other one's child resources to it. If both can handle a
+// If the argument resource's template collides with the template of one of
+// its siblings, RegisterResource checks which one has the HTTP method handlers
+// set and passes the other one's child resources to it. If both can handle a
 // request, the method returns an error. Child resources are also checked
 // recursively.
 func (rb *_ResponderBase) RegisterResource(r *Resource) error {
@@ -1132,7 +1132,7 @@ func (rb *_ResponderBase) RegisterResource(r *Resource) error {
 		return newErr("%w", ErrNilArgument)
 	}
 
-	if r.IsRoot() {
+	if r.isRoot() {
 		return newErr("%w", ErrNonRouterParent)
 	}
 
@@ -1196,7 +1196,7 @@ func (rb *_ResponderBase) RegisterResourceUnder(
 		return newErr("%w", ErrNilArgument)
 	}
 
-	if r.IsRoot() {
+	if r.isRoot() {
 		return newErr("%w", ErrNonRouterParent)
 	}
 

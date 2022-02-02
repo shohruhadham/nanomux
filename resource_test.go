@@ -416,7 +416,7 @@ func TestResourceBase_Configuring(t *testing.T) {
 
 func TestResourceBase_IsRoot(t *testing.T) {
 	var r = newDormantResource(rootTmpl)
-	if !r.IsRoot() {
+	if !r.isRoot() {
 		t.Fatalf("ResourceBase.IsRoot() = false, want true")
 	}
 }

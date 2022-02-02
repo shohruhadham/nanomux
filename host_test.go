@@ -183,9 +183,9 @@ func TestHostBase_ServeHTTP(t *testing.T) {
 			hs[0],
 			"GET",
 			"http://example.com/",
-			true,
 			false,
-			"GET http://example.com",
+			false,
+			"GET http://example.com/",
 		},
 		{
 			"host #0.3",
@@ -194,7 +194,7 @@ func TestHostBase_ServeHTTP(t *testing.T) {
 			"http://example.com/.././//",
 			true,
 			false,
-			"GET http://example.com",
+			"GET http://example.com/",
 		},
 		{
 			"host #0.4",
@@ -210,9 +210,9 @@ func TestHostBase_ServeHTTP(t *testing.T) {
 			hs[0],
 			"GET",
 			"https://example.com/",
-			true,
 			false,
-			"GET https://example.com",
+			false,
+			"GET https://example.com/",
 		},
 		{
 			"host #0.6",
@@ -221,7 +221,7 @@ func TestHostBase_ServeHTTP(t *testing.T) {
 			"https://example.com/.././//",
 			true,
 			false,
-			"GET https://example.com",
+			"GET https://example.com/",
 		},
 
 		// ----------
@@ -240,9 +240,9 @@ func TestHostBase_ServeHTTP(t *testing.T) {
 			hs[1],
 			"CUSTOM",
 			"http://sub.example.com/",
-			true,
 			false,
-			"CUSTOM http://sub.example.com",
+			false,
+			"CUSTOM http://sub.example.com/",
 		},
 		{
 			"host #1.3",
@@ -251,7 +251,7 @@ func TestHostBase_ServeHTTP(t *testing.T) {
 			"http://sub.example.com///..//.//",
 			true,
 			false,
-			"CUSTOM http://sub.example.com",
+			"CUSTOM http://sub.example.com/",
 		},
 		{
 			"host #1.4",
@@ -267,9 +267,9 @@ func TestHostBase_ServeHTTP(t *testing.T) {
 			hs[1],
 			"POST",
 			"https://sub.example.com/",
-			true,
 			false,
-			"POST https://sub.example.com",
+			false,
+			"POST https://sub.example.com/",
 		},
 		{
 			"host #1.6",
@@ -278,7 +278,7 @@ func TestHostBase_ServeHTTP(t *testing.T) {
 			"https://sub.example.com///..//.//",
 			true,
 			false,
-			"CUSTOM https://sub.example.com",
+			"CUSTOM https://sub.example.com/",
 		},
 
 		// ----------
@@ -324,9 +324,9 @@ func TestHostBase_ServeHTTP(t *testing.T) {
 			hs[2],
 			"POST",
 			"https://example.com/",
-			true,
 			false,
-			"POST https://example.com",
+			false,
+			"POST https://example.com/",
 		},
 		{
 			"host #2.6",
@@ -335,7 +335,7 @@ func TestHostBase_ServeHTTP(t *testing.T) {
 			"https://example.com///..//.//",
 			true,
 			false,
-			"CUSTOM https://example.com",
+			"CUSTOM https://example.com/",
 		},
 
 		// ----------
@@ -372,9 +372,9 @@ func TestHostBase_ServeHTTP(t *testing.T) {
 			hs[3],
 			"CUSTOM",
 			"https://example.com",
-			true,
 			false,
-			"CUSTOM https://example.com/",
+			false,
+			"CUSTOM https://example.com",
 		},
 		{
 			"host #3.5",
@@ -413,7 +413,7 @@ func TestHostBase_ServeHTTP(t *testing.T) {
 			"http://sub.sub.example.com/",
 			true,
 			false,
-			"POST https://sub.sub.example.com",
+			"POST https://sub.sub.example.com/",
 		},
 		{
 			"host #4.3",
@@ -422,7 +422,7 @@ func TestHostBase_ServeHTTP(t *testing.T) {
 			"http://sub.sub.example.com/..///.//",
 			true,
 			false,
-			"POST https://sub.sub.example.com",
+			"POST https://sub.sub.example.com/",
 		},
 		{
 			"host #4.4",
@@ -438,9 +438,9 @@ func TestHostBase_ServeHTTP(t *testing.T) {
 			hs[4],
 			"POST",
 			"https://sub.sub.example.com/",
-			true,
 			false,
-			"POST https://sub.sub.example.com",
+			false,
+			"POST https://sub.sub.example.com/",
 		},
 		{
 			"host #4.6",
@@ -449,7 +449,7 @@ func TestHostBase_ServeHTTP(t *testing.T) {
 			"https://sub.sub.example.com/..///.//",
 			true,
 			false,
-			"POST https://sub.sub.example.com",
+			"POST https://sub.sub.example.com/",
 		},
 
 		// ----------
@@ -526,17 +526,17 @@ func TestHostBase_ServeHTTP(t *testing.T) {
 			"CUSTOM",
 			"http://example.com/",
 			false,
-			true,
-			"Not Found\n",
+			false,
+			"CUSTOM http://example.com/",
 		},
 		{
 			"host #6.3",
 			hs[6],
 			"GET",
 			"http://example.com/..///././..///",
-			false,
 			true,
-			"Not Found\n",
+			false,
+			"GET http://example.com/",
 		},
 		{
 			"host #6.4",
@@ -553,17 +553,17 @@ func TestHostBase_ServeHTTP(t *testing.T) {
 			"CUSTOM",
 			"https://example.com/",
 			false,
-			true,
-			"Not Found\n",
+			false,
+			"CUSTOM https://example.com/",
 		},
 		{
 			"host #6.6",
 			hs[6],
 			"GET",
 			"https://example.com/..///././..///",
-			false,
 			true,
-			"Not Found\n",
+			false,
+			"GET https://example.com/",
 		},
 
 		// ----------
@@ -574,8 +574,8 @@ func TestHostBase_ServeHTTP(t *testing.T) {
 			"GET",
 			"http://example.com",
 			false,
-			true,
-			"Not Found\n",
+			false,
+			"GET http://example.com",
 		},
 		{
 			"host #7.2",
@@ -601,8 +601,8 @@ func TestHostBase_ServeHTTP(t *testing.T) {
 			"GET",
 			"https://example.com",
 			false,
-			true,
-			"Not Found\n",
+			false,
+			"GET https://example.com",
 		},
 		{
 			"host #7.5",
@@ -697,18 +697,18 @@ func TestHostBase_ServeHTTP(t *testing.T) {
 			hs[9],
 			"GET",
 			"http://example.com/",
-			false,
 			true,
-			"Not Found\n",
+			false,
+			"GET https://example.com/",
 		},
 		{
 			"host #9.3",
 			hs[9],
 			"GET",
 			"http://example.com/.././//",
-			false,
 			true,
-			"Not Found\n",
+			false,
+			"GET https://example.com/",
 		},
 		{
 			"host #9.4",
@@ -725,17 +725,17 @@ func TestHostBase_ServeHTTP(t *testing.T) {
 			"GET",
 			"https://example.com/",
 			false,
-			true,
-			"Not Found\n",
+			false,
+			"GET https://example.com/",
 		},
 		{
 			"host #9.6",
 			hs[9],
 			"GET",
 			"https://example.com/.././//",
-			false,
 			true,
-			"Not Found\n",
+			false,
+			"GET https://example.com/",
 		},
 	}
 
@@ -876,8 +876,8 @@ func TestHostBase_ServeHTTP(t *testing.T) {
 			hs[3],
 			"CUSTOM",
 			"https://example.com",
-			true, false,
-			"middleware CUSTOM https://example.com/",
+			false, false,
+			"middleware CUSTOM https://example.com",
 		},
 	}
 
