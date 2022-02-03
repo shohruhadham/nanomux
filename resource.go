@@ -13,10 +13,10 @@ import (
 // Resource represents the path segment resource.
 type Resource struct {
 	_ResponderBase
-	urlt *URLTmpl
+	urlt *_URLTmpl
 }
 
-// createDormantResource creates an unconfigured and dormant resource.
+// createDormantResource creates a dormant, not configured resource.
 func createDormantResource(tmpl *Template) (*Resource, error) {
 	if tmpl == nil {
 		return nil, newErr("%w", ErrNilArgument)
@@ -29,8 +29,8 @@ func createDormantResource(tmpl *Template) (*Resource, error) {
 	return rb, nil
 }
 
-// createResource creates an instance of the Resource. The impl and
-// config parameters can be nil.
+// createResource creates an instance of the Resource. The impl and config
+// parameters can be nil.
 func createResource(
 	tmplStr string,
 	impl Impl,
@@ -86,7 +86,7 @@ func createResource(
 	}
 
 	if hTmplStr != "" || pTmplStr != "" {
-		r.urlt = &URLTmpl{Host: hTmplStr, PrefixPath: pTmplStr}
+		r.urlt = &_URLTmpl{Host: hTmplStr, PrefixPath: pTmplStr}
 	}
 
 	r.derived = r
@@ -95,7 +95,7 @@ func createResource(
 	return r, nil
 }
 
-// CreateDormantResource returns a new dormant resource (without request
+// CreateDormantResource returns a new dormant resource (without HTTP method
 // handlers) from the URL template. The template's scheme and trailing slash
 // property values are used to configure the resource.
 //
@@ -121,7 +121,7 @@ func CreateDormantResource(urlTmplStr string) (*Resource, error) {
 }
 
 // CreateDormantResourceUsingConfig returns a new dormant resource (without
-// request handlers) from the URL template.
+// HTTP method handlers) from the URL template.
 //
 // The resource is configured with the properties in the config as well as the
 // scheme and trailing slash property values of the URL template (the config's
@@ -151,7 +151,7 @@ func CreateDormantResourceUsingConfig(
 	return r, nil
 }
 
-// CreateResource returns a newly created resource.
+// CreateResource returns a new resource.
 //
 // The first argument URL template's scheme and trailing slash property values
 // are used to configure the new instance of the Resource.
@@ -160,8 +160,8 @@ func CreateDormantResourceUsingConfig(
 // instance of a type with methods to handle HTTP requests. Methods must have
 // the signature of the Handler and must start with the "Handle" prefix. The
 // remaining part of any such method's name is considered an HTTP method. For
-// example, HandleGet and HandleCustom are considered the handlers of the GET
-// and CUSTOM HTTP methods, respectively. If the value of the impl has the
+// example, HandleGet and HandleShare are considered the handlers of the GET
+// and SHARE HTTP methods, respectively. If the value of the impl has the
 // HandleNotAllowedMethod method, then it's used as the handler of the not
 // allowed HTTP methods.
 //
@@ -171,6 +171,7 @@ func CreateDormantResourceUsingConfig(
 // 	func (er *ExampleResource) HandleGet(
 // 		w http.ResponseWriter,
 // 		r *http.Request,
+//		args *nanomux.Args,
 // 	) {
 // 		// ...
 // 	}
@@ -206,17 +207,17 @@ func CreateResource(urlTmplStr string, impl Impl) (*Resource, error) {
 	return r, nil
 }
 
-// CreateResourceUsingConfig returns a newly created resource. The resource
-// is configured with the properties in the config as well as the scheme and
-// trailing slash property values of the URL template (the config's Secure
-// and TrailingSlash values are ignored and may not be set).
+// CreateResourceUsingConfig returns a new resource. The resource is configured
+// with the properties in the config as well as the scheme and trailing slash
+// property values of the URL template (the config's Secure and TrailingSlash
+// values are ignored and may not be set).
 //
 // The Impl is, in a sense, the implementation of the resource. It is an
 // instance of a type with methods to handle HTTP requests. Methods must have
 // the signature of the Handler and must start with the "Handle" prefix. The
 // remaining part of any such method's name is considered an HTTP method. For
-// example, HandleGet and HandleCustom are considered the handlers of the GET
-// and CUSTOM HTTP methods, respectively. If the value of the impl has the
+// example, HandleGet and HandleShare are considered the handlers of the GET
+// and SHARE HTTP methods, respectively. If the value of the impl has the
 // HandleNotAllowedMethod method, then it's used as the handler of the not
 // allowed HTTP methods.
 //
@@ -226,6 +227,7 @@ func CreateResource(urlTmplStr string, impl Impl) (*Resource, error) {
 // 	func (er *ExampleResource) HandleGet(
 // 		w http.ResponseWriter,
 // 		r *http.Request,
+//		args *nanomux.Args,
 // 	) {
 // 		// ...
 // 	}
@@ -234,7 +236,7 @@ func CreateResource(urlTmplStr string, impl Impl) (*Resource, error) {
 // 	var exampleResource, err = CreateResourceUsingConfig(
 // 		"https://example.com/{wildCardTemplate}/",
 // 		&ExampleResource{},
-// 		Config{Subtree: true, RedirectInsecureRequest: true},
+// 		Config{SubtreeHandler: true, RedirectInsecureRequest: true},
 // 	)
 //
 // When the URL template contains a host and/or prefix path segment templates,
@@ -268,9 +270,9 @@ func CreateResourceUsingConfig(
 
 // -------------------------
 
-// NewDormantResource returns a new dormant resource (without request handlers)
-// from the URL template. Unlike CreateDormantResource, NewDormantResource
-// panics on error.
+// NewDormantResource returns a new dormant resource (without HTTP
+// method handlers) from the URL template. Unlike CreateDormantResource,
+// NewDormantResource panics on error.
 //
 // The template's scheme and trailing slash property values are used to
 // configure the resource.
@@ -296,8 +298,8 @@ func NewDormantResource(urlTmplStr string) *Resource {
 	return r
 }
 
-// NewDormantResourceUsingConfig returns a new dormant resource (without
-// request handlers) from the URL template.
+// NewDormantResourceUsingConfig returns a new dormant resource
+// (without HTTP method handlers) from the URL template.
 // Unlike CreateDormantResourceUsingConfig, NewDormantResourceUsingConfig
 // panics on an error.
 //
@@ -326,8 +328,8 @@ func NewDormantResourceUsingConfig(urlTmplStr string, config Config) *Resource {
 	return r
 }
 
-// NewResource returns a newly created resource. Unlike CreateResource,
-// NewResource panics on an error.
+// NewResource returns a new resource. Unlike CreateResource, NewResource
+// panics on an error.
 //
 // The first argument URL template's scheme and trailing slash property values
 // are used to configure the new Resource instance.
@@ -336,8 +338,8 @@ func NewDormantResourceUsingConfig(urlTmplStr string, config Config) *Resource {
 // instance of a type with methods to handle HTTP requests. Methods must have
 // the signature of the Handler and must start with the "Handle" prefix. The
 // remaining part of any such method's name is considered an HTTP method. For
-// example, HandleGet and HandleCustom are considered the handlers of the GET
-// and CUSTOM HTTP methods, respectively. If the value of the impl has the
+// example, HandleGet and HandleShare are considered the handlers of the GET
+// and SHARE HTTP methods, respectively. If the value of the impl has the
 // HandleNotAllowedMethod method, then it's used as the handler of the not
 // allowed HTTP methods.
 //
@@ -347,6 +349,7 @@ func NewDormantResourceUsingConfig(urlTmplStr string, config Config) *Resource {
 // 	func (er *ExampleResource) HandleGet(
 // 		w http.ResponseWriter,
 // 		r *http.Request,
+//		args *nanomux.Args,
 // 	) {
 // 		// ...
 // 	}
@@ -378,8 +381,8 @@ func NewResource(urlTmplStr string, impl Impl) *Resource {
 	return rb
 }
 
-// NewResourceUsingConfig returns a newly created resource. Unlike
-// CreateResourceUsingConfig, NewResourceUsingConfig panics on an error.
+// NewResourceUsingConfig returns a new resource.
+// Unlike CreateResourceUsingConfig, NewResourceUsingConfig panics on an error.
 //
 // The new Resource instance is configured with the properties in the
 // config as well as the scheme and trailing slash property values of the URL
@@ -390,8 +393,8 @@ func NewResource(urlTmplStr string, impl Impl) *Resource {
 // instance of a type with methods to handle HTTP requests. Methods must have
 // the signature of the Handler and must start with the "Handle" prefix. The
 // remaining part of any such method's name is considered an HTTP method. For
-// example, HandleGet and HandleCustom are considered the handlers of the GET
-// and CUSTOM HTTP methods, respectively. If the value of the impl has the
+// example, HandleGet and HandleShare are considered the handlers of the GET
+// and SHARE HTTP methods, respectively. If the value of the impl has the
 // HandleNotAllowedMethod method, then it's used as the handler of the not
 // allowed HTTP methods.
 //
@@ -401,6 +404,7 @@ func NewResource(urlTmplStr string, impl Impl) *Resource {
 // 	func (er *ExampleResource) HandleGet(
 // 		w http.ResponseWriter,
 // 		r *http.Request,
+//		args *nanomux.Args,
 // 	) {
 // 		// ...
 // 	}
@@ -409,7 +413,7 @@ func NewResource(urlTmplStr string, impl Impl) *Resource {
 // 	var exampleResource = NewResourceUsingConfig(
 // 		"https://example.com/{wildCardTemplate}/",
 // 		&ExampleResource{},
-// 		Config{Subtree: true, RedirectInsecureRequest: true},
+// 		Config{SubtreeHandler: true, RedirectInsecureRequest: true},
 // 	)
 //
 // When the URL template contains a host and/or prefix path segment templates,
@@ -454,11 +458,11 @@ func newRootResource() *Resource {
 
 // -------------------------
 
-func (rb *Resource) setUrltTmpl(urlt *URLTmpl) {
+func (rb *Resource) setUrltTmpl(urlt *_URLTmpl) {
 	rb.urlt = urlt
 }
 
-func (rb *Resource) urlTmpl() *URLTmpl {
+func (rb *Resource) urlTmpl() *_URLTmpl {
 	var urlt = rb.urlt
 	rb.urlt = nil
 	return urlt
@@ -478,7 +482,8 @@ func (rb *Resource) Host() *Host {
 	return nil
 }
 
-// Parent returns the parent resource or host of the receiver resource.
+// Parent returns the parent resource of the receiver resource if it was
+// registered under the resource. Otherwise, the method returns nil.
 func (rb *Resource) Parent() *Resource {
 	var r, _ = rb.papa.(*Resource)
 	return r
@@ -493,9 +498,8 @@ func (rb *Resource) isRoot() bool {
 
 // -------------------------
 
-// ServeHTTP is called when the resource is used without a router. It calls the
-// HTTP request handler when the resource's template matches the request's first
-// path segment.
+// ServeHTTP is the Resource's implementations of the http.Handler interface.
+// It is called when the resource is used directly.
 func (rb *Resource) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var args = getArgs(r.URL, rb.derived)
 	args.nextPathSegment() // First call returns '/'.

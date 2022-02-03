@@ -13,8 +13,8 @@ import (
 
 type Middleware func(next Handler) Handler
 
-// Mw converts the middleware that takes an http.Handler and returns an
-// http.Handler to the Middleware.
+// Mw converts the middleware with the signature func(http.Handler) http.Handler
+// to the nanomux.Middleware.
 func Mw(mw func(http.Handler) http.Handler) Middleware {
 	return func(next Handler) Handler {
 		var h http.Handler = http.HandlerFunc(
@@ -58,7 +58,7 @@ func wrapEveryHandlerOf(
 				for _, m := range ms {
 					var err = rhb.wrapHandlerOf(m, mws...)
 					if err != nil {
-						// If the _Resource can handle a request, then
+						// If the _Responder can handle a request, then
 						// ErrNoHandlerExists is returned only when there
 						// is no handler for a specific HTTP method, which
 						// can be ignored.

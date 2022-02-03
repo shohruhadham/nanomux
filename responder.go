@@ -12,8 +12,8 @@ import (
 
 // --------------------------------------------------
 
-// _Responder interface is the common interface between the Host and Resource
-// interfaces.
+// The _Responder interface is the common interface for the Host and Resource
+// types.
 type _Responder interface {
 	Name() string
 	Template() *Template
@@ -24,7 +24,7 @@ type _Responder interface {
 	setParent(p _Parent) error
 	parent() _Parent
 
-	resourcesInThePath() []_Responder
+	respondersInThePath() []_Responder
 
 	SetSharedData(data interface{})
 	SharedData() interface{}
@@ -162,18 +162,17 @@ type _ResponderBase struct {
 
 // --------------------------------------------------
 
-// Name returns the name of the resource given in the resource's path
-// segment template.
+// Name returns the name of the responder given in the template.
 func (rb *_ResponderBase) Name() string {
 	return rb.tmpl.Name()
 }
 
-// Template returns the path segment template of the resource.
+// Template returns the parsed template of the responder.
 func (rb *_ResponderBase) Template() *Template {
 	return rb.tmpl
 }
 
-// URL returns the resource's URL with values applied to it.
+// URL returns the responder's URL with values applied to it.
 func (rb *_ResponderBase) URL(values HostPathValues) (*url.URL, error) {
 	var url, err = responderURL(rb.derived, values)
 	if err != nil {
@@ -183,9 +182,7 @@ func (rb *_ResponderBase) URL(values HostPathValues) (*url.URL, error) {
 	return url, nil
 }
 
-// Router returns the router of the resource. The resource can be a host or a
-// path segment resource. It's not required to be directly registered in the
-// router.
+// Router returns the router of the responder.
 func (rb *_ResponderBase) Router() *Router {
 	for p := rb.papa; p != nil; p = p.parent() {
 		if ro, ok := p.(*Router); ok {
@@ -198,7 +195,7 @@ func (rb *_ResponderBase) Router() *Router {
 
 // -------------------------
 
-// setParent sets the resource's parent when it's being registered.
+// setParent sets the responder's parent when it's being registered.
 func (rb *_ResponderBase) setParent(p _Parent) error {
 	if p == nil {
 		rb.papa = nil
@@ -223,14 +220,14 @@ func (rb *_ResponderBase) setParent(p _Parent) error {
 	return nil
 }
 
-// parent returns the resource's parent.
+// parent returns the responder's parent.
 func (rb *_ResponderBase) parent() _Parent {
 	return rb.papa
 }
 
-// resourcesInThePath returns all the resources above in the hierarchy
-// (including a host and the resource itself).
-func (rb *_ResponderBase) resourcesInThePath() []_Responder {
+// respondersInThePath returns all the responders above in the hierarchy
+// (including the host and the resource itself).
+func (rb *_ResponderBase) respondersInThePath() []_Responder {
 	var resources []_Responder
 	for p := rb.derived.(_Parent); p != nil; p = p.parent() {
 		if _, ok := p.(*Router); ok {
@@ -250,13 +247,12 @@ func (rb *_ResponderBase) resourcesInThePath() []_Responder {
 
 // -------------------------
 
-// SetSharedData sets the data that is shared between the request handlers.
-// It's useful when the handlers are not the resource's own methods.
+// SetSharedData sets the data shared between handlers. It's useful when the
+// responder wasn't created from an implementation.
 //
-// Shared data can be retrieved through the request's context by calling its
-// Value method with the ResourcesSharedDataKey. If the shared data can be
-// modified, accessing it must be synchronized with a mutex or some other
-// synchronization method.
+// Shared data can be retrieved using the *Args arguments ResponderSharedData
+// method. If the shared data can be modified, accessing it must be
+// synchronized with a mutex or some other synchronization method.
 //
 // Example:
 //
@@ -267,8 +263,12 @@ func (rb *_ResponderBase) resourcesInThePath() []_Responder {
 //
 // 	...
 //
-// 	func SomeHandler(w http.ResponseWriter, r *http.Request) {
-// 		var sharedData = r.Context().Value(ResourcesSharedDataKey)
+// 	func SomeHandler(
+//		w http.ResponseWriter,
+//		r *http.Request,
+//		args *nanomux.Args,
+//	) {
+// 		var sharedData = args.ResponderSharedData().(*SharedData)
 //		sharedData.Lock()
 //		defer sharedData.Unlock()
 //		sharedData.X = someValue
@@ -290,7 +290,7 @@ func (rb *_ResponderBase) setConfigFlags(flag _ConfigFlags) {
 	rb.cfs.set(flag)
 }
 
-// updateConfigFlags is used to update existing config flags to the passed
+// updateConfigFlags is used to replace existing config flags with the passed
 // config flags.
 func (rb *_ResponderBase) updateConfigFlags(cfs _ConfigFlags) {
 	rb.cfs = cfs
@@ -301,9 +301,9 @@ func (rb *_ResponderBase) configFlags() _ConfigFlags {
 	return rb.cfs
 }
 
-// configCompatibility checks the configured resource's properties for
-// compatibility with the arguments. If the resource wasn't configured,
-// the function configures it with the arguments. If the cfs parameter is
+// configCompatibility checks the configured responder's properties for
+// compatibility with the arguments. If the responder wasn't configured,
+// the method configures it with the arguments. If the cfs parameter is
 // nil, it's ignored.
 func (rb *_ResponderBase) configCompatibility(
 	secure, tslash bool,
@@ -343,73 +343,75 @@ func (rb *_ResponderBase) configCompatibility(
 	return nil
 }
 
-// SetConfiguration sets the config for the host or resource. If the host
-// or resource has been configured before, it's reconfigured.
+// SetConfiguration sets the config for the responder. If the responder
+// has been configured before, it's reconfigured.
 func (rb *_ResponderBase) SetConfiguration(config Config) {
 	rb.updateConfigFlags(flagActive | config.asFlags())
 }
 
-// Configuration returns the configuration of the host or resource.
+// Configuration returns the configuration of responder.
 func (rb *_ResponderBase) Configuration() Config {
 	return rb.cfs.asConfig()
 }
 
-// IsSubtreeHandler returns true if the resource was configured as a subtree.
+// IsSubtreeHandler returns true if the responder was configured to
+// be a subtree handler.
 func (rb *_ResponderBase) IsSubtreeHandler() bool {
 	return rb.cfs.has(flagSubtreeHandler)
 }
 
-// IsSecure returns true if the resource was configured to respond only if
+// IsSecure returns true if the responder was configured to respond only if
 // it is used under "https".
 func (rb *_ResponderBase) IsSecure() bool {
 	return rb.cfs.has(flagSecure)
 }
 
-// RedirectsInsecureRequest returns true if the resource was configured to
+// RedirectsInsecureRequest returns true if the responder was configured to
 // redirect insecure requests, instead of responding with a "404 Not Found"
 // status code.
 //
-// The resource can be configured to redirect insecure requests if it's
+// The responder can be configured to redirect insecure requests if it's
 // intended to be used in both "http" and "https" servers.
 func (rb *_ResponderBase) RedirectsInsecureRequest() bool {
 	return rb.cfs.has(flagRedirectInsecure)
 }
 
-// HasTrailingSlash returns true if the resource's URL ends with a trailing
-// slash. If the resource has a trailing slash in its URL and the request is
-// made to the URL without the trailing slash, the resource redirects it to its
-// URL with the trailing slash and vice versa.
+// HasTrailingSlash returns true if the responder's URL ends with a trailing
+// slash. If the responder has a trailing slash in its URL and the request is
+// made to the URL without a trailing slash, the responder redirects it to the
+// URL with a trailing slash and vice versa.
 func (rb *_ResponderBase) HasTrailingSlash() bool {
 	return rb.cfs.has(flagTrailingSlash)
 }
 
-// IsStrictOnTrailingSlash returns true if the resource was configured to
+// IsStrictOnTrailingSlash returns true if the responder was configured to
 // drop the request when the presence or absence of the trailing slash in
-// the request's URL doesn't match with its own URL. By default, the resource
+// the request's URL doesn't match with its own URL. By default, the responder
 // redirects the request on unmatched trailing slash.
 func (rb *_ResponderBase) IsStrictOnTrailingSlash() bool {
 	return rb.cfs.has(flagStrictOnTrailingSlash)
 }
 
-// IsLenientOnTrailingSlash returns true if the resource was configured to
+// IsLenientOnTrailingSlash returns true if the responder was configured to
 // ignore an unmatched trailing slash in the request's URL.
 func (rb *_ResponderBase) IsLenientOnTrailingSlash() bool {
 	return rb.cfs.has(flagLeniencyOnTrailingSlash)
 }
 
-// IsLenientOnUncleanPath returns true if the resource was configured to ignore
+// IsLenientOnUncleanPath returns true if the responder was configured to ignore
 // unclean paths like "example.com///.//resource1//resource2".
 func (rb *_ResponderBase) IsLenientOnUncleanPath() bool {
 	return rb.cfs.has(flagLeniencyOnUncleanPath)
 }
 
-// HandlesThePathAsIs returns true if the resource was configured to be lenient
+// HandlesThePathAsIs returns true if the responder was configured to be lenient
 // on both, trailing slash and unclean paths.
 func (rb *_ResponderBase) HandlesThePathAsIs() bool {
 	return rb.cfs.has(flagHandleThePathAsIs)
 }
 
-// canHandleRequest returns true if the resource has any HTTP method handler.
+// canHandleRequest returns true if the responder has at least one HTTP method
+// handler.
 func (rb *_ResponderBase) canHandleRequest() bool {
 	return rb._RequestHandlerBase != nil &&
 		len(rb._RequestHandlerBase.mhPairs) > 0
@@ -418,7 +420,7 @@ func (rb *_ResponderBase) canHandleRequest() bool {
 // -------------------------
 
 // checkNamesAreUniqueInTheURL checks whether the name and value names of
-// the template are unique in the resource's URL.
+// the template are unique in the responder's URL.
 func (rb *_ResponderBase) checkNamesAreUniqueInTheURL(tmpl *Template) error {
 	var tmplValueNames = tmpl.ValueNames()
 	if tmpl.name == "" && tmplValueNames == nil {
@@ -467,9 +469,8 @@ func (rb *_ResponderBase) checkNamesOfTheChildrenAreUniqueInTheURL(
 	return nil
 }
 
-// validate checks whether the argument template pointer is nil or a non-static
-// template without a name. It also checks the name of a non-static template
-// for uniqueness above in the resource's hierarchy.
+// Validate checks whether the argument template pointer is nil and if its name
+// is unique in the responder's URL.
 func (rb *_ResponderBase) validate(tmpl *Template) error {
 	if tmpl == nil {
 		return newErr("%w", ErrNilArgument)
@@ -483,7 +484,9 @@ func (rb *_ResponderBase) validate(tmpl *Template) error {
 }
 
 // validateHostTmpl checks whether the argument template is the template of the
-// resource's host. Validation fails even if the resource doesn't have a host.
+// responder's host. Validation fails even if the resource doesn't have a host.
+// When the responder is a host, argument template is checked against its
+// template.
 func (rb *_ResponderBase) validateHostTmpl(hostTmplStr string) error {
 	if hostTmplStr != "" {
 		var h *Host
@@ -523,7 +526,7 @@ func (rb *_ResponderBase) validateURL(hostTmplStr string, pathTmplStr string) (
 	remainingPathTmplStr string,
 	err error,
 ) {
-	var resources = rb.resourcesInThePath()
+	var resources = rb.respondersInThePath()
 	if err := resources[0].validateHostTmpl(hostTmplStr); err != nil {
 		return "", newErr("%w", err)
 	}
@@ -739,8 +742,8 @@ func (rb *_ResponderBase) replaceResource(oldR, newR *Resource) error {
 	return nil
 }
 
-// registerResource registers the argument resource and sets the receiver
-// resource as its parent.
+// registerResource registers the argument resource and sets the responder
+// as its parent.
 func (rb *_ResponderBase) registerResource(r *Resource) error {
 	switch tmpl := r.Template(); {
 	case tmpl.IsStatic():
@@ -859,9 +862,9 @@ func (rb *_ResponderBase) pathSegmentResources(pathTmplStr string) (
 }
 
 // registerResourceUnder registeres the argument resource below in the hierarchy
-// of the receiver resource under the given prefix path segments. It also
-// creates and registers the prefix path segments below in the hierarchy, if
-// they don't exist.
+// of the responder under the given prefix path segments. It also creates and
+// registers the prefix path segment resources below in the hierarchy, if they
+// don't exist.
 func (rb *_ResponderBase) registerResourceUnder(
 	prefixPath string,
 	r *Resource,
@@ -904,11 +907,11 @@ func (rb *_ResponderBase) registerResourceUnder(
 }
 
 // keepResourceOrItsChildResources is intended to be used when there is a
-// template collision between resources. In that scenario, the function keeps
-// one of them depending on whether one has request handlers set. The function
-// also passes the child resources of the resource that cannot handle a request
-// to the one that can. If both resources can handle a request, then the
-// ErrDuplicateResourceTemplate error will be returned.
+// template collision between resources. In that scenario, the method keeps
+// one of them depending on whether one has HTTP method handlers set. The
+// method also passes the child resources of the resource that cannot handle
+// a request to the one that can. If both resources can handle a request, then
+// the ErrDuplicateResourceTemplate error will be returned.
 func (rb *_ResponderBase) keepResourceOrItsChildResources(r *Resource) error {
 	var rwt, err = rb.resourceWithTemplate(r.Template())
 	if err != nil {
@@ -966,9 +969,9 @@ func (rb *_ResponderBase) keepResourceOrItsChildResources(r *Resource) error {
 }
 
 // Resource uses the path template to find an existing resource or to create
-// a new one below in the hierarchy of the receiver resource and returns it.
-// If the path template contains prefix segments that don't exist, the method
-// also creates new resources for them.
+// a new one below in the hierarchy of the responder and returns it. If the
+// path template contains prefix segments that don't have existing resources,
+// the method also creates new resources for them.
 //
 // If the resource exists, its scheme and trailing slash properties are
 // compared to the values given in the path template. If there is a difference,
@@ -1035,14 +1038,14 @@ func (rb *_ResponderBase) Resource(pathTmplStr string) (*Resource, error) {
 }
 
 // ResourceUsingConfig uses the path template and config to find an existing
-// resource or to create a new one below in the hierarchy of the receiver
-// resource and returns it. If the path template contains prefix segments
-// that don't exist, the method also creates new resources for them.
+// resource or to create a new one below in the hierarchy of the responder and
+// returns it. If the path template contains prefix segments that don't have
+// existing resources, the method also creates new resources for them.
 //
 // If the resource exists, its configuration is compared to the argument config.
 // Also, its scheme and trailing slash properties are compared to the values
-// given in the path template. If there is a difference, the function returns
-// an error. If the function creates a new resource, it's configured using the
+// given in the path template. If there is a difference, the method returns
+// an error. If the method creates a new resource, it's configured using the
 // config and the values given in the path template.
 //
 // The names of the path segment resources must be unique within the path and
@@ -1112,15 +1115,15 @@ func (rb *_ResponderBase) ResourceUsingConfig(
 }
 
 // RegisterResource registers the argument resource below in the hierarchy of
-// the receiver resource.
+// the responder.
 //
 // If the argument resource has a URL template, its corresponding host and path
 // segments must be compatible with the templates of the host and path segment
 // resources above in the hierarchy. The remaining path segments are used as the
-// prefix segments for the argument resource below the receiver resource. If
-// there are compatible resources with the remaining path segments below the
-// receiver resource, the argument resource will be registered under them.
-// Otherwise, new resources will be created for the missing path segments.
+// prefix path segments of the argument resource below the responder. If there
+// are compatible resources with the remaining path segments below the
+// responder, the argument resource will be registered under them. Otherwise,
+// new resources will be created for the missing path segments.
 //
 // If the argument resource's template collides with the template of one of
 // its siblings, RegisterResource checks which one has the HTTP method handlers
@@ -1171,8 +1174,8 @@ func (rb *_ResponderBase) RegisterResource(r *Resource) error {
 	return nil
 }
 
-// RegisterResourceUnder registers the argument resource below the receiver
-// resource and the prefix path segments.
+// RegisterResourceUnder registers the argument resource below the responder
+// and the prefix path segments.
 //
 // If the argument resource has a URL template, its host and path segment
 // templates must be compatible with the corresponding host and path segment
@@ -1183,7 +1186,7 @@ func (rb *_ResponderBase) RegisterResource(r *Resource) error {
 //
 // If the prefix path segment resources exist and the argument resource's
 // template collides with the last prefix resource's child resource,
-// RegisterResourceUnder checks which one has the request handlers set and
+// RegisterResourceUnder checks which one has the HTTP method handlers set and
 // passes the other one's child resources to it. If both can handle a request,
 // the method returns an error.
 //
@@ -1274,9 +1277,9 @@ func (rb *_ResponderBase) RegisterResourceUnder(
 	return nil
 }
 
-// RegisteredResource returns the resource in the hierarchy below the receiver
-// resource if it can be reached with the path template. In the path template,
-// names can be used instead of the complete segment templates.
+// RegisteredResource returns the resource in the hierarchy below the responder
+// if it can be reached with the path template. In the path template, names can
+// be used instead of the complete segment templates.
 //
 // For example,
 // 		/childResourceTemplate/$someName/anotherResourceTemplate/,
@@ -1329,8 +1332,8 @@ func (rb *_ResponderBase) RegisteredResource(pathTmplStr string) (
 	return nil, nil
 }
 
-// ChildResourceNamed returns the named resource if it exists, otherwise it
-// returns nil. Only the direct child resources of the receiver resource will
+// ChildResourceNamed returns the named resource if it exists, otherwise
+// it returns nil. Only the direct child resources of the responder will
 // be looked at.
 func (rb *_ResponderBase) ChildResourceNamed(name string) *Resource {
 	if name == "" {
@@ -1356,9 +1359,8 @@ func (rb *_ResponderBase) ChildResourceNamed(name string) *Resource {
 	return nil
 }
 
-// ChildResources returns all the child resources of the receiver resource.
-// If the receiver resource doesn't have any child resources, the method
-// returns nil.
+// ChildResources returns all the child resources of the responder. If the
+// responder doesn't have any child resources, the method returns nil.
 func (rb *_ResponderBase) ChildResources() []*Resource {
 	var rs []*Resource
 	for _, r := range rb.staticResources {
@@ -1375,7 +1377,7 @@ func (rb *_ResponderBase) ChildResources() []*Resource {
 }
 
 // HasChildResource returns true if the argument resource is a direct child
-// of the receiver resource.
+// of the responder.
 func (rb *_ResponderBase) HasChildResource(r *Resource) bool {
 	if r == nil {
 		return false
@@ -1401,8 +1403,7 @@ func (rb *_ResponderBase) HasChildResource(r *Resource) bool {
 	return false
 }
 
-// HasAnyChildResources returns true if the receiver resource has any child
-// resources.
+// HasAnyChildResources returns true if the responder has any child resources.
 func (rb *_ResponderBase) HasAnyChildResources() bool {
 	if len(rb.staticResources) > 0 || len(rb.patternResources) > 0 ||
 		rb.wildcardResource != nil {
@@ -1414,7 +1415,7 @@ func (rb *_ResponderBase) HasAnyChildResources() bool {
 
 // -------------------------
 
-// SetImplementation sets the request handlers from the passed impl.
+// SetImplementation sets the HTTP method handlers from the passed impl.
 // The impl is also kept for future retrieval. All existing handlers
 // are discarded.
 func (rb *_ResponderBase) SetImplementation(impl Impl) error {
@@ -1436,9 +1437,8 @@ func (rb *_ResponderBase) SetImplementation(impl Impl) error {
 	return nil
 }
 
-// Implementation returns the implementation of the host or resource. If the
-// host or resource wasn't created from an Impl or if they have no Impl set,
-// nil is returned.
+// Implementation returns the implementation of the responder. If the responder
+// wasn't created from an Impl or if it has no Impl set, nil is returned.
 func (rb *_ResponderBase) Implementation() Impl {
 	return rb.impl
 }
@@ -1484,8 +1484,8 @@ func (rb *_ResponderBase) SetHandlerFor(
 	return nil
 }
 
-// HandlerOf returns the HTTP method's handler of the resource. If the
-// resource or the handler, doesn't exist, nil is returned.
+// HandlerOf returns the HTTP method's handler of the responder. If the
+// handler doesn't exist, nil is returned.
 //
 // The argument method is an HTTP method. An exclamation mark "!" can be used
 // to get the handler of HTTP methods that are not allowed. Examples: "GET",
@@ -1500,7 +1500,7 @@ func (rb *_ResponderBase) HandlerOf(method string) Handler {
 
 // -------------------------
 
-// WrapRequestPasser wraps the request passer of the host or resource with the
+// WrapRequestPasser wraps the request passer of the responder with the
 // middlewares in their passed order.
 //
 // The request passer is responsible for finding the next resource that matches
@@ -1522,12 +1522,12 @@ func (rb *_ResponderBase) WrapRequestPasser(mws ...Middleware) error {
 	return nil
 }
 
-// WrapRequestHandler wraps the resource's request handler with the middlewares
+// WrapRequestHandler wraps the responder's request handler with the middlewares
 // in their passed order.
 //
-// The request handler calls the HTTP method handler of the resource depending
+// The request handler calls the HTTP method handler of the responder depending
 // on the request's method. Unlike the request passer, the request handler is
-// called only when the resource is going to handle the request.
+// called only when the responder is going to handle the request.
 func (rb *_ResponderBase) WrapRequestHandler(mws ...Middleware) error {
 	if len(mws) == 0 {
 		return newErr("%w", ErrNoMiddleware)
@@ -1553,8 +1553,8 @@ func (rb *_ResponderBase) WrapRequestHandler(mws ...Middleware) error {
 }
 
 // WrapHandlerOf wraps the handler of the HTTP methods with the middlewares in
-// their passed order. If the handler doesn't exist for any given method, the
-// method returns an error.
+// their passed order. If the handler doesn't exist for any given HTTP method,
+// the method returns an error.
 //
 // The argument methods is a list of HTTP methods separated by a comma and/or
 // space. An exclamation mark "!" denotes the handler of the not allowed HTTP
@@ -1669,13 +1669,13 @@ func (rb *_ResponderBase) ConfigurationAt(pathTmplStr string) (Config, error) {
 	return r.Configuration(), nil
 }
 
-// SetImplementationAt sets the request handlers for a resource at the path
+// SetImplementationAt sets the HTTP method handlers for a resource at the path
 // from the passed Impl. If the resource doesn't exist, the method creates it.
 // The resource keeps the impl for future retrieval. Existing handlers of the
 // resource are discarded.
 //
 // The scheme and trailing slash property values in the path template must be
-// compatible with the existing resource's properties, otherwise the function
+// compatible with the existing resource's properties, otherwise the method
 // returns an error. A newly created resource is configured with the values in
 // the path template.
 func (rb *_ResponderBase) SetImplementationAt(
@@ -1725,7 +1725,7 @@ func (rb *_ResponderBase) ImplementationAt(pathTmplStr string) (Impl, error) {
 // "GET", "PUT, POST", "SHARE, LOCK" or "!".
 //
 // The scheme and trailing slash property values in the path template must be
-// compatible with the existing resource's properties, otherwise the function
+// compatible with the existing resource's properties, otherwise the method
 // returns an error. A newly created resource is configured with the values in
 // the path template.
 func (rb *_ResponderBase) SetPathHandlerFor(
@@ -1753,8 +1753,8 @@ func (rb *_ResponderBase) SetPathHandlerFor(
 // "POST" or "!".
 //
 // The scheme and trailing slash property values in the path template must be
-// compatible with the resource's properties, otherwise the function returns
-// an error.
+// compatible with the resource's properties, otherwise the method returns an
+// error.
 func (rb *_ResponderBase) PathHandlerOf(method, pathTmplStr string) (
 	Handler,
 	error,
@@ -1804,12 +1804,12 @@ func (rb *_ResponderBase) WrapRequestPasserAt(
 }
 
 // WrapRequestHandlerAt wraps the request handler of the resource at the path.
-// Handler is wrapped in the middlewares' passed order. If the resource doesn't
-// exist, an error is returned.
+// The handler is wrapped in the middlewares' passed order. If the resource
+// doesn't exist, an error is returned.
 //
-// The request handler calls the HTTP method handler of the resource depending
+// The request handler calls the HTTP method handler of the responder depending
 // on the request's method. Unlike the request passer, the request handler is
-// called only when the resource is going to handle the request.
+// called only when the responder is going to handle the request.
 //
 // The scheme and trailing slash property values in the URL template must be
 // compatible with the resource's properties, otherwise the method returns an
@@ -1835,8 +1835,8 @@ func (rb *_ResponderBase) WrapRequestHandlerAt(
 	return nil
 }
 
-// WrapPathHandlerOf wraps the handlers of HTTP methods of the resource at the
-// path. Handlers are wrapped in the middlewares' passed order.
+// WrapPathHandlerOf wraps the handlers of the HTTP methods of the resource
+// at the path. The handlers are wrapped in the middlewares' passed order.
 //
 // The argument methods is a list of HTTP methods separated by a comma and/or
 // space. An exclamation mark "!" denotes the handler of the not allowed HTTP
@@ -1899,9 +1899,9 @@ func (rb *_ResponderBase) SetConfigurationForSubtree(config Config) {
 	)
 }
 
-// WrapSubtreeRequestPassers wraps the request passers of the resources
-// in the hierarchy below the receiver resource. The request passers are
-// wrapped in the middlewares' passed order.
+// WrapSubtreeRequestPassers wraps the request passers of the resources in
+// the hierarchy below the responder. The request passers are wrapped in the
+// middlewares' passed order.
 //
 // The request passer is responsible for finding the next resource that matches
 // the next path segment and passing the request to it. If there is no matching
@@ -1923,13 +1923,13 @@ func (rb *_ResponderBase) WrapSubtreeRequestPassers(
 	return nil
 }
 
-// WrapSubtreeRequestHandlers wraps the request handlers of the resources
-// in the hierarchy below the receiver resource. Handlers are wrapped in the
-// middlewares' passed order.
+// WrapSubtreeRequestHandlers wraps the request handlers of the resources in
+// the hierarchy below the responder. Handlers are wrapped in the middlewares'
+// passed order.
 //
-// The request handler calls the HTTP method handler of the resource depending
+// The request handler calls the HTTP method handler of the responder depending
 // on the request's method. Unlike the request passer, the request handler is
-// called only when the resource is going to handle the request.
+// called only when the responder is going to handle the request.
 func (rb *_ResponderBase) WrapSubtreeRequestHandlers(
 	mws ...Middleware,
 ) error {
@@ -1955,7 +1955,7 @@ func (rb *_ResponderBase) WrapSubtreeRequestHandlers(
 }
 
 // WrapSubtreeHandlersOf wraps the HTTP method handlers of the resources in
-// the hierarchy below the receiver resource.
+// the hierarchy below the responder.
 //
 // The argument methods is a list of HTTP methods separated by a comma and/or
 // space. An exclamation mark "!" denotes the handler of the not allowed HTTP
@@ -1999,10 +1999,10 @@ func (rb *_ResponderBase) requestHandlerBase() *_RequestHandlerBase {
 
 // -------------------------
 
-// passRequest is the request passer of the host and resource.
-// It passes the request to the next child resource if the child resource's
-// template matches the next path segment of the request's URL. If there is
-// no matching resource, the handler for a not-found resource is called.
+// passRequest is the request passer of the responder. It passes the request
+// to the next child resource if the child resource's template matches the next
+// path segment of the request's URL. If there is no matching resource, the
+// handler for a not-found resource is called.
 func (rb *_ResponderBase) passRequest(
 	w http.ResponseWriter,
 	r *http.Request,

@@ -539,9 +539,9 @@ func SetPermanentRedirectHandler(fn RedirectHandler) error {
 	return nil
 }
 
-// PermanentRedirectHandler returns the redirect handler function. The
-// handler is used to redirect requests to an "https" from an "http", to a URL
-// with a trailing slash from one without, or vice versa.
+// PermanentRedirectHandler returns the redirect handler function. The handler
+// is used to redirect requests to an "https" from an "http", to a URL with a
+// trailing slash from one without, or vice versa.
 func PermanentRedirectHandler() RedirectHandler {
 	return permanentRedirectHandler
 }
