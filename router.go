@@ -12,7 +12,7 @@ import (
 
 // --------------------------------------------------
 
-// Router is an HTTP request multiplexer. It passes the incoming requests to
+// Router is an HTTP request router. It passes the incoming requests to
 // their matching host or resources.
 type Router struct {
 	staticHosts  map[string]*Host
@@ -39,8 +39,8 @@ func (ro *Router) parent() _Parent {
 // -------------------------
 
 // _Responder uses the URL template to find an existing host or resource, or to
-// create a new one. If the URL template contains a host or prefix path segments
-// that doesn't exist, the method creates it too.
+// create a new one. If the URL template contains host or prefix path segments
+// that no host or resources responsible for exist, the method creates them too.
 //
 // If the host or resource exists, its scheme and trailing slash properties are
 // compared to the values given in the URL template. If there is a difference,
@@ -306,10 +306,10 @@ func (ro *Router) ConfigurationAt(urlTmplStr string) (Config, error) {
 	return _r.Configuration(), nil
 }
 
-// SetImplementationAt sets the request handlers for a host or resource at the
-// URL from the passed impl. If the host or resource doesn't exist, the method
-// creates it. The host or resource keeps the impl for future retrieval. Old
-// handlers of the existing host or resource are discarded.
+// SetImplementationAt sets the HTTP method handlers for a host or resource at
+// the URL from the passed impl. If the host or resource doesn't exist, the
+// method creates it. The host or resource keeps the impl for future retrieval.
+// Old handlers of the existing host or resource are discarded.
 //
 // The scheme and trailing slash property values in the URL template must be
 // compatible with the existing host or resource's properties, otherwise the
@@ -664,6 +664,10 @@ func (ro *Router) host(hostTmplStr string) (
 // trailing slash properties with the values in the template and returns an
 // error if there is a difference.
 //
+// The trailing slash is used only for path segments when the host is a subtree
+// handler and should respond to the request. It has no effect on the host
+// itself. The template cannot be a wildcard template.
+//
 // The name given to the host must be unique among the other hosts.
 func (ro *Router) Host(hostTmplStr string) (*Host, error) {
 	var h, newHost, secure, tslash, err = ro.host(hostTmplStr)
@@ -697,6 +701,10 @@ func (ro *Router) Host(hostTmplStr string) (*Host, error) {
 // given in the template. If there is a difference, the method returns an
 // error. If the method creates a new host, it's configured using the config
 // and the values given in the template.
+//
+// The trailing slash is used only for path segments when the host is a subtree
+// handler and should respond to the request. It has no effect on the host
+// itself. The template cannot be a wildcard template.
 //
 // The name given to the host must be unique among the other hosts.
 func (ro *Router) HostUsingConfig(
@@ -736,7 +744,7 @@ func (ro *Router) HostUsingConfig(
 // are unique among the other hosts.
 //
 // If the host's template collides with the template of any other host,
-// RegisterHost checks which one has request handlers set and passes the
+// RegisterHost checks which one has HTTP method handlers set and passes the
 // other host's child resources to it. If both hosts can handle a request,
 // the method returns an error.
 func (ro *Router) RegisterHost(h *Host) error {
@@ -786,11 +794,11 @@ func (ro *Router) RegisterHost(h *Host) error {
 	return newErr("%w", ErrDuplicateHostTemplate)
 }
 
-// RegisteredHost returns an already registered host. The host template can
+// RegisteredHost returns an already registered host. The host template may
 // contain only a name.
 //
 // For example:
-//		https://$someName, http://$someName/
+//		https://$hostName, http://example.com
 //
 // Template's scheme and trailing slash property values must be compatible with
 // the host's properties, otherwise the method returns an error.
@@ -878,7 +886,7 @@ func (ro *Router) HasHost(h *Host) bool {
 	return false
 }
 
-// HasAnyHost returns true if the router has any hosts.
+// HasAnyHost returns true if the router has at least one host.
 func (ro *Router) HasAnyHost() bool {
 	if len(ro.staticHosts) > 0 || len(ro.patternHosts) > 0 {
 		return true
@@ -896,7 +904,7 @@ func (ro *Router) initializeRootResource() {
 // Resource returns an existing or newly created resource.
 //
 // When the URL template contains a host template, its path template cannot be
-// empty or root "/" (hosts have a trailing slash but not a root resource). If
+// empty or root "/" (the Host type itself is responsible for the root path). If
 // the new resource's host or prefix path segment resources don't exist, the
 // method creates them too.
 //
@@ -923,8 +931,8 @@ func (ro *Router) Resource(urlTmplStr string) (*Resource, error) {
 	var newHost bool
 	if hTmplStr != "" {
 		if pTmplStr == "/" {
-			// Hosts have trailing slash but not a root resource.
-			return nil, newErr("%w", ErrEmptyPathTemplate)
+			// The root resource cannot be registered under a host.
+			return nil, newErr("%w", ErrNonRouterParent)
 		}
 
 		_r, newHost, _, _, err = ro.host(hTmplStr)
@@ -982,7 +990,7 @@ func (ro *Router) Resource(urlTmplStr string) (*Resource, error) {
 // ResourceUsingConfig returns an existing or newly created resource.
 //
 // When the URL template contains a host template, its path template cannot be
-// empty or root "/" (hosts have a trailing slash but not a root resource). If
+// empty or root "/" (the Host type itself is responsible for the root path). If
 // the new resource's host or prefix path segment resources don't exist, the
 // method creates them too.
 //
@@ -1018,7 +1026,8 @@ func (ro *Router) ResourceUsingConfig(urlTmplStr string, config Config) (
 	var newHost bool
 	if hTmplStr != "" {
 		if pTmplStr == "/" {
-			return nil, newErr("%w", ErrEmptyPathSegmentTemplate)
+			// The root resource cannot be registered under a host.
+			return nil, newErr("%w", ErrNonRouterParent)
 		}
 
 		_r, newHost, _, _, err = ro.host(hTmplStr)
@@ -1117,7 +1126,7 @@ func (ro *Router) registerNewRoot(r *Resource) error {
 // have a URL template, otherwise it registers the resource under the URL.
 //
 // When the resource has a URL template and the host or prefix resources coming
-// before it don't exist, the method creates them.
+// before it don't exist, the method creates them too.
 //
 // The content of the resource's template must be unique among its siblings. If
 // the resource has a name, it also must be unique among its siblings as well
@@ -1215,7 +1224,7 @@ func (ro *Router) RegisterResource(r *Resource) error {
 // with the argument URL template.
 //
 // When the URL template has a host or prefix resources that don't exist,
-// coming before the argument resource, the method creates them.
+// coming before the argument resource, the method creates them too.
 //
 // The resource's template must be unique among its siblings. If the resource
 // has a name, it also must be unique among its siblings as well as in the path.
@@ -1570,8 +1579,8 @@ func (ro *Router) _Responders() []_Responder {
 
 // -------------------------
 
+// ServeHTTP is the Router's implementation of the http.Handler interface.
 func (ro *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// fmt.Printf("\nhost: %s\nurl: %s", r.Host, r.URL)
 	var args = getArgs(r.URL, nil)
 	ro.requestPasser(w, r, args)
 	putArgsInThePool(args)

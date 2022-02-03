@@ -19,7 +19,7 @@ type Host struct {
 	_ResponderBase
 }
 
-// createDormantHost creates an unconfigured and dormant host.
+// createDormantHost creates a dormant not configured host.
 func createDormantHost(tmpl *Template) (*Host, error) {
 	if tmpl == nil {
 		return nil, newErr("%w", ErrNilArgument)
@@ -36,8 +36,8 @@ func createDormantHost(tmpl *Template) (*Host, error) {
 	return h, nil
 }
 
-// createHost creates an instance of the Host. The Impl and
-// config parameters can be nil.
+// createHost creates an instance of the Host. The Impl and config parameters
+// can be nil.
 func createHost(tmplStr string, impl Impl, config *Config) (*Host, error) {
 	var hTmplStr, secure, tslash, err = getHost(tmplStr)
 	if err != nil {
@@ -91,7 +91,7 @@ func createHost(tmplStr string, impl Impl, config *Config) (*Host, error) {
 // CreateDormantHost returns a new dormant host (without HTTP method handlers).
 // The template's scheme and trailing slash values are used to configure the
 // host. The trailing slash is used only for path segments when the host is a
-// subtree handler and must respond to the request. It has no effect on the
+// subtree handler and should respond to the request. It has no effect on the
 // host itself. The template cannot be a wildcard template.
 func CreateDormantHost(hostTmplStr string) (*Host, error) {
 	var h, err = createHost(hostTmplStr, nil, nil)
@@ -106,7 +106,7 @@ func CreateDormantHost(hostTmplStr string) (*Host, error) {
 // handlers). The host is configured with the properties in the config as well
 // as the scheme and trailing slash values of the host template. The trailing
 // slash is used only for path segments when the host is a subtree handler and
-// must respond to the request. It has no effect on the host itself. The
+// should respond to the request. It has no effect on the host itself. The
 // config's Secure and TrailingSlash values are ignored and may not be set. The
 // host template cannot be a wildcard template.
 func CreateDormantHostUsingConfig(
@@ -123,7 +123,7 @@ func CreateDormantHostUsingConfig(
 
 // CreateHost returns a new host. The template's scheme and trailing slash
 // values are used to configure the host. The trailing slash is used only for
-// path segments when the host is a subtree handler and must respond to the
+// path segments when the host is a subtree handler and should respond to the
 // request. It has no effect on the host itself. The template cannot be a
 // wildcard template.
 //
@@ -131,15 +131,19 @@ func CreateDormantHostUsingConfig(
 // of a type with methods to handle HTTP requests. Methods must have the
 // signature of the Handler and must start with the "Handle" prefix.
 // The remaining part of any such method's name is considered an HTTP method.
-// For example, HandleGet and HandleCustom are considered the handlers of the
-// GET and CUSTOM HTTP methods, respectively. If the value of the impl has the
+// For example, HandleGet and HandleShare are considered the handlers of the
+// GET and SHARE HTTP methods, respectively. If the value of the impl has the
 // HandleNotAllowedMethod method, then it's used as the handler of the not
 // allowed HTTP methods.
 //
 // Example:
 // 	type ExampleHost struct{}
 //
-// 	func (eh *ExampleHost) HandleGet(w http.ResponseWriter, r *http.Request) {
+// 	func (eh *ExampleHost) HandleGet(
+//		w http.ResponseWriter,
+//		r *http.Request,
+//		args *nanomux.Args,
+//	) {
 //		// ...
 // 	}
 //
@@ -161,7 +165,7 @@ func CreateHost(hostTmplStr string, impl Impl) (*Host, error) {
 // CreateHost returns a new host. The host is configured with the properties
 // in the config as well as the scheme and trailing slash values of the host
 // template. The trailing slash is used only for path segments when the host
-// is a subtree handler and must respond to the request. It has no effect on
+// is a subtree handler and should respond to the request. It has no effect on
 // the host itself. The config's Secure and TrailingSlash values are ignored
 // and may not be set. The host template cannot be a wildcard template.
 //
@@ -169,23 +173,27 @@ func CreateHost(hostTmplStr string, impl Impl) (*Host, error) {
 // of a type with methods to handle HTTP requests. Methods must have the
 // signature of the Handler and must start with the "Handle" prefix.
 // The remaining part of any such method's name is considered an HTTP method.
-// For example, HandleGet and HandleCustom are considered the handlers of the
-// GET and CUSTOM HTTP methods, respectively. If the value of the impl has the
+// For example, HandleGet and HandleShare are considered the handlers of the
+// GET and SHARE HTTP methods, respectively. If the value of the impl has the
 // HandleNotAllowedMethod method, then it's used as the handler of the not
 // allowed HTTP methods.
 //
 // Example:
 // 	type ExampleHost struct{}
 //
-// 	func (eh *ExampleHost) HandleGet(w http.ResponseWriter, r *http.Request) {
+// 	func (eh *ExampleHost) HandleGet(
+//		w http.ResponseWriter,
+//		r *http.Request,
+//		args *nanomux.Args,
+//	) {
 //		// ...
 // 	}
 //
 // 	// ...
 // 	var exampleHost, err = CreateHostUsingConfig(
-// 		"https://example.com/",
+// 		"https://example.com",
 // 		&ExampleHost{},
-// 		Config{Subtree: true, RedirectInsecureRequest: true},
+// 		Config{SubtreeHandler: true, RedirectInsecureRequest: true},
 // 	)
 func CreateHostUsingConfig(
 	hostTmplStr string,
@@ -206,13 +214,13 @@ func CreateHostUsingConfig(
 
 // -------------------------
 
-// NewDormantHost returns a new dormant host (without request handlers) from
+// NewDormantHost returns a new dormant host (without HTTP method handlers) from
 // the URL template. Unlike CreateDormantHost, NewDormantHost panics on an
 // error.
 //
 // The template's scheme and trailing slash values are used to configure the
 // host. The trailing slash is used only for path segments when the host is a
-// subtree handler and must respond to the request. It has no effect on the
+// subtree handler and should respond to the request. It has no effect on the
 // host itself. The template cannot be a wildcard template.
 func NewDormantHost(hostTmplStr string) *Host {
 	var h, err = CreateDormantHost(hostTmplStr)
@@ -223,13 +231,13 @@ func NewDormantHost(hostTmplStr string) *Host {
 	return h
 }
 
-// NewDormantHostUsingConfig returns a new dormant host (without request
+// NewDormantHostUsingConfig returns a new dormant host (without HTTP method
 // hanlders) from the URL template. Unlike CreateDormantHostUsingConfig,
 // NewDormantHostUsingConfig panics on an error.
 //
 // The host is configured with the properties in the config as well as the
 // scheme and trailing slash values of the host template. The trailing slash
-// is used only for path segments when the host is a subtree handler and must
+// is used only for path segments when the host is a subtree handler and should
 // respond to the request. It has no effect on the host itself. The config's
 // Secure and TrailingSlash values are ignored and may not be set. The host
 // template cannot be a wildcard template.
@@ -245,22 +253,26 @@ func NewDormantHostUsingConfig(hostTmplStr string, config Config) *Host {
 // NewHost returns a new host. Unlike CreateHost, NewHost panics on an error.
 // The template's scheme and trailing slash values are used to configure the
 // host. The trailing slash is used only for path segments when the host is a
-// subtree handler and must respond to the request. It has no effect on the
+// subtree handler and should respond to the request. It has no effect on the
 // host itself. The template cannot be a wildcard template.
 //
 // The Impl is, in a sense, the implementation of the host. It is an instance
 // of a type with methods to handle HTTP requests. Methods must have the
 // signature of the Handler and must start with the "Handle" prefix.
 // The remaining part of any such method's name is considered an HTTP method.
-// For example, HandleGet and HandleCustom are considered the handlers of the
-// GET and CUSTOM HTTP methods, respectively. If the value of the impl has the
+// For example, HandleGet and HandleShare are considered the handlers of the
+// GET and SHARE HTTP methods, respectively. If the value of the impl has the
 // HandleNotAllowedMethod method, then it's used as the handler of the not
 // allowed HTTP methods.
 //
 // Example:
 // 	type ExampleHost struct{}
 //
-// 	func (eh *ExampleHost) HandleGet(w http.ResponseWriter, r *http.Request) {
+// 	func (eh *ExampleHost) HandleGet(
+//		w http.ResponseWriter,
+//		r *http.Request,
+//		args *nanomux.Args,
+//	) {
 //		// ...
 // 	}
 //
@@ -280,7 +292,7 @@ func NewHost(hostTmplStr string, impl Impl) *Host {
 //
 // The host is configured with the properties in the config as well as the
 // scheme and trailing slash values of the host template. The trailing slash
-// is used only for path segments when the host is a subtree handler and must
+// is used only for path segments when the host is a subtree handler and should
 // respond to the request. It has no effect on the host itself. The config's
 // Secure and TrailingSlash values are ignored and may not be set. The host
 // template cannot be a wildcard template.
@@ -289,23 +301,27 @@ func NewHost(hostTmplStr string, impl Impl) *Host {
 // of a type with methods to handle HTTP requests. Methods must have the
 // signature of the Handler and must start with the "Handle" prefix.
 // The remaining part of any such method's name is considered an HTTP method.
-// For example, HandleGet and HandleCustom are considered the handlers of the
-// GET and CUSTOM HTTP methods, respectively. If the value of the impl has the
+// For example, HandleGet and HandleShare are considered the handlers of the
+// GET and SHARE HTTP methods, respectively. If the value of the impl has the
 // HandleNotAllowedMethod method, then it's used as the handler of the not
 // allowed HTTP methods.
 //
 // Example:
 // 	type ExampleHost struct{}
 //
-// 	func (eh *ExampleHost) HandleGet(w http.ResponseWriter, r *http.Request) {
+// 	func (eh *ExampleHost) HandleGet(
+//		w http.ResponseWriter,
+//		r *http.Request,
+//		args *nanomux.Args,
+//	) {
 //		// ...
 // 	}
 //
 // 	// ...
 // 	var exampleHost = NewHostUsingConfig(
-// 		"https://example.com/",
+// 		"https://example.com",
 // 		&ExampleHost{},
-// 		Config{Subtree: true, RedirectInsecureRequest: true},
+// 		Config{SubtreeHandler: true, RedirectInsecureRequest: true},
 // 	)
 func NewHostUsingConfig(
 	hostTmplStr string,
@@ -322,8 +338,8 @@ func NewHostUsingConfig(
 
 // -------------------------
 
-// ServeHTTP is called when the host is used without a router and the host's
-// template matches the request's host.
+// ServeHTTP is the Host's implementation of the http.Handler interface.
+// It is called when the host is used directly.
 func (hb *Host) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var host = r.URL.Host
 	if host == "" {

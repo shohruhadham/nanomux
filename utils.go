@@ -14,8 +14,10 @@ import (
 
 // --------------------------------------------------
 
-// URLTmpl is used to keep the resource's scheme, host and prefix path segments.
-type URLTmpl struct {
+// _URLTmpl is used to keep the resource's scheme, host and prefix path
+// segments. When registering the resource, _URLTmpl will be used to find
+// the resource's place in the hierarchy.
+type _URLTmpl struct {
 	Scheme     string
 	Host       string
 	PrefixPath string
@@ -125,14 +127,15 @@ func toUpperSplitByCommaSpace(str string) []string {
 }
 
 // splitHostAndPath splits the URL template into the host and path templates.
-// It also returns the security and tslash property values.
+// It also returns the security and trailing slash property values.
 //
 // Only an absolute URL template can have a host template. When a URL template
-// doesn't start with a scheme, it is considered a path template. The URL
-// template may have no host segment template but can start with a scheme to
-// specify the security of the last path segment. After a host template, if a
-// path template contains only a slash, the trailing slash return value will be
-// true and the path template return value will be empty.
+// doesn't start with a scheme or the scheme is followed by a three slashes,
+// it is considered a path template. The URL template may have no host segment
+// template but can start with a scheme to specify the security of the last
+// path segment. After a host template, if a path template contains only a
+// slash, the trailing slash return value will be true and the path template
+// return value will be empty.
 //
 // For example,
 // https:///resource1/resource2 - specifies that resource2 is secure.
@@ -367,7 +370,7 @@ loop:
 // --------------------------------------------------
 
 // HostPathValues is a slice of the host and path segment values.
-// It does not include query values.
+// It does not include query values, hence the name :)
 type HostPathValues = TemplateValues
 
 // --------------------------------------------------
@@ -400,9 +403,8 @@ func (args _Args) get(key interface{}) (int, interface{}) {
 
 // --------------------------------------------------
 
-// Args is created for each request when the host template contains a
-// pattern or when the request's URL contains path segments. It's kept in the
-// request's context.
+// Args is created for each request and passed to handlers. The middleware must
+// pass the *Args argument to the next handler.
 type Args struct {
 	path                  string
 	rawPath               bool
@@ -450,7 +452,7 @@ func getArgs(url *url.URL, _r _Responder) *Args {
 // -------------------------
 
 // nextPathSegment returns the unescaped next path segment of the request's URL
-// below the resource that is using the routing data.
+// below the responder that is using the *Args argument.
 func (args *Args) nextPathSegment() (string, error) {
 	var lpath = len(args.path)
 	if args.currentPathSegmentIdx == lpath {
@@ -483,8 +485,8 @@ func (args *Args) nextPathSegment() (string, error) {
 	return args.path[cIdx:idx], nil
 }
 
-// reachedTheLastPathSegment returns true when the resource that is using the
-// routing data is the last resource in the request's URL.
+// reachedTheLastPathSegment returns true when the responder that is using the
+// routing data is the last responder in the request's URL.
 func (args *Args) reachedTheLastPathSegment() bool {
 	return args.currentPathSegmentIdx == len(args.path)
 }
@@ -503,9 +505,7 @@ func (args *Args) HostPathValues() HostPathValues {
 }
 
 // RemainingPath returns the escaped remaining path of the request's URL
-// that's below the current responder's segment. The remaining path doesn't
-// include the host, even when the method is called from the middleware of
-// the router's request passer.
+// that's below the current responder's segment.
 func (args *Args) RemainingPath() string {
 	if args.reachedTheLastPathSegment() {
 		return ""
@@ -516,8 +516,7 @@ func (args *Args) RemainingPath() string {
 		// request's path contains only a slash "/" (root), the remaining path
 		// should not start with or contain only a trailing slash. When the
 		// request's path contains only a slash "/", that means the remaining
-		// path is being retrieved by a host which is lenient on the trailing
-		// slash or a root resource.
+		// path is being retrieved by a host or a root resource.
 		if args.currentPathSegmentIdx == 0 {
 			return args.path[1:]
 		}
@@ -550,8 +549,8 @@ func (args *Args) ResponderImpl() Impl {
 	return args._r.Implementation()
 }
 
-// Host returns the *Host of the request's URL. If there is no *Host, nil is
-// returned.
+// Host returns the *Host of the responders' tree, to which the request's URL
+// maps. If the tree doesn't have a *Host, nil is returned.
 func (args *Args) Host() *Host {
 	switch _r := args._r.(type) {
 	case *Host:
@@ -600,8 +599,8 @@ type _ArgsKey struct{}
 var argsKey interface{} = _ArgsKey{}
 
 // ArgsFrom is a function to retrieve the argument *Args in the http.Handler
-// or http.HandlerFunc after the conversion to the Handler with the Hr or FnHr
-// functions.
+// or http.HandlerFunc after the conversion to the Handler with the HrWithArgs
+// or FnHrWithArgs functions.
 func ArgsFrom(r *http.Request) *Args {
 	var args, _ = r.Context().Value(argsKey).(*Args)
 	return args
@@ -659,9 +658,9 @@ func getArgsFromThePool(url *url.URL, _r _Responder) *Args {
 
 // --------------------------------------------------
 
-// traverseAndCall traverses all the _Resources in the passed _Resource trees
-// and calls the f on each _Resource.
-func traverseAndCall(rs []_Responder, f func(_Responder) error) error {
+// traverseAndCall traverses all the responders in the passed _Responders' tree
+// and calls the fn function on each responder.
+func traverseAndCall(rs []_Responder, fn func(_Responder) error) error {
 	type node struct {
 		rs   []_Responder
 		next *node
@@ -678,7 +677,7 @@ func traverseAndCall(rs []_Responder, f func(_Responder) error) error {
 	for currentN != nil {
 		crs, lcrs = currentN.rs, len(currentN.rs)
 		for i := 0; i < lcrs; i++ {
-			err = f(crs[i])
+			err = fn(crs[i])
 			if err != nil {
 				return err
 			}

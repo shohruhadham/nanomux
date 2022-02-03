@@ -255,7 +255,7 @@ func TestResourceBase_parent(t *testing.T) {
 	}
 }
 
-func TestResourceBase_resourcesInThePath(t *testing.T) {
+func TestResourceBase_respondersInThePath(t *testing.T) {
 	var (
 		h  = NewDormantHost("example.com")
 		r1 = NewDormantResource("r1")
@@ -265,53 +265,53 @@ func TestResourceBase_resourcesInThePath(t *testing.T) {
 	r1.setParent(h)
 	r2.setParent(r1)
 
-	var rs = h.resourcesInThePath()
+	var rs = h.respondersInThePath()
 	var lrs = len(rs)
 	if lrs != 1 {
 		t.Fatalf(
-			"ResourceBase().resourcesInThePath() returned %d resoruces, wnat 1",
+			"ResourceBase().respondersInThePath() returned %d resoruces, wnat 1",
 			lrs,
 		)
 	}
 
 	if rs[0].(*Host) != h {
-		t.Fatalf("ResourceBase().resourcesInThePath() failed to get host")
+		t.Fatalf("ResourceBase().respondersInThePath() failed to get host")
 	}
 
-	rs = r1.resourcesInThePath()
+	rs = r1.respondersInThePath()
 	if lrs = len(rs); lrs != 2 {
 		t.Fatalf(
-			"ResourceBase().resourcesInThePath() returned %d resoruces, wnat 2",
+			"ResourceBase().respondersInThePath() returned %d resoruces, wnat 2",
 			lrs,
 		)
 	}
 
 	if rs[0].(*Host) != h {
-		t.Fatalf("ResourceBase().resourcesInThePath() failed to get host")
+		t.Fatalf("ResourceBase().respondersInThePath() failed to get host")
 	}
 
 	if rs[1].(*Resource) != r1 {
-		t.Fatalf("ResourceBase().resourcesInThePath() failed to get r1")
+		t.Fatalf("ResourceBase().respondersInThePath() failed to get r1")
 	}
 
-	rs = r2.resourcesInThePath()
+	rs = r2.respondersInThePath()
 	if lrs = len(rs); lrs != 3 {
 		t.Fatalf(
-			"ResourceBase().resourcesInThePath() returned %d resoruces, wnat 3",
+			"ResourceBase().respondersInThePath() returned %d resoruces, wnat 3",
 			lrs,
 		)
 	}
 
 	if rs[0].(*Host) != h {
-		t.Fatalf("ResourceBase().resourcesInThePath() failed to get host")
+		t.Fatalf("ResourceBase().respondersInThePath() failed to get host")
 	}
 
 	if rs[1].(*Resource) != r1 {
-		t.Fatalf("ResourceBase().resourcesInThePath() failed to get r1")
+		t.Fatalf("ResourceBase().respondersInThePath() failed to get r1")
 	}
 
 	if rs[2].(*Resource) != r2 {
-		t.Fatalf("ResourceBase().resourcesInThePath() failed to get r2")
+		t.Fatalf("ResourceBase().respondersInThePath() failed to get r2")
 	}
 }
 
