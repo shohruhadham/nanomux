@@ -243,7 +243,10 @@ func (hb *Host) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		)
 
 		if matched {
-			hb.handleOrPassRequest(w, r, args)
+			if !hb.handleOrPassRequest(w, r, args) {
+				notFoundResourceHandler(w, r, args)
+			}
+
 			putArgsInThePool(args)
 			return
 		}
