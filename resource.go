@@ -19,7 +19,7 @@ type Resource struct {
 // createDormantResource creates a dormant, not configured resource.
 func createDormantResource(tmpl *Template) (*Resource, error) {
 	if tmpl == nil {
-		return nil, newErr("%w", ErrNilArgument)
+		return nil, newErr("%w", errNilArgument)
 	}
 
 	var rb = &Resource{}
@@ -44,7 +44,7 @@ func createResource(
 	var tmpl *Template
 	if rTmplStr == "/" {
 		if hTmplStr != "" {
-			return nil, newErr("%w", ErrNonRouterParent)
+			return nil, newErr("%w", errNonRouterParent)
 		}
 
 		tmpl = rootTmpl
@@ -61,7 +61,7 @@ func createResource(
 	if config != nil {
 		config.Secure, config.TrailingSlash = secure, tslash
 		if config.RedirectInsecureRequest && !secure {
-			return nil, newErr("%w", ErrConflictingSecurity)
+			return nil, newErr("%w", errConflictingSecurity)
 		}
 
 		var tcfs = config.asFlags()
@@ -95,184 +95,10 @@ func createResource(
 	return r, nil
 }
 
-// CreateDormantResource returns a new dormant resource (without HTTP method
-// handlers) from the URL template. The template's scheme and trailing slash
-// property values are used to configure the resource.
-//
-// When the URL template contains a host and/or prefix path segment templates,
-// the resource keeps them. Templates are used when the resource is being
-// registered. When the resource is being registered by a router, the host and
-// path segment templates indicate where in the hierarchy it must be placed.
-// When the resource is being registered by a host, the host template is checked
-// for compatibility, and the prefix path segment templates show where in the
-// hierarchy the resource must be placed under the host. When the resource
-// is being registered by another resource, the host and prefix path segment
-// templates are checked for compatibility with the registering resource's host
-// and corresponding prefix path segments. If there are remaining path segments
-// that come below the registering resource, they show where in the hierarchy
-// the resource must be placed under the registering resource.
-func CreateDormantResource(urlTmplStr string) (*Resource, error) {
-	var r, err = createResource(urlTmplStr, nil, nil)
-	if err != nil {
-		return nil, newErr("%w", err)
-	}
-
-	return r, nil
-}
-
-// CreateDormantResourceUsingConfig returns a new dormant resource (without
-// HTTP method handlers) from the URL template.
-//
-// The resource is configured with the properties in the config as well as the
-// scheme and trailing slash property values of the URL template (the config's
-// Secure and TrailingSlash values are ignored and may not be set).
-//
-// When the URL template contains a host and/or prefix path segment templates,
-// the resource keeps them. Templates are used when the resource is being
-// registered. When the resource is being registered by a router, the host and
-// path segment templates indicate where in the hierarchy it must be placed.
-// When the resource is being registered by a host, the host template is checked
-// for compatibility, and the prefix path segment templates show where in the
-// hierarchy the resource must be placed under the host. When the resource
-// is being registered by another resource, the host and prefix path segment
-// templates are checked for compatibility with the registering resource's host
-// and corresponding prefix path segments. If there are remaining path segments
-// that come below the registering resource, they show where in the hierarchy
-// the resource must be placed under the registering resource.
-func CreateDormantResourceUsingConfig(
-	urlTmplStr string,
-	config Config,
-) (*Resource, error) {
-	var r, err = createResource(urlTmplStr, nil, &config)
-	if err != nil {
-		return nil, newErr("%w", err)
-	}
-
-	return r, nil
-}
-
-// CreateResource returns a new resource.
-//
-// The first argument URL template's scheme and trailing slash property values
-// are used to configure the new instance of the Resource.
-//
-// The Impl is, in a sense, the implementation of the resource. It is an
-// instance of a type with methods to handle HTTP requests. Methods must have
-// the signature of the Handler and must start with the "Handle" prefix. The
-// remaining part of any such method's name is considered an HTTP method. For
-// example, HandleGet and HandleShare are considered the handlers of the GET
-// and SHARE HTTP methods, respectively. If the value of the impl has the
-// HandleNotAllowedMethod method, then it's used as the handler of the not
-// allowed HTTP methods.
-//
-// Example:
-// 	type ExampleResource struct{}
-//
-// 	func (er *ExampleResource) HandleGet(
-// 		w http.ResponseWriter,
-// 		r *http.Request,
-//		args *nanomux.Args,
-// 	) {
-// 		// ...
-// 	}
-//
-// 	// ...
-// 	var exampleResource, err = CreateResource(
-// 		"https://example.com/staticTemplate/{valueName:patternTemplate}",
-// 		&ExampleResource{},
-// 	)
-//
-// When the URL template contains a host and/or prefix path segment templates,
-// the resource keeps them. Templates are used when the resource is being
-// registered. When the resource is being registered by a router, the host and
-// path segment templates indicate where in the hierarchy it must be placed.
-// When the resource is being registered by a host, the host template is checked
-// for compatibility, and the prefix path segment templates show where in the
-// hierarchy the resource must be placed under the host. When the resource
-// is being registered by another resource, the host and prefix path segment
-// templates are checked for compatibility with the registering resource's host
-// and corresponding prefix path segments. If there are remaining path segments
-// that come below the registering resource, they show where in the hierarchy
-// the resource must be placed under the registering resource.
-func CreateResource(urlTmplStr string, impl Impl) (*Resource, error) {
-	if impl == nil {
-		return nil, newErr("%w", ErrNilArgument)
-	}
-
-	var r, err = createResource(urlTmplStr, impl, nil)
-	if err != nil {
-		return nil, newErr("%w", err)
-	}
-
-	return r, nil
-}
-
-// CreateResourceUsingConfig returns a new resource. The resource is configured
-// with the properties in the config as well as the scheme and trailing slash
-// property values of the URL template (the config's Secure and TrailingSlash
-// values are ignored and may not be set).
-//
-// The Impl is, in a sense, the implementation of the resource. It is an
-// instance of a type with methods to handle HTTP requests. Methods must have
-// the signature of the Handler and must start with the "Handle" prefix. The
-// remaining part of any such method's name is considered an HTTP method. For
-// example, HandleGet and HandleShare are considered the handlers of the GET
-// and SHARE HTTP methods, respectively. If the value of the impl has the
-// HandleNotAllowedMethod method, then it's used as the handler of the not
-// allowed HTTP methods.
-//
-// Example:
-// 	type ExampleResource struct{}
-//
-// 	func (er *ExampleResource) HandleGet(
-// 		w http.ResponseWriter,
-// 		r *http.Request,
-//		args *nanomux.Args,
-// 	) {
-// 		// ...
-// 	}
-//
-// 	// ...
-// 	var exampleResource, err = CreateResourceUsingConfig(
-// 		"https://example.com/{wildCardTemplate}/",
-// 		&ExampleResource{},
-// 		Config{SubtreeHandler: true, RedirectInsecureRequest: true},
-// 	)
-//
-// When the URL template contains a host and/or prefix path segment templates,
-// the resource keeps them. Templates are used when the resource is being
-// registered. When the resource is being registered by a router, the host and
-// path segment templates indicate where in the hierarchy it must be placed.
-// When the resource is being registered by a host, the host template is checked
-// for compatibility, and the prefix path segment templates show where in the
-// hierarchy the resource must be placed under the host. When the resource
-// is being registered by another resource, the host and prefix path segment
-// templates are checked for compatibility with the registering resource's host
-// and corresponding prefix path segments. If there are remaining path segments
-// that come below the registering resource, they show where in the hierarchy
-// the resource must be placed under the registering resource.
-func CreateResourceUsingConfig(
-	urlTmplStr string,
-	impl Impl,
-	config Config,
-) (*Resource, error) {
-	if impl == nil {
-		return nil, newErr("%w", ErrNilArgument)
-	}
-
-	var r, err = createResource(urlTmplStr, impl, &config)
-	if err != nil {
-		return nil, newErr("%w", err)
-	}
-
-	return r, nil
-}
-
 // -------------------------
 
 // NewDormantResource returns a new dormant resource (without HTTP
-// method handlers) from the URL template. Unlike CreateDormantResource,
-// NewDormantResource panics on error.
+// method handlers).
 //
 // The template's scheme and trailing slash property values are used to
 // configure the resource.
@@ -290,22 +116,20 @@ func CreateResourceUsingConfig(
 // that come below the registering resource, they show where in the hierarchy
 // the resource must be placed under the registering resource.
 func NewDormantResource(urlTmplStr string) *Resource {
-	var r, err = CreateDormantResource(urlTmplStr)
+	var r, err = createResource(urlTmplStr, nil, nil)
 	if err != nil {
-		panic(newErr("%w", err))
+		panicWithErr("%w", err)
 	}
 
 	return r
 }
 
-// NewDormantResourceUsingConfig returns a new dormant resource
-// (without HTTP method handlers) from the URL template.
-// Unlike CreateDormantResourceUsingConfig, NewDormantResourceUsingConfig
-// panics on an error.
+// NewDormantResourceUsingConfig returns a new dormant resource (without HTTP
+// method handlers).
 //
 // The resource is configured with the properties in the config as well as
-// the scheme and trailing slash property values of the URL template (the
-// config's Secure and TrailingSlash values are ignored and may not be set).
+// the scheme and trailing slash property values of the URL template. The
+// config's Secure and TrailingSlash values are ignored and may not be set.
 //
 // When the URL template contains a host and/or prefix path segment templates,
 // the resource keeps them. Templates are used when the resource is being
@@ -320,16 +144,15 @@ func NewDormantResource(urlTmplStr string) *Resource {
 // that come below the registering resource, they show where in the hierarchy
 // the resource must be placed under the registering resource.
 func NewDormantResourceUsingConfig(urlTmplStr string, config Config) *Resource {
-	var r, err = CreateDormantResourceUsingConfig(urlTmplStr, config)
+	var r, err = createResource(urlTmplStr, nil, &config)
 	if err != nil {
-		panic(newErr("%w", err))
+		panicWithErr("%w", err)
 	}
 
 	return r
 }
 
-// NewResource returns a new resource. Unlike CreateResource, NewResource
-// panics on an error.
+// NewResource returns a new resource.
 //
 // The first argument URL template's scheme and trailing slash property values
 // are used to configure the new Resource instance.
@@ -350,7 +173,7 @@ func NewDormantResourceUsingConfig(urlTmplStr string, config Config) *Resource {
 // 		w http.ResponseWriter,
 // 		r *http.Request,
 //		args *nanomux.Args,
-// 	) {
+// 	) bool {
 // 		// ...
 // 	}
 //
@@ -373,21 +196,24 @@ func NewDormantResourceUsingConfig(urlTmplStr string, config Config) *Resource {
 // that come below the registering resource, they show where in the hierarchy
 // the resource must be placed under the registering resource.
 func NewResource(urlTmplStr string, impl Impl) *Resource {
-	var rb, err = CreateResource(urlTmplStr, impl)
-	if err != nil {
-		panic(newErr("%w", err))
+	if impl == nil {
+		panicWithErr("%w", errNilArgument)
 	}
 
-	return rb
+	var r, err = createResource(urlTmplStr, impl, nil)
+	if err != nil {
+		panicWithErr("%w", err)
+	}
+
+	return r
 }
 
 // NewResourceUsingConfig returns a new resource.
-// Unlike CreateResourceUsingConfig, NewResourceUsingConfig panics on an error.
 //
 // The new Resource instance is configured with the properties in the
 // config as well as the scheme and trailing slash property values of the URL
-// template (the config's Secure and TrailingSlash values are ignored and may
-// not be set).
+// template. The config's Secure and TrailingSlash values are ignored and may
+// not be set.
 //
 // The Impl is, in a sense, the implementation of the resource. It is an
 // instance of a type with methods to handle HTTP requests. Methods must have
@@ -405,7 +231,7 @@ func NewResource(urlTmplStr string, impl Impl) *Resource {
 // 		w http.ResponseWriter,
 // 		r *http.Request,
 //		args *nanomux.Args,
-// 	) {
+// 	) bool {
 // 		// ...
 // 	}
 //
@@ -433,19 +259,23 @@ func NewResourceUsingConfig(
 	impl Impl,
 	config Config,
 ) *Resource {
-	var rb, err = CreateResourceUsingConfig(urlTmplStr, impl, config)
-	if err != nil {
-		panic(newErr("%w", err))
+	if impl == nil {
+		panicWithErr("%w", errNilArgument)
 	}
 
-	return rb
+	var r, err = createResource(urlTmplStr, impl, &config)
+	if err != nil {
+		panicWithErr("%w", err)
+	}
+
+	return r
 }
 
 // newDormantResource creates a dormant instance of the Resource from the tmpl.
 func newDormantResource(tmpl *Template) *Resource {
 	var r, err = createDormantResource(tmpl)
 	if err != nil {
-		panic(newErr("%w", err))
+		panicWithErr("%w", err)
 	}
 
 	return r

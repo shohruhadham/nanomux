@@ -288,14 +288,11 @@ func TestRouter_SetGetSharedDataAt(t *testing.T) {
 				}
 			}
 
-			err = ro.SetSharedDataAt(c.url, data)
-			if (err != nil) != c.wantErr {
-				t.Fatalf(
-					"Router.SetSharedDataAt() = %v, wantErr = %t",
-					err,
-					c.wantErr,
-				)
-			}
+			testPanicker(
+				t,
+				c.wantErr,
+				func() { ro.SetSharedDataAt(c.url, data) },
+			)
 
 			if _r != nil {
 				var retrievedData = _r.SharedData()
@@ -307,15 +304,10 @@ func TestRouter_SetGetSharedDataAt(t *testing.T) {
 					)
 				}
 
-				retrievedData = 0
-				retrievedData, err = ro.SharedDataAt(c.url)
-				if err != nil {
-					t.Fatalf(
-						"Router.SharedDataAt() err = %v, want nil",
-						err,
-					)
-				}
+				defer checkPanic(t, c.wantErr)
 
+				retrievedData = 0
+				retrievedData = ro.SharedDataAt(c.url)
 				if retrievedData != data {
 					t.Fatalf(
 						"Router.SharedDataAt() data = %v, want %v",
@@ -463,16 +455,9 @@ func TestRouter_ConfigurationAt(t *testing.T) {
 				}
 			}
 
-			var _rConfig Config
-			_rConfig, err = ro.ConfigurationAt(c.urlToCheck)
-			if (err != nil) != c.wantErr {
-				t.Fatalf(
-					"Router.ConfigurationAt() = %v, wantErr = %t",
-					err,
-					c.wantErr,
-				)
-			}
+			defer checkPanic(t, c.wantErr)
 
+			var _rConfig = ro.ConfigurationAt(c.urlToCheck)
 			if !c.wantErr {
 				if _rConfig != wantConfig {
 					t.Fatalf(
@@ -485,51 +470,6 @@ func TestRouter_ConfigurationAt(t *testing.T) {
 		})
 	}
 }
-
-// implType is usef in other test files too.
-type implType struct{}
-
-func (rht *implType) HandleGet(
-	http.ResponseWriter,
-	*http.Request,
-	*Args,
-) bool {
-	return true
-}
-
-func (rht *implType) HandlePost(
-	http.ResponseWriter,
-	*http.Request,
-	*Args,
-) bool {
-	return true
-}
-
-func (rht *implType) HandleCustom(
-	http.ResponseWriter,
-	*http.Request,
-	*Args,
-) bool {
-	return true
-}
-
-func (rht *implType) HandleNotAllowedMethod(
-	http.ResponseWriter,
-	*http.Request,
-	*Args,
-) bool {
-	return true
-}
-
-func (rht *implType) SomeMethod(
-	http.ResponseWriter,
-	*http.Request,
-	*Args,
-) bool {
-	return true
-}
-
-const rhTypeHTTPMethods = "get post custom"
 
 func TestRouter_SetImplementationAt(t *testing.T) {
 	var ro = NewRouter()
@@ -591,19 +531,14 @@ func TestRouter_SetImplementationAt(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			var err = ro.SetImplementationAt(c.urlTmpl, rh)
-
-			if (err != nil) != c.wantErr {
-				t.Fatalf(
-					"Router.SetImplementationAt() err = %v, wantErr %t",
-					err,
-					c.wantErr,
-				)
-			}
+			testPanicker(
+				t,
+				c.wantErr,
+				func() { ro.SetImplementationAt(c.urlTmpl, rh) },
+			)
 
 			if c.urlToCheck != "" {
-				var _r _Responder
-				_r, _, err = ro.registered_Responder(c.urlToCheck)
+				var _r, _, err = ro.registered_Responder(c.urlToCheck)
 				if err != nil {
 					return
 				}
@@ -631,30 +566,11 @@ func TestRouter_ImplementationAt(t *testing.T) {
 	var ro = NewRouter()
 	var rh = &implType{}
 
-	var err = ro.SetImplementationAt("http://example.com", rh)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = ro.SetImplementationAt("https://example.com/r10/", rh)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = ro.SetImplementationAt("http://example.com/r10/{r20:1}", rh)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = ro.SetImplementationAt("/r00", rh)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = ro.SetImplementationAt("{r01}/r11", rh)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ro.SetImplementationAt("http://example.com", rh)
+	ro.SetImplementationAt("https://example.com/r10/", rh)
+	ro.SetImplementationAt("http://example.com/r10/{r20:1}", rh)
+	ro.SetImplementationAt("/r00", rh)
+	ro.SetImplementationAt("{r01}/r11", rh)
 
 	var cases = []struct {
 		name, urlTmpl string
@@ -677,15 +593,9 @@ func TestRouter_ImplementationAt(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			var _rh, err = ro.ImplementationAt(c.urlTmpl)
-			if (err != nil) != c.wantErr {
-				t.Fatalf(
-					"Router.ImplementationAt() err = %v, want %t",
-					err,
-					c.wantErr,
-				)
-			}
+			defer checkPanic(t, c.wantErr)
 
+			var _rh = ro.ImplementationAt(c.urlTmpl)
 			if !c.wantErr && _rh != rh {
 				t.Fatalf(
 					"Router.ImplementationAt(): couldn't return impl",
@@ -764,29 +674,24 @@ func TestRouter_SetURLHandlerFor(t *testing.T) {
 		{"empty url", "get", "", "", 0, true},
 	}
 
+	var fnName = "Router.SetUrlHandlerfor()"
+
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			var err = ro.SetURLHandlerFor(c.methods, c.urlTmpl, handler)
-			if (err != nil) != c.wantErr {
-				t.Fatalf(
-					"Router.SetURLHandlerFor() err = %v, wantErr %t",
-					err,
-					c.wantErr,
-				)
-			}
+			testPanicker(
+				t,
+				c.wantErr,
+				func() { ro.SetURLHandlerFor(c.methods, c.urlTmpl, handler) },
+			)
 
-			err = ro.SetURLHandlerFor("!", c.urlTmpl, handler)
-			if (err != nil) != c.wantErr {
-				t.Fatalf(
-					"Router.SetURLHandlerFor() err == %v, wantErr %t",
-					err,
-					c.wantErr,
-				)
-			}
+			testPanicker(
+				t,
+				c.wantErr,
+				func() { ro.SetURLHandlerFor("!", c.urlTmpl, handler) },
+			)
 
 			if c.urlToCheck != "" {
-				var _r _Responder
-				_r, _, err = ro.registered_Responder(c.urlToCheck)
+				var _r, _, err = ro.registered_Responder(c.urlToCheck)
 				if err != nil {
 					return
 				}
@@ -795,27 +700,29 @@ func TestRouter_SetURLHandlerFor(t *testing.T) {
 				case *Host:
 					if n := len(_r.mhPairs); n != c.numberOfHandlers {
 						t.Fatalf(
-							"Router.SetURLHandlerFor(): len(handlers) = %d, want %d",
-							n, c.numberOfHandlers,
+							fnName+" len(handlers) = %d, want %d",
+							n,
+							c.numberOfHandlers,
 						)
 					}
 
 					if _r.notAllowedHTTPMethodsHandler == nil {
 						t.Fatalf(
-							"Router.SetURLHandlerFor(): notAllowedMethodsHandler == nil",
+							fnName + " notAllowedMethodsHandler == nil",
 						)
 					}
 				case *Resource:
 					if n := len(_r.mhPairs); n != c.numberOfHandlers {
 						t.Fatalf(
-							"Router.SetURLHandlerFor(): len(handlers) = %d, want %d",
-							n, c.numberOfHandlers,
+							fnName+" len(handlers) = %d, want %d",
+							n,
+							c.numberOfHandlers,
 						)
 					}
 
 					if _r.notAllowedHTTPMethodsHandler == nil {
 						t.Fatalf(
-							"Router.SetHandlerFor(): notAllowedMethodsHandler == nil",
+							fnName + " notAllowedMethodsHandler == nil",
 						)
 					}
 				}
@@ -834,65 +741,20 @@ func TestRouter_URLHandlerOf(t *testing.T) {
 		return true
 	}
 
-	var err = ro.SetURLHandlerFor("get put", "http://example.com", handler)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ro.SetURLHandlerFor("get put", "http://example.com", handler)
+	ro.SetURLHandlerFor("!", "http://example.com", handler)
 
-	err = ro.SetURLHandlerFor("!", "http://example.com", handler)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ro.SetURLHandlerFor("post", "https://example.com/r10/", handler)
+	ro.SetURLHandlerFor("!", "https://example.com/r10/", handler)
 
-	err = ro.SetURLHandlerFor("post", "https://example.com/r10/", handler)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ro.SetURLHandlerFor("custom", "http://example.com/r10/{r20:1}", handler)
+	ro.SetURLHandlerFor("!", "http://example.com/r10/{r20:1}", handler)
 
-	err = ro.SetURLHandlerFor("!", "https://example.com/r10/", handler)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ro.SetURLHandlerFor("get post", "/r00", handler)
+	ro.SetURLHandlerFor("!", "/r00", handler)
 
-	err = ro.SetURLHandlerFor(
-		"custom",
-		"http://example.com/r10/{r20:1}",
-		handler,
-	)
-
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = ro.SetURLHandlerFor(
-		"!",
-		"http://example.com/r10/{r20:1}",
-		handler,
-	)
-
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = ro.SetURLHandlerFor("get post", "/r00", handler)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = ro.SetURLHandlerFor("!", "/r00", handler)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = ro.SetURLHandlerFor("get post custom put", "{r01}/r11", handler)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = ro.SetURLHandlerFor("!", "{r01}/r11", handler)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ro.SetURLHandlerFor("get post custom put", "{r01}/r11", handler)
+	ro.SetURLHandlerFor("!", "{r01}/r11", handler)
 
 	var cases = []struct {
 		name, method, urlTmpl string
@@ -924,14 +786,11 @@ func TestRouter_URLHandlerOf(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			var h, err = ro.URLHandlerOf(c.method, c.urlTmpl)
-			if (err != nil) != c.wantErr {
-				t.Fatalf("Router.HandlerOf() err = %v, want %t", err, c.wantErr)
-			}
-
+			defer checkPanic(t, c.wantErr)
+			var h = ro.URLHandlerOf(c.method, c.urlTmpl)
 			if !c.wantErr && c.method != "" {
 				if h == nil {
-					t.Fatalf("Router.HandlerOf(): couldn't return handler")
+					t.Fatalf("Router.URLHandlerOf(): couldn't return handler")
 				}
 			}
 		})
@@ -1021,14 +880,11 @@ func TestRouter_WrapRequestPasserAt(t *testing.T) {
 				}
 			}
 
-			err = ro.WrapRequestPasserAt(c.url, mws...)
-			if (err != nil) != c.wantErr {
-				t.Fatalf(
-					"Router.WrapURLRequestPasser() err = %v, wantErr = %t",
-					err,
-					c.wantErr,
-				)
-			}
+			testPanicker(
+				t,
+				c.wantErr,
+				func() { ro.WrapRequestPasserAt(c.url, mws...) },
+			)
 
 			if !c.wantErr {
 				strb.Reset()
@@ -1039,7 +895,7 @@ func TestRouter_WrapRequestPasserAt(t *testing.T) {
 				var str = strb.String()
 				if str != c.wantStr {
 					t.Fatalf(
-						"Router.WrapURLRequestPasser() gotStr = %s, want = %s",
+						"Router.WrapRequestPasserAt() gotStr = %s, want = %s",
 						str,
 						c.wantStr,
 					)
@@ -1049,7 +905,7 @@ func TestRouter_WrapRequestPasserAt(t *testing.T) {
 	}
 }
 
-func TestRouter_WrapURLRequestHandler(t *testing.T) {
+func TestRouter_WrapRequestHandlerAt(t *testing.T) {
 	var ro = NewRouter()
 	var impl = &implType{}
 
@@ -1138,22 +994,15 @@ func TestRouter_WrapURLRequestHandler(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			var err error
 			if !c.wantErr {
-				err = ro.SetImplementationAt(c.url, impl)
-				if err != nil {
-					t.Fatal(err)
-				}
+				ro.SetImplementationAt(c.url, impl)
 			}
 
-			err = ro.WrapRequestHandlerAt(c.url, mws...)
-			if (err != nil) != c.wantErr {
-				t.Fatalf(
-					"Router.WrapURLRequestHandler() err = %v, wantErr = %t",
-					err,
-					c.wantErr,
-				)
-			}
+			testPanicker(
+				t,
+				c.wantErr,
+				func() { ro.WrapRequestHandlerAt(c.url, mws...) },
+			)
 
 			if !c.wantErr {
 				strb.Reset()
@@ -1164,7 +1013,7 @@ func TestRouter_WrapURLRequestHandler(t *testing.T) {
 				var str = strb.String()
 				if str != "ab" {
 					t.Fatalf(
-						"Router.WrapURLRequestHandler() gotStr = %s, want = ab",
+						"Router.WrapRequestHandlerAt() gotStr = %s, want = ab",
 						str,
 					)
 				}
@@ -1208,65 +1057,20 @@ func TestRouter_WrapURLHandlerOf(t *testing.T) {
 		}
 	)
 
-	var err = ro.SetURLHandlerFor("get put", "http://example.com", handler)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ro.SetURLHandlerFor("get put", "http://example.com", handler)
+	ro.SetURLHandlerFor("!", "http://example.com", handler)
 
-	err = ro.SetURLHandlerFor("!", "http://example.com", handler)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ro.SetURLHandlerFor("post put", "http://example.com/r10", handler)
+	ro.SetURLHandlerFor("!", "http://example.com/r10", handler)
 
-	err = ro.SetURLHandlerFor("post put", "http://example.com/r10", handler)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ro.SetURLHandlerFor("custom", "http://example.com/r10/{r20:1}", handler)
+	ro.SetURLHandlerFor("!", "http://example.com/r10/{r20:1}", handler)
 
-	err = ro.SetURLHandlerFor("!", "http://example.com/r10", handler)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ro.SetURLHandlerFor("get post", "/r00", handler)
+	ro.SetURLHandlerFor("!", "/r00", handler)
 
-	err = ro.SetURLHandlerFor(
-		"custom",
-		"http://example.com/r10/{r20:1}",
-		handler,
-	)
-
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = ro.SetURLHandlerFor(
-		"!",
-		"http://example.com/r10/{r20:1}",
-		handler,
-	)
-
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = ro.SetURLHandlerFor("get post", "/r00", handler)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = ro.SetURLHandlerFor("!", "/r00", handler)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = ro.SetURLHandlerFor("get post custom put", "{r01}/r11", handler)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = ro.SetURLHandlerFor("!", "{r01}/r11", handler)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ro.SetURLHandlerFor("get post custom put", "{r01}/r11", handler)
+	ro.SetURLHandlerFor("!", "{r01}/r11", handler)
 
 	var cases = []struct {
 		name, methods, urlTmpl, urlToCheck string
@@ -1399,25 +1203,19 @@ func TestRouter_WrapURLHandlerOf(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			var err = ro.WrapURLHandlerOf(c.methods, c.urlTmpl, mws...)
-			if (err != nil) != c.wantErr {
-				t.Fatalf(
-					"Router.WrapURLHandlerOf() err = %v, want %t",
-					err,
-					c.wantErr,
-				)
-			}
+			testPanicker(
+				t,
+				c.wantErr,
+				func() { ro.WrapURLHandlerOf(c.methods, c.urlTmpl, mws...) },
+			)
 
 			if c.urlToCheck != "" && c.methodsToCheck != nil {
 				var h Handler
 				for _, m := range c.methodsToCheck {
-					h, err = ro.URLHandlerOf(m, c.urlToCheck)
-					if err != nil {
-						t.Fatal(err)
-					}
-
+					h = ro.URLHandlerOf(m, c.urlToCheck)
 					strb.Reset()
 					h(nil, nil, nil)
+
 					var checkStr = "321"
 					if c.wantErr {
 						checkStr = "1"
@@ -1765,11 +1563,9 @@ func TestRouter_Host(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			var h, err = ro.Host(c.tmplStr)
-			if (err != nil) != c.wantErr {
-				t.Fatalf("Router.Host() err = %v, want nil", err)
-			}
+			defer checkPanic(t, c.wantErr)
 
+			var h = ro.Host(c.tmplStr)
 			if c.wantHost != nil && h != c.wantHost {
 				t.Fatalf("Router.Host() couldn't get host")
 			}
@@ -1969,15 +1765,9 @@ func TestRouter_HostUsingConfig(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			var r, err = ro.HostUsingConfig(c.tmplStr, c.config)
-			if (err != nil) != c.wantErr {
-				t.Fatalf(
-					"Router.HostUsingConfig() err = %v, want %t",
-					err,
-					c.wantErr,
-				)
-			}
+			defer checkPanic(t, c.wantErr)
 
+			var r = ro.HostUsingConfig(c.tmplStr, c.config)
 			if c.wantHost != nil && r != c.wantHost {
 				t.Fatalf("Router.HostUsingConfig() couldn't get host")
 			}
@@ -2012,70 +1802,35 @@ func TestRouter_RegisterHost(t *testing.T) {
 		h2 = NewDormantHost("{sub:id}.example.com")
 		r1 = NewDormantResource("r1")
 		r2 = NewDormantResource("r2")
+
+		fnName = "Router.RegisterHost()"
 	)
 
-	if err := h1.RegisterResource(r1); err != nil {
-		t.Fatal(err)
-	}
+	h1.RegisterResource(r1)
 
-	if err := ro.RegisterHost(h1); err != nil {
-		t.Fatalf("Router.RegisterHost() err = %v, want nil", nil)
-	}
-
-	if err := h2.RegisterResource(r2); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := ro.RegisterHost(h2); err != nil {
-		t.Fatalf("Router.RegisterHost() err = %v, want nil", nil)
-	}
+	testPanicker(t, false, func() { ro.RegisterHost(h1) })
+	testPanicker(t, false, func() { h2.RegisterResource(r2) })
+	testPanicker(t, false, func() { ro.RegisterHost(h2) })
 
 	if len(ro.patternHosts) != 1 && ro.patternHosts[0] != h1 {
-		t.Fatalf(
-			"Router.RegisterHost() couldn't keep router's own host",
-		)
+		t.Fatalf(fnName + " couldn't keep router's own host")
 	}
 
 	var hb = ro.patternHosts[0]
 	if len(hb.staticResources) != 2 {
-		t.Fatalf("Router.RegisterHost() couldn't keep rersource 2")
+		t.Fatalf(fnName + " couldn't keep rersource 2")
 	}
 
-	if err := ro.RegisterHost(nil); err == nil {
-		t.Fatalf("ro.RegisterHost() err = nil, want !nil")
-	}
+	testPanicker(t, true, func() { ro.RegisterHost(nil) })
 }
 
 func TestRouter_RegisteredHost(t *testing.T) {
 	var ro = NewRouter()
-	var static1, err = ro.Host("example1.com")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var static2 *Host
-	static2, err = ro.Host("$static2:example2.com")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var pattern1 *Host
-	pattern1, err = ro.Host("{sub1:name}.example.com")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var pattern2 *Host
-	pattern2, err = ro.Host("$sub2:{sub1:name}{sub2}.example.com")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var wildcardSub *Host
-	wildcardSub, err = ro.Host("{sub}.example.com")
-	if err != nil {
-		t.Fatal(err)
-	}
+	var static1 = ro.Host("example1.com")
+	var static2 = ro.Host("$static2:example2.com")
+	var pattern1 = ro.Host("{sub1:name}.example.com")
+	var pattern2 = ro.Host("$sub2:{sub1:name}{sub2}.example.com")
+	var wildcardSub = ro.Host("{sub}.example.com")
 
 	var cases = []struct {
 		name    string
@@ -2106,14 +1861,9 @@ func TestRouter_RegisteredHost(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got, err := ro.RegisteredHost(c.tmplStr)
-			if (err != nil) != c.wantErr {
-				t.Fatalf(
-					"Router.RegisteredHost() error = %v, want %v",
-					err, c.wantErr,
-				)
-			}
+			defer checkPanic(t, c.wantErr)
 
+			var got = ro.RegisteredHost(c.tmplStr)
 			if got != c.want {
 				t.Fatalf(
 					"Router.RegisteredHost() = %v, want %v",
@@ -2127,33 +1877,12 @@ func TestRouter_RegisteredHost(t *testing.T) {
 func TestRouter_HostNamed(t *testing.T) {
 	var ro = NewRouter()
 
-	var _, err = ro.Host("$host:example.com")
-	if err != nil {
-		t.Fatal(err)
-	}
+	ro.Host("$host:example.com")
+	ro.Host("{id:id}.example.com")
 
-	_, err = ro.Host("{id:id}.example.com")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var wildcardSub *Host
-	wildcardSub, err = ro.Host("{subdomain}.example.com")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var static *Host
-	static, err = ro.Host("$static:example2.com")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var pattern *Host
-	pattern, err = ro.Host("{name:name}.example.com")
-	if err != nil {
-		t.Fatal(err)
-	}
+	var wildcardSub = ro.Host("{subdomain}.example.com")
+	var static = ro.Host("$static:example2.com")
+	var pattern = ro.Host("{name:name}.example.com")
 
 	if got := ro.HostNamed("subdomain"); got != wildcardSub {
 		t.Fatalf("Router.HostNamed() = %v, want %v", got, wildcardSub)
@@ -2177,33 +1906,13 @@ func TestRouter_Hosts(t *testing.T) {
 		ro     = NewRouter()
 		length = 5
 		hs     = make([]*Host, length)
-		err    error
 	)
 
-	hs[0], err = ro.Host("example1.com")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	hs[1], err = ro.Host("example2.com")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	hs[2], err = ro.Host("{sub:name1}.example.com")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	hs[3], err = ro.Host("{sub2:name2}.example.com")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	hs[4], err = ro.Host("{wildCardSub}.example.com")
-	if err != nil {
-		t.Fatal(err)
-	}
+	hs[0] = ro.Host("example1.com")
+	hs[1] = ro.Host("example2.com")
+	hs[2] = ro.Host("{sub:name1}.example.com")
+	hs[3] = ro.Host("{sub2:name2}.example.com")
+	hs[4] = ro.Host("{wildCardSub}.example.com")
 
 	var gotHs = ro.Hosts()
 	if len(gotHs) != length {
@@ -2236,31 +1945,11 @@ func TestRouter_HasHost(t *testing.T) {
 	var ro = NewRouter()
 	var hs = make([]*Host, 5)
 
-	var err error
-	hs[0], err = ro.Host("example1.com")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	hs[1], err = ro.Host("example2.com")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	hs[2], err = ro.Host("{sub:name1}.example.com")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	hs[3], err = ro.Host("{sub2:name2}.example.com")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	hs[4], err = ro.Host("{wildCardSub}.example.com")
-	if err != nil {
-		t.Fatal(err)
-	}
+	hs[0] = ro.Host("example1.com")
+	hs[1] = ro.Host("example2.com")
+	hs[2] = ro.Host("{sub:name1}.example.com")
+	hs[3] = ro.Host("{sub2:name2}.example.com")
+	hs[4] = ro.Host("{wildCardSub}.example.com")
 
 	var cases = []struct {
 		name string
@@ -2300,10 +1989,7 @@ func TestRouter_HasAnyHost(t *testing.T) {
 		t.Fatalf("Router.HasAnyHost() = true, want false")
 	}
 
-	if _, err := ro.Host("{sub}.example.com"); err != nil {
-		t.Fatal(err)
-	}
-
+	ro.Host("{sub}.example.com")
 	if !ro.HasAnyHost() {
 		t.Fatalf("Router.HasAnyHost() = false, want true")
 	}
@@ -2322,23 +2008,12 @@ func TestRouter_initializeRootResource(t *testing.T) {
 }
 
 func TestRouter_Resource(t *testing.T) {
+	defer checkPanic(t, false)
+
 	var ro = NewRouter()
-	var static1, err = ro.Resource("static1")
-	if err != nil {
-		t.Fatalf("Router.Resource() err = %v, want nil", err)
-	}
-
-	var pattern *Resource
-	pattern, err = ro.Resource("static2/{name:pattern}/")
-	if err != nil {
-		t.Fatalf("Router.Resource() err = %v, want nil", err)
-	}
-
-	var wildcard *Resource
-	wildcard, err = ro.Resource("https:///{name:pattern2}/{wildcard}")
-	if err != nil {
-		t.Fatal(err)
-	}
+	var static1 = ro.Resource("static1")
+	var pattern = ro.Resource("static2/{name:pattern}/")
+	var wildcard = ro.Resource("https:///{name:pattern2}/{wildcard}")
 
 	var cases = []struct {
 		name         string
@@ -2407,15 +2082,9 @@ func TestRouter_Resource(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			var r, err = ro.Resource(c.tmplStr)
-			if (err != nil) != c.wantErr {
-				t.Fatalf(
-					"Router.Resource() err = %v, wantErr = %t",
-					err,
-					c.wantErr,
-				)
-			}
+			defer checkPanic(t, c.wantErr)
 
+			var r = ro.Resource(c.tmplStr)
 			if c.wantResource != nil && r != c.wantResource {
 				t.Fatalf("Router.Resource() couldn't get resource")
 			}
@@ -2424,30 +2093,17 @@ func TestRouter_Resource(t *testing.T) {
 }
 
 func TestRouter_ResourceUsingConfig(t *testing.T) {
+	defer checkPanic(t, false)
+
 	var ro = NewRouter()
-
-	var static, err = ro.ResourceUsingConfig("static", Config{SubtreeHandler: true})
-	if err != nil {
-		t.Fatalf("Router.ResourceUsingConfig() err = %v, want nil", err)
-	}
-
-	var pattern *Resource
-	pattern, err = ro.ResourceUsingConfig("{name:pattern}/", Config{
+	var static = ro.ResourceUsingConfig("static", Config{SubtreeHandler: true})
+	var pattern = ro.ResourceUsingConfig("{name:pattern}/", Config{
 		HandleThePathAsIs: true,
 	})
 
-	if err != nil {
-		t.Fatalf("Router.ResourceUsingConfig() err = %v, want nil", err)
-	}
-
-	var wildcard *Resource
-	wildcard, err = ro.ResourceUsingConfig("https:///{wildcard}", Config{
+	var wildcard = ro.ResourceUsingConfig("https:///{wildcard}", Config{
 		RedirectInsecureRequest: true,
 	})
-
-	if err != nil {
-		t.Fatalf("Router.ResourceUsingConfig() err = %v, want nil", err)
-	}
 
 	var cases = []struct {
 		name    string
@@ -2652,14 +2308,9 @@ func TestRouter_ResourceUsingConfig(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			var r, err = ro.ResourceUsingConfig(c.tmplStr, c.config)
-			if (err != nil) != c.wantErr {
-				t.Fatalf(
-					"Router.ResourceUsingConfig() err = %v, want nil",
-					err,
-				)
-			}
+			defer checkPanic(t, c.wantErr)
 
+			var r = ro.ResourceUsingConfig(c.tmplStr, c.config)
 			if c.wantR != nil && r != c.wantR {
 				t.Fatalf(
 					"Router.ResourceUsingConfig() couldn't get resource",
@@ -2676,21 +2327,13 @@ func TestRouter_registerNewRoot(t *testing.T) {
 		t.Fatalf("Router.registerNewRoot() err = %v, want nil", err)
 	}
 
-	var r1 *Resource
-	r1, err = ro.Resource("static1")
-	if err != nil {
-		t.Fatalf("Router.registerNewRoot() err = %v, want nil", err)
-	}
-
+	var r1 = ro.Resource("static1")
 	var root1 = newRootResource()
-	err = root1.SetHandlerFor(
+
+	root1.SetHandlerFor(
 		"get",
 		func(http.ResponseWriter, *http.Request, *Args) bool { return true },
 	)
-
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	err = ro.registerNewRoot(root1)
 	if err != nil {
@@ -2709,11 +2352,7 @@ func TestRouter_registerNewRoot(t *testing.T) {
 	}
 
 	var root2 = newRootResource()
-	var r2 *Resource
-	r2, err = root2.Resource("static2")
-	if err != nil {
-		t.Fatal(err)
-	}
+	var r2 = root2.Resource("static2")
 
 	err = ro.registerNewRoot(root2)
 	if err != nil {
@@ -2732,14 +2371,10 @@ func TestRouter_registerNewRoot(t *testing.T) {
 	}
 
 	root2 = newRootResource()
-	err = root2.SetHandlerFor(
+	root2.SetHandlerFor(
 		"get",
 		func(http.ResponseWriter, *http.Request, *Args) bool { return true },
 	)
-
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	err = ro.registerNewRoot(root2)
 	if err == nil {
@@ -2764,95 +2399,68 @@ func TestRouter_RegisterResource(t *testing.T) {
 		ro          = NewRouter()
 		child1      = NewDormantResource("{name:pattern}")
 		child2      = NewDormantResource("{name:pattern}")
-		grandChild1 = NewDormantResource("grandChild1")
-		grandChild2 = NewDormantResource("grandChild2")
+		grandchild1 = NewDormantResource("grandchild1")
+		grandchild2 = NewDormantResource("grandchild2")
+
+		fnName = "Router.RegisterResource()"
 	)
 
-	if err := child1.RegisterResource(grandChild1); err != nil {
-		t.Fatalf("Router.RegisterResource() err = %v, want nil", err)
+	testPanicker(t, false, func() { child1.RegisterResource(grandchild1) })
+	testPanicker(t, false, func() { ro.RegisterResource(child1) })
+	testPanicker(t, false, func() { child2.RegisterResource(grandchild2) })
+	testPanicker(t, false, func() { ro.RegisterResource(child2) })
+
+	if len(ro.r.patternResources) != 1 && ro.r.patternResources[0] != child1 {
+		t.Fatalf(fnName + " couldn't keep own child")
 	}
 
-	if err := ro.RegisterResource(child1); err != nil {
-		t.Fatalf("Router.RegisterResource() err = %v, want nil", nil)
+	var child = ro.r.patternResources[0]
+	if len(child.staticResources) != 2 {
+		t.Fatalf(fnName + " couldn't keep grandchild2")
 	}
 
-	if err := child2.RegisterResource(grandChild2); err != nil {
-		t.Fatalf("Router.RegisterResource() err = %v, want nil", err)
-	}
-
-	if err := ro.RegisterResource(child2); err != nil {
-		t.Fatalf("Router.RegisterResource() err = %v, want nil", nil)
-	}
-
-	var rb = ro.r
-	if len(rb.patternResources) != 1 && rb.patternResources[0] != child1 {
-		t.Fatalf(
-			"Router.RegisterResource() couldn't keep own child",
-		)
-	}
-
-	var childB = rb.patternResources[0]
-	if len(childB.staticResources) != 2 {
-		t.Fatalf("Router.RegisterResource() couldn't keep grandChild2")
-	}
-
-	if err := ro.RegisterResource(nil); err == nil {
-		t.Fatalf("Router.RegisterResource() err = nil, want !nil")
-	}
-
-	if err := ro.RegisterResource(grandChild1); err == nil {
-		t.Fatalf("Router.RegisterResource() err = nil, want !nil")
-	}
-
-	var r = NewDormantResource("http://example.com/prefix/resource")
-	if err := ro.RegisterResource(r); err != nil {
-		t.Fatalf("Router.RegisterResource() err = %v, want nil", err)
-	}
+	testPanicker(t, true, func() { ro.RegisterResource(nil) })
+	testPanicker(t, true, func() { ro.RegisterResource(grandchild1) })
+	testPanicker(
+		t,
+		false,
+		func() {
+			var r = NewDormantResource("http://example.com/prefix/resource")
+			ro.RegisterResource(r)
+		},
+	)
 
 	if len(ro.staticHosts) != 1 {
-		t.Fatalf("Router.RegisterResource() failed to register host")
+		t.Fatalf(fnName + " failed to register host")
 	}
 
-	var hb = ro.staticHosts["example.com"]
-	if len(hb.staticResources) != 1 {
-		t.Fatalf("Router.RegisterResource() failed to register prefix")
+	var h = ro.staticHosts["example.com"]
+	if len(h.staticResources) != 1 {
+		t.Fatalf(fnName + " failed to register prefix")
 	}
 
-	rb = hb.staticResources["prefix"]
-	if rb.staticResources["resource"] == nil {
-		t.Fatalf("Router.RegisterResource() failed to register resource")
+	var r = h.staticResources["prefix"]
+	if r.staticResources["resource"] == nil {
+		t.Fatalf(fnName + " failed to register resource")
 	}
 
 	var root = NewDormantResource("/")
-	var err error
-	r, err = root.Resource("new-resource")
-	if err != nil {
-		t.Fatal(err)
-	}
+	r = root.Resource("new-resource")
 
-	err = ro.r.SetHandlerFor(
+	ro.r.SetHandlerFor(
 		"get",
 		func(http.ResponseWriter, *http.Request, *Args) bool { return true },
 	)
 
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	var oldRoot = ro.r
-	err = ro.RegisterResource(root)
-	if err != nil {
-		t.Fatalf("Router.RegisterResource() err = %v, want nil", err)
-	}
+	testPanicker(t, false, func() { ro.RegisterResource(root) })
 
 	if ro.r != oldRoot {
-		t.Fatalf("Router.RegisterResource() failed to keep old root")
+		t.Fatalf(fnName + " failed to keep old root")
 	}
 
 	if ro.r.staticResources["new-resource"] != r {
-		t.Fatalf(
-			"Router.RegisterResource() failed to register new root's resource",
-		)
+		t.Fatalf(fnName + " failed to register new root's resource")
 	}
 }
 
@@ -2860,242 +2468,224 @@ func TestRouter_RegisterResourceUnder(t *testing.T) {
 	var (
 		ro     = NewRouter()
 		child1 = NewDormantResource("resource1")
-		child2 = NewDormantResource("/{name:pattern}/{grandChild}/resource2")
-		child3 = NewDormantResource("{name:pattern}/grandChild/resource3")
+		child2 = NewDormantResource("/{name:pattern}/{grandchild}/resource2")
+		child3 = NewDormantResource("{name:pattern}/grandchild/resource3")
 		child4 = NewDormantResource(
-			"http://example.com/{name:pattern}/grandChild/resource4",
+			"http://example.com/{name:pattern}/grandchild/resource4",
 		)
+
+		fnName = "Router.RegisterResourceUnder()"
 	)
 
-	if err := ro.RegisterResourceUnder(
-		"https://example.com/{name:pattern}/grandChild",
-		child1,
-	); err != nil {
-		t.Fatalf("Router.RegisterResourceUnder() err = %v, want nil", err)
-	}
+	testPanicker(
+		t,
+		false,
+		func() {
+			ro.RegisterResourceUnder(
+				"https://example.com/{name:pattern}/grandchild",
+				child1,
+			)
+		},
+	)
 
 	if len(ro.staticHosts) != 1 {
-		t.Fatalf("Router.RegisterResourceUnder() failed to register host")
+		t.Fatalf(fnName + " failed to register host")
 	}
 
-	var hb = ro.staticHosts["example.com"]
-	if len(hb.patternResources) != 1 {
-		t.Fatalf(
-			"Router.RegisterResourceUnder() failed to register prefix[0]",
-		)
+	var h = ro.staticHosts["example.com"]
+	if len(h.patternResources) != 1 {
+		t.Fatalf(fnName + " failed to register prefix[0]")
 	}
 
-	var rb = hb.patternResources[0]
-	if len(rb.staticResources) != 1 {
-		t.Fatalf(
-			"Router.RegisterResourceUnder() failed to register prefix[1]",
-		)
+	var r = h.patternResources[0]
+	if len(r.staticResources) != 1 {
+		t.Fatalf(fnName + " failed to register prefix[1]")
 	}
 
-	rb = rb.staticResources["grandChild"]
-	if len(rb.staticResources) != 1 {
-		t.Fatalf(
-			"Router.RegisterResourceUnder() failed to register resource",
-		)
+	r = r.staticResources["grandchild"]
+	if len(r.staticResources) != 1 {
+		t.Fatalf(fnName + " failed to register resource")
 	}
 
-	rb = rb.staticResources["resource1"]
-	if !rb.configFlags().has(flagSecure) {
-		t.Fatalf(
-			"Router.RegisterResourceUnder() failed to set flagSecure",
-		)
+	r = r.staticResources["resource1"]
+	if !r.configFlags().has(flagSecure) {
+		t.Fatalf(fnName + " failed to set flagSecure")
 	}
 
-	if err := ro.RegisterResourceUnder(
-		"{name:pattern}/grandChild",
-		child2, // child2 has different prefix template
-	); err == nil {
-		t.Fatalf("Router.RegisterResourceUnder() err = nil, want non-nil")
+	testPanicker(
+		t,
+		true,
+		func() {
+			// child2 has different prefix template
+			ro.RegisterResourceUnder("{name:pattern}/grandChild", child2)
+		},
+	)
+
+	testPanicker(
+		t,
+		false,
+		func() {
+			var r = NewDormantResource("/{name:pattern}/{grandChild}/resource2")
+			ro.RegisterResourceUnder("{name:pattern}/{grandChild}", r)
+		},
+	)
+
+	if len(ro.r.patternResources) != 1 {
+		t.Fatalf(fnName + " failed to keep prefix[0]")
 	}
 
-	child2 = NewDormantResource("/{name:pattern}/{grandChild}/resource2")
-	if err := ro.RegisterResourceUnder(
-		"{name:pattern}/{grandChild}",
-		child2,
-	); err != nil {
-		t.Fatalf("Router.RegisterResourceUnder() err = %v, want nil", err)
+	r = ro.r.patternResources[0]
+	if r.wildcardResource == nil {
+		t.Fatalf(fnName + " failed to register prefix[1]")
 	}
 
-	rb = ro.r
-	if len(rb.patternResources) != 1 {
-		t.Fatalf(
-			"Router.RegisterResourceUnder() failed to keep prefix[0]",
-		)
+	r = r.wildcardResource
+	if len(r.staticResources) != 1 {
+		t.Fatalf(fnName + " failed to register resource")
 	}
 
-	rb = rb.patternResources[0]
-	if rb.wildcardResource == nil {
-		t.Fatalf(
-			"Router.RegisterResourceUnder() failed to register prefix[1]",
-		)
+	testPanicker(
+		t,
+		false,
+		func() {
+			ro.RegisterResourceUnder(
+				"http://example.com/{name:pattern}/grandchild",
+				child3,
+			)
+		},
+	)
+
+	r = h.patternResources[0]
+	r = r.staticResources["grandchild"]
+
+	if len(r.staticResources) != 2 {
+		t.Fatalf(fnName + " failed to register resource")
 	}
 
-	rb = rb.wildcardResource
-	if len(rb.staticResources) != 1 {
-		t.Fatalf(
-			"Router.RegisterResourceUnder() failed to register resource",
-		)
+	testPanicker(
+		t,
+		false,
+		func() {
+			ro.RegisterResourceUnder(
+				"http://example.com/{name:pattern}/grandchild",
+				child4,
+			)
+		},
+	)
+
+	r = h.patternResources[0]
+	r = r.staticResources["grandchild"]
+
+	if len(r.staticResources) != 3 {
+		t.Fatalf(fnName + " failed to register resource")
 	}
 
-	if err := ro.RegisterResourceUnder(
-		"http://example.com/{name:pattern}/grandChild",
-		child3,
-	); err != nil {
-		t.Fatalf("Router.RegisterResourceUnder() err = %v, want nil", err)
-	}
+	testPanicker(
+		t,
+		true,
+		func() {
+			var r = NewDormantResource("http://example.com/child/resource0")
+			ro.RegisterResourceUnder("/child", r)
+		},
+	)
 
-	rb = hb.patternResources[0]
-	rb = rb.staticResources["grandChild"]
+	testPanicker(
+		t,
+		true,
+		func() {
+			var r = NewDormantResource("http://example.com/child/resource0")
+			ro.RegisterResourceUnder("http://example.com/", r)
+		},
+	)
 
-	if len(rb.staticResources) != 2 {
-		t.Fatalf(
-			"Router.RegisterResourceUnder() failed to register resource",
-		)
-	}
+	var rr = NewDormantResource(
+		"http://{sub}.example.com/child/resource0",
+	)
 
-	if err := ro.RegisterResourceUnder(
-		"http://example.com/{name:pattern}/grandChild",
-		child4,
-	); err != nil {
-		t.Fatalf("Router.RegisterResourceUnder() err = %v, want nil", err)
-	}
-
-	rb = hb.patternResources[0]
-	rb = rb.staticResources["grandChild"]
-
-	if len(rb.staticResources) != 3 {
-		t.Fatalf(
-			"Router.RegisterResourceUnder() failed to register resource",
-		)
-	}
-
-	var r = NewDormantResource("http://example.com/child/resource0")
-	if err := ro.RegisterResourceUnder("/child", r); err == nil {
-		t.Fatalf("Router.RegisterResourceUnder() err = nil, want non-nil")
-	}
-
-	r = NewDormantResource("http://example.com/child/resource0")
-	if err := ro.RegisterResourceUnder("http://example.com/", r); err == nil {
-		t.Fatalf("Router.RegisterResourceUnder() err = nil, want non-nil")
-	}
-
-	r = NewDormantResource("http://{sub}.example.com/child/resource0")
-	var err = ro.RegisterResourceUnder("http://{sub}.example.com/child/", r)
-	if err != nil {
-		t.Fatalf("Router.RegisterResourceUnder() err = %v, want nil", err)
-	}
+	testPanicker(
+		t,
+		false,
+		func() {
+			ro.RegisterResourceUnder("http://{sub}.example.com/child/", rr)
+		},
+	)
 
 	if len(ro.patternHosts) != 1 {
-		t.Fatalf(
-			"Router.RegisterResourceUnder() failed to register pattern host",
-		)
+		t.Fatalf(fnName + " failed to register pattern host")
 	}
 
-	rb = ro.patternHosts[0].staticResources["child"]
-	if rb.staticResources["resource0"] != r {
-		t.Fatalf(
-			"Router.RegisterResourceUnder() failed to register new resource",
-		)
+	r = ro.patternHosts[0].staticResources["child"]
+	if r.staticResources["resource0"] != rr {
+		t.Fatalf(fnName + " failed to register new resource")
 	}
 
-	err = ro.RegisterResourceUnder("{sub}.example.com/child", nil)
-	if err == nil {
-		t.Fatalf("Router.RegisterResourceUnder() err = nil, want non-nil")
-	}
+	testPanicker(
+		t,
+		true,
+		func() { ro.RegisterResourceUnder("{sub}.example.com/child", nil) },
+	)
 
-	if err := ro.RegisterResourceUnder("", child1); err == nil {
-		t.Fatalf("Router.RegisterResourceUnder() err = nil, want non-nil")
-	}
+	testPanicker(
+		t,
+		true,
+		func() { ro.RegisterResourceUnder("", child1) },
+	)
 
-	r = NewDormantResource("new-child2")
-	if err := ro.RegisterResourceUnder(
-		"http://example.com/{changedName:pattern}",
-		r,
-	); err == nil {
-		t.Fatalf("Router.RegisterResourceUnder() err = nil, want non-nil")
-	}
+	testPanicker(
+		t,
+		true,
+		func() {
+			var r = NewDormantResource("new-child2")
+			ro.RegisterResourceUnder(
+				"http://example.com/{changedName:pattern}",
+				r,
+			)
+		},
+	)
 
-	r = NewDormantResource("new-child3")
-	if err := ro.RegisterResourceUnder(
-		"http://example.com/$changedName:{name:pattern}",
-		r,
-	); err == nil {
-		t.Fatalf("Router.RegisterResourceUnder() err = nil, want non-nil")
-	}
+	testPanicker(
+		t,
+		true,
+		func() {
+			var r = NewDormantResource("new-child3")
+			ro.RegisterResourceUnder(
+				"http://example.com/$changedName:{name:pattern}",
+				r,
+			)
+		},
+	)
 
 	var root = NewDormantResource("/")
-	r, err = root.Resource("new-resource")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = root.SetHandlerFor(
+	rr = root.Resource("new-resource")
+	root.SetHandlerFor(
 		"get",
 		func(http.ResponseWriter, *http.Request, *Args) bool { return true },
 	)
 
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = ro.RegisterResourceUnder("", root)
-	if err != nil {
-		t.Fatalf("Router.RegisterResourceUnder() err = %v, want nil", err)
-	}
+	testPanicker(t, false, func() { ro.RegisterResourceUnder("", root) })
 
 	if ro.r != root {
-		t.Fatalf("router.RegisterResourceUnder() failed to keep old root")
+		t.Fatalf(fnName + " failed to keep old root")
 	}
 
-	rb = ro.r
-	if rb.staticResources["new-resource"] != r {
-		t.Fatalf(
-			"Router.RegisterResourceUnder() failed to register new root's resource",
-		)
+	if ro.r.staticResources["new-resource"] != rr {
+		t.Fatalf(fnName + " failed to register new root's resource")
 	}
 
-	if len(rb.patternResources) != 1 {
-		t.Fatalf(
-			"Router.RegisterResourceUnder() failed to keep old root's resources",
-		)
+	if len(ro.r.patternResources) != 1 {
+		t.Fatalf(fnName + " failed to keep old root's resources")
 	}
 }
 
 func TestRouter_RegisteredResource(t *testing.T) {
-	var ro = NewRouter()
-	var static1, err = ro.Resource("static")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var static2 *Resource
-	static2, err = ro.Resource("$staticR1:staticR1")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var pattern1 *Resource
-	pattern1, err = ro.Resource("{patternR1:pattern}")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var pattern2 *Resource
-	pattern2, err = ro.Resource("$patternR2:{name:pattern}{wildcard}")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var wildcard *Resource
-	wildcard, err = ro.Resource("{wildcard}")
-	if err != nil {
-		t.Fatal(err)
-	}
+	var (
+		ro       = NewRouter()
+		static1  = ro.Resource("static")
+		static2  = ro.Resource("$staticR1:staticR1")
+		pattern1 = ro.Resource("{patternR1:pattern}")
+		pattern2 = ro.Resource("$patternR2:{name:pattern}{wildcard}")
+		wildcard = ro.Resource("{wildcard}")
+	)
 
 	var cases = []struct {
 		name    string
@@ -3126,18 +2716,14 @@ func TestRouter_RegisteredResource(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got, err := ro.RegisteredResource(c.tmplStr)
-			if (err != nil) != c.wantErr {
-				t.Fatalf(
-					"Router.RegisteredResource() error = %v, want %v",
-					err, c.wantErr,
-				)
-			}
+			defer checkPanic(t, c.wantErr)
 
+			got := ro.RegisteredResource(c.tmplStr)
 			if got != c.want {
 				t.Fatalf(
 					"Router.RegisteredResource() = %v, want %v",
-					got, c.want,
+					got,
+					c.want,
 				)
 			}
 		})
@@ -3150,73 +2736,75 @@ func TestRouter_WrapRequestPasser(t *testing.T) {
 		strb strings.Builder
 	)
 
-	ro.requestPasser = Handler(
-		func(http.ResponseWriter, *http.Request, *Args) bool {
-			strb.WriteByte('A')
-			return true
+	ro.requestPasser = func(http.ResponseWriter, *http.Request, *Args) bool {
+		strb.WriteByte('A')
+		return true
+	}
+
+	testPanicker(
+		t,
+		false,
+		func() {
+			ro.WrapRequestPasser(
+				[]Middleware{
+					func(next Handler) Handler {
+						return func(
+							w http.ResponseWriter,
+							r *http.Request,
+							args *Args,
+						) bool {
+							strb.WriteByte('B')
+							return next(w, r, args)
+						}
+					},
+					func(next Handler) Handler {
+						return func(
+							w http.ResponseWriter,
+							r *http.Request,
+							args *Args,
+						) bool {
+							strb.WriteByte('C')
+							return next(w, r, args)
+						}
+					},
+				}...,
+			)
 		},
 	)
-
-	var err = ro.WrapRequestPasser(
-		[]Middleware{
-			func(next Handler) Handler {
-				return func(
-					w http.ResponseWriter,
-					r *http.Request,
-					args *Args,
-				) bool {
-					strb.WriteByte('B')
-					return next(w, r, args)
-				}
-			},
-			func(next Handler) Handler {
-				return func(
-					w http.ResponseWriter,
-					r *http.Request,
-					args *Args,
-				) bool {
-					strb.WriteByte('C')
-					return next(w, r, args)
-				}
-			},
-		}...,
-	)
-
-	if err != nil {
-		t.Fatalf("Router.WrapWith() = %v, want nil", err)
-	}
 
 	ro.requestPasser(nil, nil, nil)
 	if strb.String() != "CBA" {
 		t.Fatalf(
-			"Router.WrapWith() failed to wrap resource's httpHandler",
+			"Router.WrapRequestPasser() has failed",
 		)
 	}
 
-	err = ro.WrapRequestPasser(
-		[]Middleware{
-			func(next Handler) Handler {
-				return func(
-					w http.ResponseWriter,
-					r *http.Request,
-					args *Args,
-				) bool {
-					strb.WriteByte('D')
-					return next(w, r, args)
-				}
-			},
-		}...,
+	testPanicker(
+		t,
+		false,
+		func() {
+			ro.WrapRequestPasser(
+				[]Middleware{
+					func(next Handler) Handler {
+						return func(
+							w http.ResponseWriter,
+							r *http.Request,
+							args *Args,
+						) bool {
+							strb.WriteByte('D')
+							return next(w, r, args)
+						}
+					},
+				}...,
+			)
+		},
 	)
-
-	if err != nil {
-		t.Fatalf("Router.WrapWith() = %v, want nil", err)
-	}
 
 	strb.Reset()
 	ro.requestPasser(nil, nil, nil)
 	if strb.String() != "DCBA" {
 		t.Fatalf(
-			"Router.WrapWith() failed to wrap resource's httpHandler",
+			"Router.WrapRequestPasser() has failed",
 		)
 	}
 }
@@ -3443,10 +3031,7 @@ func TestRouter_WrapAllRequestPassers(t *testing.T) {
 		},
 	}
 
-	err = ro.WrapAllRequestPassers(mws...)
-	if err != nil {
-		t.Fatalf("Router.WrapAllRequestPassers() err = %v, want nil", err)
-	}
+	testPanicker(t, false, func() { ro.WrapAllRequestPassers(mws...) })
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -3556,20 +3141,15 @@ func TestRouter_WrapAllRequestHandlers(t *testing.T) {
 		{"r01 error", "", "http://non-existent.com/r01", true},
 	}
 
-	var err error
 	for _, c := range cases {
 		if !c.wantErr {
-			err = ro.SetURLHandlerFor(
+			ro.SetURLHandlerFor(
 				"get",
 				c.urlTmpl,
 				func(http.ResponseWriter, *http.Request, *Args) bool {
 					return true
 				},
 			)
-
-			if err != nil {
-				t.Fatal(err)
-			}
 		}
 	}
 
@@ -3597,10 +3177,7 @@ func TestRouter_WrapAllRequestHandlers(t *testing.T) {
 		},
 	}
 
-	err = ro.WrapAllRequestHandlers(mws...)
-	if err != nil {
-		t.Fatalf("Router.WrapAllRequestHandlers() err = %v, want nil", err)
-	}
+	testPanicker(t, false, func() { ro.WrapAllRequestHandlers(mws...) })
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -3680,17 +3257,9 @@ func TestRouter_WrapAllHandlersOf(t *testing.T) {
 		},
 	}
 
-	var err error
 	for _, c := range cases {
-		err = ro.SetImplementationAt(c.urlTmpl, rh)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		err = ro.SetURLHandlerFor("!", c.urlTmpl, h)
-		if err != nil {
-			t.Fatal(err)
-		}
+		ro.SetImplementationAt(c.urlTmpl, rh)
+		ro.SetURLHandlerFor("!", c.urlTmpl, h)
 	}
 
 	var strb = strings.Builder{}
@@ -3717,20 +3286,16 @@ func TestRouter_WrapAllHandlersOf(t *testing.T) {
 		},
 	}
 
-	err = ro.WrapAllHandlersOf("get, custom", mws...)
-	if err != nil {
-		t.Fatalf("Router.WrapAllHandlersOf() err = %v, want nil", err)
-	}
+	var fnName = "Router.WrapAllHandlersOf()"
 
-	err = ro.WrapAllHandlersOf("!", mws...)
-	if err != nil {
-		t.Fatalf("Router.WrapAllHandlersOf() err = %v, want nil", err)
-	}
+	testPanicker(
+		t,
+		false,
+		func() { ro.WrapAllHandlersOf("get, custom", mws...) },
+	)
 
-	err = ro.WrapAllHandlersOf("*", mws...)
-	if err != nil {
-		t.Fatalf("Router.WrapAllHandlersOf() err = %v, want nil", err)
-	}
+	testPanicker(t, false, func() { ro.WrapAllHandlersOf("!", mws...) })
+	testPanicker(t, false, func() { ro.WrapAllHandlersOf("*", mws...) })
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -3740,9 +3305,7 @@ func TestRouter_WrapAllHandlersOf(t *testing.T) {
 			strb.Reset()
 			ro.ServeHTTP(rr, r)
 			if strb.String() != "ABAB" {
-				t.Fatalf(
-					"Router.WrapAllHandlersOf() has failed to wrap GET method's handler",
-				)
+				t.Fatalf(fnName + " has failed to wrap GET method's handler")
 			}
 
 			r = httptest.NewRequest("CUSTOM", c.requestURL, nil)
@@ -3750,9 +3313,7 @@ func TestRouter_WrapAllHandlersOf(t *testing.T) {
 			strb.Reset()
 			ro.ServeHTTP(rr, r)
 			if strb.String() != "ABAB" {
-				t.Fatalf(
-					"Router.WrapAllHandlersOf() has failed to wrap CUSTOM method's handler",
-				)
+				t.Fatalf(fnName + " has failed to wrap CUSTOM method's handler")
 			}
 
 			r = httptest.NewRequest("NOTALLOWED", c.requestURL, nil)
@@ -3761,7 +3322,7 @@ func TestRouter_WrapAllHandlersOf(t *testing.T) {
 			ro.ServeHTTP(rr, r)
 			if strb.String() != "AB" {
 				t.Fatalf(
-					"Router.WrapAllHandlersOf() has failed to wrap the not allowed methods' handler",
+					fnName + " has failed to wrap the not allowed methods' handler",
 				)
 			}
 
@@ -3770,51 +3331,30 @@ func TestRouter_WrapAllHandlersOf(t *testing.T) {
 			strb.Reset()
 			ro.ServeHTTP(rr, r)
 			if strb.String() != "AB" {
-				t.Fatalf(
-					"Router.WrapAllHandlersOf() has failed to wrap POST hander.",
-				)
+				t.Fatalf(fnName + " has failed to wrap POST hander.")
 			}
 		})
 	}
 }
 
-func TestRouter__Resources(t *testing.T) {
+func TestRouter__Responders(t *testing.T) {
 	var (
-		ro  = NewRouter()
-		rs  = make([]_Responder, 4)
-		err error
+		ro = NewRouter()
+		rs = make([]_Responder, 4)
 	)
 
-	rs[0], err = ro.Host("example.com")
-	if err != nil {
-		t.Fatal(err)
-	}
+	rs[0] = ro.Host("example.com")
+	rs[1] = ro.Host("{sub:name}.example.com")
+	rs[2] = ro.Host("{wildCardSub}.example.com")
 
-	rs[1], err = ro.Host("{sub:name}.example.com")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	rs[2], err = ro.Host("{wildCardSub}.example.com")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	_, err = ro.Resource("resource1")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	_, err = ro.Resource("resource2")
-	if err != nil {
-		t.Fatal(err)
-	}
+	ro.Resource("resource1")
+	ro.Resource("resource2")
 
 	rs[3] = ro.r
 
 	var gotRs = ro._Responders()
 	if len(gotRs) != 4 {
-		t.Fatalf("Router._Resources(): len(got) = %d, want 4", len(gotRs))
+		t.Fatalf("Router._Responders(): len(got) = %d, want 4", len(gotRs))
 	}
 
 	for _, r := range rs {
@@ -3828,7 +3368,7 @@ func TestRouter__Resources(t *testing.T) {
 
 		if !found {
 			t.Fatalf(
-				"Router._Resources() failed to return resource %q",
+				"Router._Responders() failed to return resource %q",
 				r.Template().String(),
 			)
 		}
@@ -3837,65 +3377,36 @@ func TestRouter__Resources(t *testing.T) {
 
 func TestRouter_ServeHTTP(t *testing.T) {
 	var ro = NewRouter()
-	var staticHost1, err = ro.Host("example1.com")
-	if err != nil {
-		t.Fatal(err)
-	}
-
+	var staticHost1 = ro.Host("example1.com")
 	addRequestHandlerSubresources(t, staticHost1, 0, 2)
 
-	var staticHost2 *Host
-	staticHost2, err = ro.Host("example2.com")
-	if err != nil {
-		t.Fatal(err)
-	}
-
+	var staticHost2 = ro.Host("example2.com")
 	addRequestHandlerSubresources(t, staticHost2, 0, 2)
 
-	var patternHost1 *Host
-	patternHost1, err = ro.HostUsingConfig(
+	var patternHost1 = ro.HostUsingConfig(
 		"{sub:\\d?}.example1.com/",
 		Config{SubtreeHandler: true},
 	)
 
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	patternHost1.SetSharedData(true)
 	addRequestHandlerSubresources(t, patternHost1, 0, 2)
 
-	var patternHost2 *Host
-	patternHost2, err = ro.Host("https://{sub2:\\d?}.example2.com")
-	if err != nil {
-		t.Fatal(err)
-	}
-
+	var patternHost2 = ro.Host("https://{sub2:\\d?}.example2.com")
 	patternHost2.SetSharedData(true)
 	addRequestHandlerSubresources(t, patternHost2, 0, 2)
 
-	var wildcardSub1 *Host
-	wildcardSub1, err = ro.HostUsingConfig(
+	var wildcardSub1 = ro.HostUsingConfig(
 		"{wildCardSub}.example1.com",
 		Config{StrictOnTrailingSlash: true},
 	)
 
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	wildcardSub1.SetSharedData(true)
 	addRequestHandlerSubresources(t, wildcardSub1, 0, 2)
 
-	var wildcardSub2 *Host
-	wildcardSub2, err = ro.HostUsingConfig(
+	var wildcardSub2 = ro.HostUsingConfig(
 		"{wildCardSub2}.example2.com",
 		Config{HandleThePathAsIs: true},
 	)
-
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	wildcardSub2.SetSharedData(true)
 	addRequestHandlerSubresources(t, wildcardSub2, 0, 2)
@@ -4254,10 +3765,7 @@ func TestRouter_ServeHTTP(t *testing.T) {
 		})
 	}
 
-	err = SetPermanentRedirectCode(http.StatusMovedPermanently)
-	if err != nil {
-		t.Fatal(err)
-	}
+	SetPermanentRedirectCode(http.StatusMovedPermanently)
 
 	var w = httptest.NewRecorder()
 	var r = httptest.NewRequest("GET", "http://name.example.com///..//.//", nil)
@@ -4282,11 +3790,7 @@ func TestRouter_ServeHTTP(t *testing.T) {
 		return true
 	}
 
-	err = SetPermanentRedirectHandler(permanentRedirectFunc)
-
-	if err != nil {
-		t.Fatal(err)
-	}
+	SetPermanentRedirectHandler(permanentRedirectFunc)
 
 	w = httptest.NewRecorder()
 	r = httptest.NewRequest("GET", "http://name.example.com///..//.//", nil)
@@ -4295,7 +3799,7 @@ func TestRouter_ServeHTTP(t *testing.T) {
 		t.Fatalf("SetPermanentRedirectHandler() failed")
 	}
 
-	err = WrapPermanentRedirectHandler(
+	WrapPermanentRedirectHandler(
 		func(wrapper RedirectHandler) RedirectHandler {
 			return func(
 				w http.ResponseWriter,
@@ -4311,10 +3815,6 @@ func TestRouter_ServeHTTP(t *testing.T) {
 		},
 	)
 
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	w = httptest.NewRecorder()
 	r = httptest.NewRequest("GET", "http://name.example.com///..//.//", nil)
 	ro.ServeHTTP(w, r)
@@ -4322,17 +3822,13 @@ func TestRouter_ServeHTTP(t *testing.T) {
 		t.Fatalf("WrapPermanentRedirectHandler() failed")
 	}
 
-	err = SetHandlerForNotFoundResource(Handler(
+	SetHandlerForNotFoundResource(Handler(
 		func(http.ResponseWriter, *http.Request, *Args) bool {
 			strb.Reset()
 			strb.WriteString("not found resource handler")
 			return true
 		},
 	))
-
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	w = httptest.NewRecorder()
 	r = httptest.NewRequest("POST", "http://example9.com", nil)
@@ -4341,7 +3837,7 @@ func TestRouter_ServeHTTP(t *testing.T) {
 		t.Fatalf("SetHandlerForNotFoundResource() failed")
 	}
 
-	err = WrapHandlerOfNotFoundResource(
+	WrapHandlerOfNotFoundResource(
 		func(next Handler) Handler {
 			return func(
 				w http.ResponseWriter,
@@ -4354,10 +3850,6 @@ func TestRouter_ServeHTTP(t *testing.T) {
 			}
 		},
 	)
-
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	w = httptest.NewRecorder()
 	r = httptest.NewRequest("CUSTOM", "http://example9.com", nil)
@@ -4428,7 +3920,6 @@ func getStaticRouter() (*Router, *http.Request, error) {
 	var (
 		ro   = NewRouter()
 		impl = &implType{}
-		err  error
 		strb strings.Builder
 	)
 
@@ -4468,10 +3959,7 @@ func getStaticRouter() (*Router, *http.Request, error) {
 		// 	},
 		// )
 
-		err = ro.SetImplementationAt(urls[i], impl)
-		if err != nil {
-			return nil, nil, newErr("%w at url %q", err, urls[i])
-		}
+		ro.SetImplementationAt(urls[i], impl)
 	}
 
 	var r = httptest.NewRequest("GET", urls[1111], nil)
@@ -4484,7 +3972,6 @@ func getPatternRouter() (*Router, *http.Request, error) {
 	var (
 		ro   = NewRouter()
 		impl = &implType{}
-		err  error
 		strb strings.Builder
 	)
 
@@ -4537,10 +4024,7 @@ func getPatternRouter() (*Router, *http.Request, error) {
 		// 	},
 		// )
 
-		err = ro.SetImplementationAt(urls[i], impl)
-		if err != nil {
-			return nil, nil, newErr("%w at url %q", err, urls[i])
-		}
+		ro.SetImplementationAt(urls[i], impl)
 	}
 
 	var url = "https://host-a1.example-a1.com/resource-b3/resource-c4/resource-d2/resource-e1"
@@ -4555,7 +4039,6 @@ func getWildcardRouter() (*Router, *http.Request, error) {
 	var (
 		ro   = NewRouter()
 		impl = &implType{}
-		err  error
 		url  = "https://{hostA}.exampleA.com/{resourceB}/{resourceC}/{resourceD}/{resourceE}"
 	)
 
@@ -4567,10 +4050,7 @@ func getWildcardRouter() (*Router, *http.Request, error) {
 	// 	},
 	// )
 
-	err = ro.SetImplementationAt(url, impl)
-	if err != nil {
-		return nil, nil, newErr("%w at url %q", err, url)
-	}
+	ro.SetImplementationAt(url, impl)
 
 	url = "https://hostA.exampleA.com/resourceB/resourceC/resourceD/resourceE"
 
@@ -4580,6 +4060,7 @@ func getWildcardRouter() (*Router, *http.Request, error) {
 	return ro, r, nil
 }
 
+//  3125 static, 3125 pattern, 1 wildcard URLs.
 func getRouter() (ro *Router, err error) {
 	ro = NewRouter()
 
@@ -4648,11 +4129,7 @@ func getRouter() (ro *Router, err error) {
 		// 	},
 		// )
 
-		err = ro.SetImplementationAt(urls[i], impl)
-		if err != nil {
-			err = newErr("%w at url %q", err, urls[i])
-			return
-		}
+		ro.SetImplementationAt(urls[i], impl)
 	}
 
 	// --------------------------------------------------
@@ -4667,12 +4144,8 @@ func getRouter() (ro *Router, err error) {
 	// 	},
 	// )
 
-	err = ro.SetImplementationAt(url, impl)
-	if err != nil {
-		err = newErr("%w at url %q", err, url)
-		return
-	}
-
+	ro.SetImplementationAt(url, impl)
+	// fmt.Println(lurls + 1)
 	return
 }
 

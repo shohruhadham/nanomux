@@ -12,132 +12,132 @@ import (
 // --------------------------------------------------
 
 var (
-	// ErrNilArgument is returned when one of the function arguments is nil.
-	ErrNilArgument = fmt.Errorf("nil argument")
+	// errNilArgument is returned when one of the function arguments is nil.
+	errNilArgument = fmt.Errorf("nil argument")
 
-	// ErrConflictingHost is returned when there is a conflict between the
+	// errConflictingHost is returned when there is a conflict between the
 	// resource's host and its parent resource's host or a host in a URL
 	// template. Conflict can be the presence or absence of the host or a
 	// difference in a host template.
-	ErrConflictingHost = fmt.Errorf("conflicting host")
+	errConflictingHost = fmt.Errorf("conflicting host")
 
-	// ErrConflictingPath is returned when there is a difference between a
+	// errConflictingPath is returned when there is a difference between a
 	// resource's prefix path and a prefix path in a URL template.
-	ErrConflictingPath = fmt.Errorf("conflicting path")
+	errConflictingPath = fmt.Errorf("conflicting path")
 
-	// ErrConflictingPathSegment is returned when there is a difference between
+	// errConflictingPathSegment is returned when there is a difference between
 	// one of the resource's prefix path segments and its corresponding path
 	// segment in a URL template.
-	ErrConflictingPathSegment = fmt.Errorf("conflicting path segment")
+	errConflictingPathSegment = fmt.Errorf("conflicting path segment")
 
-	// ErrConflictingSecurity is returned when the argument URL template has a
+	// errConflictingSecurity is returned when the argument URL template has a
 	// different scheme from the resource's scheme, or the resource is insecure
 	// (https is not required by the resource to respond), and the argument
 	// config has the RedirectInsecureRequest property set.
-	ErrConflictingSecurity = fmt.Errorf("conflicting security")
+	errConflictingSecurity = fmt.Errorf("conflicting security")
 
-	// ErrConflictingTrailingSlash is returned when the argument URL template
+	// errConflictingTrailingSlash is returned when the argument URL template
 	// has a different trailing slash property than the one the resource was
 	// configured with.
-	ErrConflictingTrailingSlash = fmt.Errorf("conflicting trailing slash")
+	errConflictingTrailingSlash = fmt.Errorf("conflicting trailing slash")
 
 	// ErrConfictingConfig is returned when the argument config is different
 	// from the resource's configuration.
-	ErrConflictingConfig = fmt.Errorf("conflicting config")
+	errConflictingConfig = fmt.Errorf("conflicting config")
 
-	// ErrEmptyHostTemplate is returned when a host is required but its
+	// errEmptyHostTemplate is returned when a host is required but its
 	// template is empty or the URL template doesn't contain a host template.
-	ErrEmptyHostTemplate = fmt.Errorf("empty host template")
+	errEmptyHostTemplate = fmt.Errorf("empty host template")
 
-	// ErrEmptyPathTemplate is returned when a path template is required but
+	// errEmptyPathTemplate is returned when a path template is required but
 	// it's empty or a URL template doesn't contain a path template.
-	ErrEmptyPathTemplate = fmt.Errorf("empty path template")
+	errEmptyPathTemplate = fmt.Errorf("empty path template")
 
-	// ErrEmptyPathSegmentTemplate is returned when one of the path segment
+	// errEmptyPathSegmentTemplate is returned when one of the path segment
 	// templates is empty in a path template.
-	ErrEmptyPathSegmentTemplate = fmt.Errorf("empty path segment template")
+	errEmptyPathSegmentTemplate = fmt.Errorf("empty path segment template")
 
-	// ErrWildcardHostTemplate is returned when a host template is a wildcard.
-	ErrWildcardHostTemplate = fmt.Errorf("wildcard host template")
+	// errWildcardHostTemplate is returned when a host template is a wildcard.
+	errWildcardHostTemplate = fmt.Errorf("wildcard host template")
 
-	// ErrUnwantedPathTemplate is returned when a host template also contains a
+	// errUnwantedPathTemplate is returned when a host template also contains a
 	// path template.
-	ErrUnwantedPathTemplate = fmt.Errorf("unwanted path template")
+	errUnwantedPathTemplate = fmt.Errorf("unwanted path template")
 
-	// ErrNonRouterParent is returned on an attempt to register a host or a root
+	// errNonRouterParent is returned on an attempt to register a host or a root
 	// resource under another host or resource.
-	ErrNonRouterParent = fmt.Errorf("non-router parent")
+	errNonRouterParent = fmt.Errorf("non-router parent")
 
-	// ErrDuplicateHostTemplate is returned when registering a new host if there
+	// errDuplicateHostTemplate is returned when registering a new host if there
 	// is another host with the same template and both of them can handle a
 	// request.
-	ErrDuplicateHostTemplate = fmt.Errorf("duplicate host template")
+	errDuplicateHostTemplate = fmt.Errorf("duplicate host template")
 
-	// ErrDuplicateResourceTemplate is returned when registering a new resource
+	// errDuplicateResourceTemplate is returned when registering a new resource
 	// if there is another resource with the same template and both of them can
 	// handle a request.
-	ErrDuplicateResourceTemplate = fmt.Errorf("duplicate resource template")
+	errDuplicateResourceTemplate = fmt.Errorf("duplicate resource template")
 
-	// ErrDuplicateNameInTheURL is returned when a new resource's name is not
+	// errDuplicateNameInTheURL is returned when a new resource's name is not
 	// unique in its URL.
-	ErrDuplicateNameInTheURL = fmt.Errorf("duplicate name in the URL")
+	errDuplicateNameInTheURL = fmt.Errorf("duplicate name in the URL")
 
-	// ErrDuplicateValueNameInTheURL is returned when one of the value names
+	// errDuplicateValueNameInTheURL is returned when one of the value names
 	// in the resource's template is a duplicate of a value name in the host's
 	// or another resource's template.
-	ErrDuplicateValueNameInTheURL = fmt.Errorf(
+	errDuplicateValueNameInTheURL = fmt.Errorf(
 		"duplicate value name in the URL",
 	)
 
-	// ErrDuplicateNameAmongSiblings is returned when a new resource's name
+	// errDuplicateNameAmongSiblings is returned when a new resource's name
 	// is not unique among the resources registered under the same host or
 	// resource.
-	ErrDuplicateNameAmongSiblings = fmt.Errorf("duplicate name among siblings")
+	errDuplicateNameAmongSiblings = fmt.Errorf("duplicate name among siblings")
 
-	// ErrDormantHost is returned when a host doesn't have a handler for any
+	// errDormantHost is returned when a host doesn't have a handler for any
 	// HTTP method and an attempt to set a handler for the not allowed HTTP
 	// methods or to wrap one of the HTTP method handlers occurs.
-	ErrDormantHost = fmt.Errorf("dormant host")
+	errDormantHost = fmt.Errorf("dormant host")
 
-	// ErrDormantResource is returned when a resource doesn't have a handler
+	// errDormantResource is returned when a resource doesn't have a handler
 	// for any HTTP method and an attempt to set a handler for the not allowed
 	// HTTP methods or to wrap one of the HTTP method handlers occurs.
-	ErrDormantResource = fmt.Errorf("dormant resource")
+	errDormantResource = fmt.Errorf("dormant resource")
 
-	// ErrRegisteredHost is returned on an attempt to register an already
+	// errRegisteredHost is returned on an attempt to register an already
 	// registered host. A host is considered registered even if it is registered
 	// under a different router.
-	ErrRegisteredHost = fmt.Errorf("registered host")
+	errRegisteredHost = fmt.Errorf("registered host")
 
-	// ErrRegisteredResource is returned on an attempt to register an already
+	// errRegisteredResource is returned on an attempt to register an already
 	// registered resource. A resource is considered registered even if it was
 	// registered under a different router, host, or resource.
-	ErrRegisteredResource = fmt.Errorf("registered resource")
+	errRegisteredResource = fmt.Errorf("registered resource")
 
-	// ErrNonExistentHost is returned on an attempt to change the state of a
+	// errNonExistentHost is returned on an attempt to change the state of a
 	// non-existent host.
-	ErrNonExistentHost = fmt.Errorf("non-existent host")
+	errNonExistentHost = fmt.Errorf("non-existent host")
 
-	// ErrNonExistentResource is returned on an attempt to change the state of a
+	// errNonExistentResource is returned on an attempt to change the state of a
 	// non-existent resource.
-	ErrNonExistentResource = fmt.Errorf("non-existent resource")
+	errNonExistentResource = fmt.Errorf("non-existent resource")
 
-	// ErrNoHTTPMethod is returned when the HTTP methods argument string is
+	// errNoHTTPMethod is returned when the HTTP methods argument string is
 	// empty.
-	ErrNoHTTPMethod = fmt.Errorf("no HTTP method has been given")
+	errNoHTTPMethod = fmt.Errorf("no HTTP method has been given")
 
-	// ErrNoHandlerExists is returned on an attempt to wrap a non-existent
+	// errNoHandlerExists is returned on an attempt to wrap a non-existent
 	// handler of the HTTP method.
-	ErrNoHandlerExists = fmt.Errorf("no handler exists")
+	errNoHandlerExists = fmt.Errorf("no handler exists")
 
-	// ErrConflictingStatusCode is returned on an attempt to set a different
+	// errConflictingStatusCode is returned on an attempt to set a different
 	// value for a status code other than the expected value. This is the case
 	// of customizable redirection status codes, where one of the
 	// StatusMovedPermanently and StatusPermanentRedirect can be chosen.
-	ErrConflictingStatusCode = fmt.Errorf("conflicting status code")
+	errConflictingStatusCode = fmt.Errorf("conflicting status code")
 
-	// ErrNoMiddleware is returned when the middleware argument has a nil value.
-	ErrNoMiddleware = fmt.Errorf("no middleware has been provided")
+	// errNoMiddleware is returned when the middleware argument has a nil value.
+	errNoMiddleware = fmt.Errorf("no middleware has been provided")
 )
 
 // --------------------------------------------------
@@ -174,9 +174,8 @@ var (
 )
 
 // --------------------------------------------------
-
-func newErr(description string, args ...interface{}) error {
-	if pc, _, _, ok := runtime.Caller(1); ok {
+func createErr(skipCount int, description string, args ...interface{}) error {
+	if pc, _, _, ok := runtime.Caller(skipCount); ok {
 		if fn := runtime.FuncForPC(pc); fn != nil {
 			var strb strings.Builder
 			strb.WriteString("-> [")
@@ -197,4 +196,12 @@ func newErr(description string, args ...interface{}) error {
 	}
 
 	return fmt.Errorf(description, args...)
+}
+
+func newErr(description string, args ...interface{}) error {
+	return createErr(2, description, args...)
+}
+
+func panicWithErr(description string, args ...interface{}) {
+	panic(createErr(2, description, args...))
 }

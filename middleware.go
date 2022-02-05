@@ -47,7 +47,7 @@ func wrapEveryHandlerOf(
 ) error {
 	var ms = toUpperSplitByCommaSpace(methods)
 	if len(ms) == 0 {
-		return newErr("%w", ErrNoHTTPMethod)
+		return newErr("%w", errNoHTTPMethod)
 	}
 
 	var err = traverseAndCall(
@@ -62,7 +62,7 @@ func wrapEveryHandlerOf(
 						// ErrNoHandlerExists is returned only when there
 						// is no handler for a specific HTTP method, which
 						// can be ignored.
-						if errors.Is(err, ErrNoHandlerExists) {
+						if errors.Is(err, errNoHandlerExists) {
 							continue
 						}
 

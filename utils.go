@@ -243,7 +243,7 @@ func getHost(urlTmplStr string) (
 	err error,
 ) {
 	if urlTmplStr == "" {
-		err = ErrEmptyHostTemplate
+		err = errEmptyHostTemplate
 		return
 	}
 
@@ -269,7 +269,7 @@ func getHost(urlTmplStr string) (
 		// Host template has a resource template.
 		secure = false
 		hostTmplStr = ""
-		err = ErrUnwantedPathTemplate
+		err = errUnwantedPathTemplate
 	}
 
 	return
@@ -291,7 +291,7 @@ func splitPathSegments(path string) (
 	}
 
 	if psi.remainingPath() != "" {
-		err = ErrEmptyPathSegmentTemplate
+		err = errEmptyPathSegmentTemplate
 		return
 	}
 
@@ -299,7 +299,10 @@ func splitPathSegments(path string) (
 }
 
 // responderURL returns the responder's URL with the URL values applied.
-func responderURL(_r _Responder, hpVs HostPathValues) (*url.URL, error) {
+func responderURL(
+	_r _Responder,
+	hpVs HostPathValues,
+) (*url.URL, error) {
 	var (
 		host string
 		pss  []string
@@ -320,7 +323,7 @@ loop:
 				continue
 			}
 
-			var ps, err = tmpl.Apply(hpVs, false)
+			var ps, err = tmpl.TryToApply(hpVs, false)
 			if err != nil {
 				return nil, newErr("%w", err)
 			}
@@ -332,7 +335,7 @@ loop:
 				host = tmpl.Content()
 			} else {
 				var err error
-				host, err = tmpl.Apply(hpVs, false)
+				host, err = tmpl.TryToApply(hpVs, false)
 				if err != nil {
 					return nil, newErr("%w", err)
 				}

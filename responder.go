@@ -78,11 +78,11 @@ type _Responder interface {
 	registerResourceUnder(prefixPath string, r *Resource) error
 	keepResourceOrItsChildResources(r *Resource) error
 
-	Resource(pathTmplStr string) (*Resource, error)
-	ResourceUsingConfig(pathTmplStr string, config Config) (*Resource, error)
-	RegisterResource(r *Resource) error
-	RegisterResourceUnder(prefixPath string, r *Resource) error
-	RegisteredResource(pathTmplStr string) (*Resource, error)
+	Resource(pathTmplStr string) *Resource
+	ResourceUsingConfig(pathTmplStr string, config Config) *Resource
+	RegisterResource(r *Resource)
+	RegisterResourceUnder(prefixPath string, r *Resource)
+	RegisteredResource(pathTmplStr string) *Resource
 
 	ChildResourceNamed(name string) *Resource
 	ChildResources() []*Resource
@@ -92,42 +92,42 @@ type _Responder interface {
 
 	// -------------------------
 
-	SetImplementation(impl Impl) error
+	SetImplementation(impl Impl)
 	Implementation() Impl
 
-	SetHandlerFor(methods string, handler Handler) error
+	SetHandlerFor(methods string, handler Handler)
 	HandlerOf(method string) Handler
 
-	WrapRequestPasser(mws ...Middleware) error
-	WrapRequestHandler(mws ...Middleware) error
-	WrapHandlerOf(methods string, mws ...Middleware) error
+	WrapRequestPasser(mws ...Middleware)
+	WrapRequestHandler(mws ...Middleware)
+	WrapHandlerOf(methods string, mws ...Middleware)
 
 	// -------------------------
 
-	SetSharedDataAt(pathTmplStr string, data interface{}) error
-	SharedDataAt(pathTmplStr string) (interface{}, error)
+	SetSharedDataAt(pathTmplStr string, data interface{})
+	SharedDataAt(pathTmplStr string) interface{}
 
-	SetConfigurationAt(pathTmplStr string, config Config) error
-	ConfigurationAt(pathTmplStr string) (Config, error)
+	SetConfigurationAt(pathTmplStr string, config Config)
+	ConfigurationAt(pathTmplStr string) Config
 
-	SetImplementationAt(pathTmplStr string, impl Impl) error
-	ImplementationAt(pathTmplStr string) (Impl, error)
+	SetImplementationAt(pathTmplStr string, impl Impl)
+	ImplementationAt(pathTmplStr string) Impl
 
-	SetPathHandlerFor(methods, pathTmplStr string, handler Handler) error
-	PathHandlerOf(method, pathTmplStr string) (Handler, error)
+	SetPathHandlerFor(methods, pathTmplStr string, handler Handler)
+	PathHandlerOf(method, pathTmplStr string) Handler
 
-	WrapRequestPasserAt(pathTmplStr string, mws ...Middleware) error
-	WrapRequestHandlerAt(pathTmplStr string, mws ...Middleware) error
-	WrapPathHandlerOf(methods, pathTmplStr string, mws ...Middleware) error
+	WrapRequestPasserAt(pathTmplStr string, mws ...Middleware)
+	WrapRequestHandlerAt(pathTmplStr string, mws ...Middleware)
+	WrapPathHandlerOf(methods, pathTmplStr string, mws ...Middleware)
 
 	// -------------------------
 
 	SetSharedDataForSubtree(data interface{})
 	SetConfigurationForSubtree(config Config)
 
-	WrapSubtreeRequestPassers(mws ...Middleware) error
-	WrapSubtreeRequestHandlers(mws ...Middleware) error
-	WrapSubtreeHandlersOf(methods string, mws ...Middleware) error
+	WrapSubtreeRequestPassers(mws ...Middleware)
+	WrapSubtreeRequestHandlers(mws ...Middleware)
+	WrapSubtreeHandlersOf(methods string, mws ...Middleware)
 
 	// -------------------------
 
@@ -205,14 +205,14 @@ func (rb *_ResponderBase) setParent(p _Parent) error {
 	if _, ok := rb.derived.(*Host); ok {
 		// Only a router can be set as a parent for a host.
 		if _, ok := p.(*Router); !ok {
-			return newErr("%w", ErrNonRouterParent)
+			return newErr("%w", errNonRouterParent)
 		}
 	}
 
 	if rb.Template().UnescapedContent() == "/" {
 		// Only a router can be set as a parent for a root.
 		if _, ok := p.(*Router); !ok {
-			return newErr("%w", ErrNonRouterParent)
+			return newErr("%w", errNonRouterParent)
 		}
 	}
 
@@ -312,16 +312,16 @@ func (rb *_ResponderBase) configCompatibility(
 	var rbcfs = rb.configFlags()
 	if rbcfs.has(flagActive) {
 		if rbcfs.has(flagSecure) != secure {
-			return newErr("%w", ErrConflictingSecurity)
+			return newErr("%w", errConflictingSecurity)
 		}
 
 		if !rbcfs.has(flagLeniencyOnTrailingSlash) && rbcfs.has(flagTrailingSlash) != tslash {
-			return newErr("%w", ErrConflictingTrailingSlash)
+			return newErr("%w", errConflictingTrailingSlash)
 		}
 
 		if cfs != nil {
 			if !rbcfs.has(*cfs) {
-				return newErr("%w", ErrConflictingConfig)
+				return newErr("%w", errConflictingConfig)
 			}
 		}
 	} else {
@@ -430,11 +430,11 @@ func (rb *_ResponderBase) checkNamesAreUniqueInTheURL(tmpl *Template) error {
 	for p := _Parent(rb); p != nil; p = p.parent() {
 		if r, ok := p.(_Responder); ok {
 			if tmpl.name != "" && r.Name() == tmpl.name {
-				return ErrDuplicateNameInTheURL
+				return errDuplicateNameInTheURL
 			}
 
 			if r.Template().HasValueName(tmplValueNames...) {
-				return ErrDuplicateValueNameInTheURL
+				return errDuplicateValueNameInTheURL
 			}
 		} else {
 			break
@@ -473,7 +473,7 @@ func (rb *_ResponderBase) checkNamesOfTheChildrenAreUniqueInTheURL(
 // is unique in the responder's URL.
 func (rb *_ResponderBase) validate(tmpl *Template) error {
 	if tmpl == nil {
-		return newErr("%w", ErrNilArgument)
+		return newErr("%w", errNilArgument)
 	}
 
 	if err := rb.checkNamesAreUniqueInTheURL(tmpl); err != nil {
@@ -498,7 +498,7 @@ func (rb *_ResponderBase) validateHostTmpl(hostTmplStr string) error {
 		}
 
 		if h == nil {
-			return newErr("%w", ErrConflictingHost)
+			return newErr("%w", errConflictingHost)
 		}
 
 		var tmpl, err = TryToParse(hostTmplStr)
@@ -507,7 +507,7 @@ func (rb *_ResponderBase) validateHostTmpl(hostTmplStr string) error {
 		}
 
 		if tmpl.IsWildcard() {
-			return newErr("%w", ErrWildcardHostTemplate)
+			return newErr("%w", errWildcardHostTemplate)
 		}
 
 		if err = h.Template().SimilarityWith(tmpl).Err(); err != nil {
@@ -547,7 +547,7 @@ func (rb *_ResponderBase) validateURL(hostTmplStr string, pathTmplStr string) (
 	for i := 0; i < lresources; i++ {
 		var ps = psi.nextSegment()
 		if ps == "" {
-			return "", newErr("%w", ErrConflictingPath)
+			return "", newErr("%w", errConflictingPath)
 		}
 
 		var tmpl, err = TryToParse(ps)
@@ -558,7 +558,7 @@ func (rb *_ResponderBase) validateURL(hostTmplStr string, pathTmplStr string) (
 		var rtmpl = resources[i].Template()
 		var similarity = rtmpl.SimilarityWith(tmpl)
 		if similarity != TheSame {
-			return "", newErr("%w %q", ErrConflictingPathSegment, ps)
+			return "", newErr("%w %q", errConflictingPathSegment, ps)
 		}
 	}
 
@@ -649,7 +649,7 @@ func (rb *_ResponderBase) registeredResource(
 		name, tmplStr, err = templateNameAndContent(ps)
 		if tmplStr == "" {
 			if name == "" {
-				return nil, false, ErrEmptyPathSegmentTemplate
+				return nil, false, errEmptyPathSegmentTemplate
 			}
 
 			r = rb.ChildResourceNamed(name)
@@ -673,7 +673,7 @@ func (rb *_ResponderBase) registeredResource(
 	}
 
 	if psi.remainingPath() != "" {
-		return nil, false, newErr("%w", ErrEmptyPathSegmentTemplate)
+		return nil, false, newErr("%w", errEmptyPathSegmentTemplate)
 	}
 
 	return r, psi.pathHasTrailingSlash(), nil
@@ -849,7 +849,7 @@ func (rb *_ResponderBase) pathSegmentResources(pathTmplStr string) (
 			return
 		}
 
-		err = newErr("%w", ErrNonRouterParent)
+		err = newErr("%w", errNonRouterParent)
 		return
 	}
 
@@ -880,7 +880,7 @@ func (rb *_ResponderBase) registerResourceUnder(
 		}
 
 		if r := oldLast.ChildResourceNamed(newFirst.Name()); r != nil {
-			return newErr("%w", ErrDuplicateNameAmongSiblings)
+			return newErr("%w", errDuplicateNameAmongSiblings)
 		}
 
 		if err = newLast.registerResource(r); err != nil {
@@ -963,7 +963,7 @@ func (rb *_ResponderBase) keepResourceOrItsChildResources(r *Resource) error {
 
 	return newErr(
 		"%w %s",
-		ErrDuplicateResourceTemplate,
+		errDuplicateResourceTemplate,
 		rwt.Template().String(),
 	)
 }
@@ -975,13 +975,13 @@ func (rb *_ResponderBase) keepResourceOrItsChildResources(r *Resource) error {
 //
 // If the resource exists, its scheme and trailing slash properties are
 // compared to the values given in the path template. If there is a difference,
-// the method returns an error. If the method creates a new resource, its
-// scheme and trailing slash properties are configured using the values given
-// within the path template.
+// the method panics. If the method creates a new resource, its scheme and
+// trailing slash properties are configured using the values given within the
+// path template.
 //
 // The names given to the path segment resources must be unique in the path and
 // among their respective siblings.
-func (rb *_ResponderBase) Resource(pathTmplStr string) (*Resource, error) {
+func (rb *_ResponderBase) Resource(pathTmplStr string) *Resource {
 	var (
 		hTmplStr       string
 		secure, tslash bool
@@ -990,15 +990,15 @@ func (rb *_ResponderBase) Resource(pathTmplStr string) (*Resource, error) {
 
 	hTmplStr, pathTmplStr, secure, tslash, err = splitHostAndPath(pathTmplStr)
 	if err != nil {
-		return nil, newErr("%w", err)
+		panicWithErr("%w", err)
 	}
 
 	if hTmplStr != "" || pathTmplStr == "/" {
-		return nil, newErr("%w", ErrNonRouterParent)
+		panicWithErr("%w", errNonRouterParent)
 	}
 
 	if pathTmplStr == "" {
-		return nil, newErr("%w", ErrEmptyPathTemplate)
+		panicWithErr("%w", errEmptyPathTemplate)
 	}
 
 	if pathTmplStr[0] != '/' {
@@ -1009,32 +1009,32 @@ func (rb *_ResponderBase) Resource(pathTmplStr string) (*Resource, error) {
 	var newFirst, newLast *Resource
 	oldLast, newFirst, newLast, _, err = rb.pathSegmentResources(pathTmplStr)
 	if err != nil {
-		return nil, newErr("%w", err)
+		panicWithErr("%w", err)
 	}
 
 	if newFirst != nil {
 		err = newLast.configCompatibility(secure, tslash, nil)
 		if err != nil {
-			return nil, newErr("%w", err)
+			panicWithErr("%w", err)
 		}
 
 		if oldLast.ChildResourceNamed(newFirst.Name()) != nil {
-			return nil, newErr("%w", ErrDuplicateNameAmongSiblings)
+			panicWithErr("%w", errDuplicateNameAmongSiblings)
 		}
 
 		if err = oldLast.registerResource(newFirst); err != nil {
-			return nil, newErr("%w", err)
+			panicWithErr("%w", err)
 		}
 
-		return newLast, nil
+		return newLast
 	}
 
 	err = oldLast.configCompatibility(secure, tslash, nil)
 	if err != nil {
-		return nil, newErr("%w", err)
+		panicWithErr("%w", err)
 	}
 
-	return oldLast.(*Resource), nil
+	return oldLast.(*Resource)
 }
 
 // ResourceUsingConfig uses the path template and config to find an existing
@@ -1044,16 +1044,16 @@ func (rb *_ResponderBase) Resource(pathTmplStr string) (*Resource, error) {
 //
 // If the resource exists, its configuration is compared to the argument config.
 // Also, its scheme and trailing slash properties are compared to the values
-// given in the path template. If there is a difference, the method returns
-// an error. If the method creates a new resource, it's configured using the
-// config and the values given in the path template.
+// given in the path template. If there is a difference, the method panics.
+// If the method creates a new resource, it's configured using theconfig and
+// the values given in the path template.
 //
 // The names of the path segment resources must be unique within the path and
 // among their respective siblings.
 func (rb *_ResponderBase) ResourceUsingConfig(
 	pathTmplStr string,
 	config Config,
-) (*Resource, error) {
+) *Resource {
 	var (
 		hTmplStr       string
 		secure, tslash bool
@@ -1062,19 +1062,19 @@ func (rb *_ResponderBase) ResourceUsingConfig(
 
 	hTmplStr, pathTmplStr, secure, tslash, err = splitHostAndPath(pathTmplStr)
 	if err != nil {
-		return nil, newErr("%w", err)
+		panicWithErr("%w", err)
 	}
 
 	if hTmplStr != "" || pathTmplStr == "/" {
-		return nil, newErr("%w", ErrNonRouterParent)
+		panicWithErr("%w", errNonRouterParent)
 	}
 
 	if pathTmplStr == "" {
-		return nil, newErr("%w", ErrEmptyPathTemplate)
+		panicWithErr("%w", errEmptyPathTemplate)
 	}
 
 	if config.RedirectInsecureRequest && !secure {
-		return nil, newErr("%w", ErrConflictingSecurity)
+		panicWithErr("%w", errConflictingSecurity)
 	}
 
 	if pathTmplStr[0] != '/' {
@@ -1085,33 +1085,33 @@ func (rb *_ResponderBase) ResourceUsingConfig(
 	var newFirst, newLast *Resource
 	oldLast, newFirst, newLast, _, err = rb.pathSegmentResources(pathTmplStr)
 	if err != nil {
-		return nil, newErr("%w", err)
+		panicWithErr("%w", err)
 	}
 
 	var cfs = config.asFlags()
 	if newFirst != nil {
 		err = newLast.configCompatibility(secure, tslash, &cfs)
 		if err != nil {
-			return nil, newErr("%w", err)
+			panicWithErr("%w", err)
 		}
 
 		if r := oldLast.ChildResourceNamed(newFirst.Name()); r != nil {
-			return nil, newErr("%w", ErrDuplicateNameAmongSiblings)
+			panicWithErr("%w", errDuplicateNameAmongSiblings)
 		}
 
 		if err = oldLast.registerResource(newFirst); err != nil {
-			return nil, newErr("%w", err)
+			panicWithErr("%w", err)
 		}
 
-		return newLast, nil
+		return newLast
 	}
 
 	err = oldLast.configCompatibility(secure, tslash, &cfs)
 	if err != nil {
-		return nil, newErr("%w", err)
+		panicWithErr("%w", err)
 	}
 
-	return oldLast.(*Resource), nil
+	return oldLast.(*Resource)
 }
 
 // RegisterResource registers the argument resource below in the hierarchy of
@@ -1128,50 +1128,47 @@ func (rb *_ResponderBase) ResourceUsingConfig(
 // If the argument resource's template collides with the template of one of
 // its siblings, RegisterResource checks which one has the HTTP method handlers
 // set and passes the other one's child resources to it. If both can handle a
-// request, the method returns an error. Child resources are also checked
-// recursively.
-func (rb *_ResponderBase) RegisterResource(r *Resource) error {
+// request, the method panics. Child resources are also checked recursively.
+func (rb *_ResponderBase) RegisterResource(r *Resource) {
 	if r == nil {
-		return newErr("%w", ErrNilArgument)
+		panicWithErr("%w", errNilArgument)
 	}
 
 	if r.isRoot() {
-		return newErr("%w", ErrNonRouterParent)
+		panicWithErr("%w", errNonRouterParent)
 	}
 
 	if r.parent() != nil {
-		return newErr("%w", ErrRegisteredResource)
+		panicWithErr("%w", errRegisteredResource)
 	}
 
 	if err := rb.validate(r.Template()); err != nil {
-		return newErr("%w", err)
+		panicWithErr("%w", err)
 	}
 
 	if err := rb.checkNamesOfTheChildrenAreUniqueInTheURL(r); err != nil {
-		return newErr("%w", err)
+		panicWithErr("%w", err)
 	}
 
 	if urlt := r.urlTmpl(); urlt != nil {
 		var rppss, err = rb.validateURL(urlt.Host, urlt.PrefixPath)
 		if err != nil {
-			return newErr("%w", err)
+			panicWithErr("%w", err)
 		}
 
 		if len(rppss) > 0 {
 			err = rb.registerResourceUnder(rppss, r)
 			if err != nil {
-				return newErr("%w", err)
+				panicWithErr("%w", err)
 			}
 
-			return nil
+			return
 		}
 	}
 
 	if err := rb.keepResourceOrItsChildResources(r); err != nil {
-		return newErr("%w", err)
+		panicWithErr("%w", err)
 	}
-
-	return nil
 }
 
 // RegisterResourceUnder registers the argument resource below the responder
@@ -1188,38 +1185,38 @@ func (rb *_ResponderBase) RegisterResource(r *Resource) error {
 // template collides with the last prefix resource's child resource,
 // RegisterResourceUnder checks which one has the HTTP method handlers set and
 // passes the other one's child resources to it. If both can handle a request,
-// the method returns an error.
+// the method panics.
 //
 // The trailing slash in the prefix path is ignored.
 func (rb *_ResponderBase) RegisterResourceUnder(
 	prefixPath string,
 	r *Resource,
-) error {
+) {
 	if r == nil {
-		return newErr("%w", ErrNilArgument)
+		panicWithErr("%w", errNilArgument)
 	}
 
 	if r.isRoot() {
-		return newErr("%w", ErrNonRouterParent)
+		panicWithErr("%w", errNonRouterParent)
 	}
 
 	if r.parent() != nil {
-		return newErr("%w", ErrRegisteredResource)
+		panicWithErr("%w", errRegisteredResource)
 	}
 
 	if err := rb.validate(r.Template()); err != nil {
-		return newErr("%w", err)
+		panicWithErr("%w", err)
 	}
 
 	if err := rb.checkNamesOfTheChildrenAreUniqueInTheURL(r); err != nil {
-		return newErr("%w", err)
+		panicWithErr("%w", err)
 	}
 
 	if prefixPath == "/" {
 		if _, ok := rb.derived.(*Host); ok {
 			prefixPath = ""
 		} else {
-			return newErr("%w", ErrNonRouterParent)
+			panicWithErr("%w", errNonRouterParent)
 		}
 	}
 
@@ -1238,7 +1235,7 @@ func (rb *_ResponderBase) RegisterResourceUnder(
 			}
 
 			if lpp > lurltPp {
-				return newErr("%w", ErrConflictingPath)
+				panicWithErr("%w", errConflictingPath)
 			}
 
 			var pp = urlt.PrefixPath
@@ -1248,15 +1245,15 @@ func (rb *_ResponderBase) RegisterResourceUnder(
 
 			var rppss, err = rb.validateURL(urlt.Host, pp)
 			if err != nil {
-				return newErr("%w", err)
+				panicWithErr("%w", err)
 			}
 
 			if len(rppss) > 0 {
-				return newErr("%w", ErrConflictingPath)
+				panicWithErr("%w", errConflictingPath)
 			}
 		} else {
 			if err := rb.validateHostTmpl(urlt.Host); err != nil {
-				return newErr("%w", err)
+				panicWithErr("%w", err)
 			}
 		}
 	}
@@ -1264,17 +1261,15 @@ func (rb *_ResponderBase) RegisterResourceUnder(
 	if prefixPath != "" {
 		var err = rb.registerResourceUnder(prefixPath, r)
 		if err != nil {
-			return newErr("%w", err)
+			panicWithErr("%w", err)
 		}
 
-		return nil
+		return
 	}
 
 	if err := rb.keepResourceOrItsChildResources(r); err != nil {
-		return newErr("%w", err)
+		panicWithErr("%w", err)
 	}
-
-	return nil
 }
 
 // RegisteredResource returns the resource in the hierarchy below the responder
@@ -1286,11 +1281,8 @@ func (rb *_ResponderBase) RegisterResourceUnder(
 //		https:///$childResourceName/$grandChildResourceName
 //
 // The scheme and trailing slash properties must be compatible with the
-// resource's otherwise the method returns an error.
-func (rb *_ResponderBase) RegisteredResource(pathTmplStr string) (
-	*Resource,
-	error,
-) {
+// resource's otherwise the method panics.
+func (rb *_ResponderBase) RegisteredResource(pathTmplStr string) *Resource {
 	var (
 		hTmplStr       string
 		secure, tslash bool
@@ -1299,37 +1291,37 @@ func (rb *_ResponderBase) RegisteredResource(pathTmplStr string) (
 
 	hTmplStr, pathTmplStr, secure, tslash, err = splitHostAndPath(pathTmplStr)
 	if err != nil {
-		return nil, newErr("%w", err)
+		panicWithErr("%w", err)
 	}
 
 	if hTmplStr != "" {
-		return nil, newErr("%w", ErrNonRouterParent)
+		panicWithErr("%w", errNonRouterParent)
 	}
 
 	if pathTmplStr == "" {
-		return nil, newErr("%w", ErrEmptyPathTemplate)
+		panicWithErr("%w", errEmptyPathTemplate)
 	}
 
 	if pathTmplStr == "/" {
-		return nil, newErr("%w", ErrNonRouterParent)
+		panicWithErr("%w", errNonRouterParent)
 	}
 
 	var r *Resource
 	r, _, err = rb.registeredResource(pathTmplStr)
 	if err != nil {
-		return nil, newErr("%w", err)
+		panicWithErr("%w", err)
 	}
 
 	if r != nil {
 		err = r.configCompatibility(secure, tslash, nil)
 		if err != nil {
-			return nil, err
+			panicWithErr("%w", err)
 		}
 
-		return r, nil
+		return r
 	}
 
-	return nil, nil
+	return nil
 }
 
 // ChildResourceNamed returns the named resource if it exists, otherwise
@@ -1418,14 +1410,14 @@ func (rb *_ResponderBase) HasAnyChildResources() bool {
 // SetImplementation sets the HTTP method handlers from the passed impl.
 // The impl is also kept for future retrieval. All existing handlers
 // are discarded.
-func (rb *_ResponderBase) SetImplementation(impl Impl) error {
+func (rb *_ResponderBase) SetImplementation(impl Impl) {
 	if impl == nil {
-		return newErr("%w", ErrNilArgument)
+		panicWithErr("%w", errNilArgument)
 	}
 
 	var rhb, err = detectHTTPMethodHandlersOf(impl)
 	if err != nil {
-		return newErr("%w", err)
+		panicWithErr("%w", err)
 	}
 
 	rb.impl = impl
@@ -1433,8 +1425,6 @@ func (rb *_ResponderBase) SetImplementation(impl Impl) error {
 	if rhb != nil {
 		rb.setRequestHandlerBase(rhb)
 	}
-
-	return nil
 }
 
 // Implementation returns the implementation of the responder. If the responder
@@ -1453,35 +1443,29 @@ func (rb *_ResponderBase) Implementation() Impl {
 // methods and must be used alone. Which means that setting the not allowed
 // HTTP methods' handler must happen in a separate call. Examples of methods:
 // "GET", "PUT, POST", "SHARE, LOCK" or "!".
-func (rb *_ResponderBase) SetHandlerFor(
-	methods string,
-	handler Handler,
-) error {
-
+func (rb *_ResponderBase) SetHandlerFor(methods string, handler Handler) {
 	if rb._RequestHandlerBase == nil {
 		var rhb = &_RequestHandlerBase{}
 		var err = rhb.setHandlerFor(methods, handler)
 		if err != nil {
-			if errors.Is(err, ErrNoHandlerExists) {
+			if errors.Is(err, errNoHandlerExists) {
 				if _, ok := rb.derived.(*Host); ok {
-					return newErr("%w %s", ErrDormantHost, err)
+					panicWithErr("%w %s", errDormantHost, err)
 				}
 
-				return newErr("%w %s", ErrDormantResource, err)
+				panicWithErr("%w %s", errDormantResource, err)
 			}
 
-			return newErr("%w", err)
+			panicWithErr("%w", err)
 		}
 
 		rb.setRequestHandlerBase(rhb)
 	} else {
 		var err = rb.setHandlerFor(methods, handler)
 		if err != nil {
-			return newErr("%w", err)
+			panicWithErr("%w", err)
 		}
 	}
-
-	return nil
 }
 
 // HandlerOf returns the HTTP method's handler of the responder. If the
@@ -1506,20 +1490,18 @@ func (rb *_ResponderBase) HandlerOf(method string) Handler {
 // The request passer is responsible for finding the next resource that matches
 // the next path segment and passing the request to it. If there is no matching
 // resource, the handler for a not-found resource is called.
-func (rb *_ResponderBase) WrapRequestPasser(mws ...Middleware) error {
+func (rb *_ResponderBase) WrapRequestPasser(mws ...Middleware) {
 	if len(mws) == 0 {
-		return newErr("%w", ErrNoMiddleware)
+		panicWithErr("%w", errNoMiddleware)
 	}
 
 	for i, mw := range mws {
 		if mw == nil {
-			return newErr("%w at index %d", ErrNilArgument, i)
+			panicWithErr("%w at index %d", errNilArgument, i)
 		}
 
 		rb.requestPasser = mw(rb.requestPasser)
 	}
-
-	return nil
 }
 
 // WrapRequestHandler wraps the responder's request handler with the middlewares
@@ -1528,33 +1510,31 @@ func (rb *_ResponderBase) WrapRequestPasser(mws ...Middleware) error {
 // The request handler calls the HTTP method handler of the responder depending
 // on the request's method. Unlike the request passer, the request handler is
 // called only when the responder is going to handle the request.
-func (rb *_ResponderBase) WrapRequestHandler(mws ...Middleware) error {
+func (rb *_ResponderBase) WrapRequestHandler(mws ...Middleware) {
 	if len(mws) == 0 {
-		return newErr("%w", ErrNoMiddleware)
+		panicWithErr("%w", errNoMiddleware)
 	}
 
 	if !rb.canHandleRequest() {
 		if _, ok := rb.derived.(*Host); ok {
-			return newErr("%w", ErrDormantHost)
+			panicWithErr("%w", errDormantHost)
 		}
 
-		return newErr("%w", ErrDormantResource)
+		panicWithErr("%w", errDormantResource)
 	}
 
 	for i, mw := range mws {
 		if mw == nil {
-			return newErr("%w at index %d", ErrNilArgument, i)
+			panicWithErr("%w at index %d", errNilArgument, i)
 		}
 
 		rb.requestHandler = mw(rb.requestHandler)
 	}
-
-	return nil
 }
 
 // WrapHandlerOf wraps the handler of the HTTP methods with the middlewares in
 // their passed order. If the handler doesn't exist for any given HTTP method,
-// the method returns an error.
+// the method panics.
 //
 // The argument methods is a list of HTTP methods separated by a comma and/or
 // space. An exclamation mark "!" denotes the handler of the not allowed HTTP
@@ -1566,21 +1546,19 @@ func (rb *_ResponderBase) WrapRequestHandler(mws ...Middleware) error {
 func (rb *_ResponderBase) WrapHandlerOf(
 	methods string,
 	mws ...Middleware,
-) error {
+) {
 	if rb._RequestHandlerBase == nil {
 		if _, ok := rb.derived.(*Host); ok {
-			return newErr("%w", ErrDormantHost)
+			panicWithErr("%w", errDormantHost)
 		}
 
-		return newErr("%w", ErrDormantResource)
+		panicWithErr("%w", errDormantResource)
 	}
 
 	var err = rb.wrapHandlerOf(methods, mws...)
 	if err != nil {
-		return newErr("%w", err)
+		panicWithErr("%w", err)
 	}
-
-	return nil
 }
 
 // -------------------------
@@ -1588,85 +1566,64 @@ func (rb *_ResponderBase) WrapHandlerOf(
 // SetSharedDataAt sets the shared data for the existing resource at the path.
 //
 // The scheme and trailing slash property values in the path template must be
-// compatible with the resource's properties, otherwise the method returns an
-// error.
+// compatible with the resource's properties, otherwise the method panics.
 func (rb *_ResponderBase) SetSharedDataAt(
 	pathTmplStr string,
 	data interface{},
-) error {
-	var r, err = rb.RegisteredResource(pathTmplStr)
-	if err != nil {
-		return newErr("%w", err)
-	}
-
+) {
+	var r = rb.RegisteredResource(pathTmplStr)
 	if r == nil {
-		return newErr("%w", ErrNonExistentResource)
+		panicWithErr("%w", errNonExistentResource)
 	}
 
 	r.SetSharedData(data)
-	return nil
 }
 
 // SharedDataAt returns the shared data of the existing resource at the path.
 //
 // The scheme and trailing slash property values in the path template must be
-// compatible with the resource's properties, otherwise the method returns an
-// error.
+// compatible with the resource's properties, otherwise the method panics.
 func (rb *_ResponderBase) SharedDataAt(
 	pathTmplStr string,
-) (interface{}, error) {
-	var r, err = rb.RegisteredResource(pathTmplStr)
-	if err != nil {
-		return Config{}, newErr("%w", err)
-	}
-
+) interface{} {
+	var r = rb.RegisteredResource(pathTmplStr)
 	if r == nil {
-		return Config{}, newErr("%w", ErrNonExistentResource)
+		panicWithErr("%w", errNonExistentResource)
 	}
 
-	return r.SharedData(), nil
+	return r.SharedData()
 }
 
 // SetConfigurationAt sets the config for the existing resource at the path.
 // If the resource was configured before, it will be reconfigured.
 //
 // The scheme and trailing slash property values in the path template must be
-// compatible with the resource's properties, otherwise the method returns an
-// error.
+// compatible with the resource's properties, otherwise the method panics.
 func (rb *_ResponderBase) SetConfigurationAt(
 	pathTmplStr string,
 	config Config,
-) error {
-	var r, err = rb.RegisteredResource(pathTmplStr)
-	if err != nil {
-		return newErr("%w", err)
-	}
-
+) {
+	var r = rb.RegisteredResource(pathTmplStr)
 	if r == nil {
-		return newErr("%w", ErrNonExistentResource)
+		panicWithErr("%w", errNonExistentResource)
 	}
 
 	r.SetConfiguration(config)
-	return nil
 }
 
 // ConfigurationAt returns the configuration of the existing resource at the
 // path.
 //
 // The scheme and trailing slash property values in the path template must be
-// compatible with the resource's properties, otherwise the method returns an
-// error.
-func (rb *_ResponderBase) ConfigurationAt(pathTmplStr string) (Config, error) {
-	var r, err = rb.RegisteredResource(pathTmplStr)
-	if err != nil {
-		return Config{}, newErr("%w", err)
-	}
+// compatible with the resource's properties, otherwise the method panics.
+func (rb *_ResponderBase) ConfigurationAt(pathTmplStr string) Config {
+	var r = rb.RegisteredResource(pathTmplStr)
 
 	if r == nil {
-		return Config{}, newErr("%w", ErrNonExistentResource)
+		panicWithErr("%w", errNonExistentResource)
 	}
 
-	return r.Configuration(), nil
+	return r.Configuration()
 }
 
 // SetImplementationAt sets the HTTP method handlers for a resource at the path
@@ -1676,23 +1633,14 @@ func (rb *_ResponderBase) ConfigurationAt(pathTmplStr string) (Config, error) {
 //
 // The scheme and trailing slash property values in the path template must be
 // compatible with the existing resource's properties, otherwise the method
-// returns an error. A newly created resource is configured with the values in
-// the path template.
+// panics. A newly created resource is configured with the values in the path
+// template.
 func (rb *_ResponderBase) SetImplementationAt(
 	pathTmplStr string,
 	rh Impl,
-) error {
-	var r, err = rb.Resource(pathTmplStr)
-	if err != nil {
-		return newErr("%w", err)
-	}
-
-	err = r.SetImplementation(rh)
-	if err != nil {
-		return newErr("%w", err)
-	}
-
-	return nil
+) {
+	var r = rb.Resource(pathTmplStr)
+	r.SetImplementation(rh)
 }
 
 // ImplementationAt returns the implementation of the resource at the path.
@@ -1700,19 +1648,14 @@ func (rb *_ResponderBase) SetImplementationAt(
 // no Impl set, nil is returned.
 //
 // The scheme and trailing slash property values in the path template must be
-// compatible with the resource's properties, otherwise the method returns an
-// error.
-func (rb *_ResponderBase) ImplementationAt(pathTmplStr string) (Impl, error) {
-	var r, err = rb.RegisteredResource(pathTmplStr)
-	if err != nil {
-		return nil, newErr("%w", err)
-	}
-
+// compatible with the resource's properties, otherwise the method panics.
+func (rb *_ResponderBase) ImplementationAt(pathTmplStr string) Impl {
+	var r = rb.RegisteredResource(pathTmplStr)
 	if r == nil {
-		return nil, newErr("%w", ErrNonExistentResource)
+		panicWithErr("%w", errNonExistentResource)
 	}
 
-	return r.Implementation(), nil
+	return r.Implementation()
 }
 
 // SetPathHandlerFor sets the HTTP methods' handler function for a resource
@@ -1726,23 +1669,14 @@ func (rb *_ResponderBase) ImplementationAt(pathTmplStr string) (Impl, error) {
 //
 // The scheme and trailing slash property values in the path template must be
 // compatible with the existing resource's properties, otherwise the method
-// returns an error. A newly created resource is configured with the values in
-// the path template.
+// panics. A newly created resource is configured with the values in the path
+// template.
 func (rb *_ResponderBase) SetPathHandlerFor(
 	methods, pathTmplStr string,
 	handler Handler,
-) error {
-	var r, err = rb.Resource(pathTmplStr)
-	if err != nil {
-		return newErr("%w", err)
-	}
-
-	err = r.SetHandlerFor(methods, handler)
-	if err != nil {
-		return newErr("%w", err)
-	}
-
-	return nil
+) {
+	var r = rb.Resource(pathTmplStr)
+	r.SetHandlerFor(methods, handler)
 }
 
 // PathHandlerOf returns the HTTP method's handler of the resource at the path.
@@ -1753,86 +1687,58 @@ func (rb *_ResponderBase) SetPathHandlerFor(
 // "POST" or "!".
 //
 // The scheme and trailing slash property values in the path template must be
-// compatible with the resource's properties, otherwise the method returns an
-// error.
-func (rb *_ResponderBase) PathHandlerOf(method, pathTmplStr string) (
-	Handler,
-	error,
-) {
-	var r, err = rb.RegisteredResource(pathTmplStr)
-	if err != nil {
-		return nil, newErr("%w", err)
-	}
-
+// compatible with the resource's properties, otherwise the method panics.
+func (rb *_ResponderBase) PathHandlerOf(method, pathTmplStr string) Handler {
+	var r = rb.RegisteredResource(pathTmplStr)
 	if r == nil {
-		return nil, newErr("%w", ErrNonExistentResource)
+		panicWithErr("%w", errNonExistentResource)
 	}
 
-	return r.HandlerOf(method), nil
+	return r.HandlerOf(method)
 }
 
 // WrapRequestPasserAt wraps the request passer of the resource at the path.
 // The request passer is wrapped in the middlewares' passed order. If the
-// resource doesn't exist, an error is returned.
+// resource doesn't exist, the method panics.
 //
 // The request passer is responsible for finding the next resource that matches
 // the next path segment and passing the request to it. If there is no matching
 // resource, the handler for a not-found resource is called.
 //
 // The scheme and trailing slash property values in the path template must be
-// compatible with the resource's properties, otherwise the method returns an
-// error.
+// compatible with the resource's properties, otherwise the method panics.
 func (rb *_ResponderBase) WrapRequestPasserAt(
 	pathTmplStr string,
 	mws ...Middleware,
-) error {
-	var r, err = rb.RegisteredResource(pathTmplStr)
-	if err != nil {
-		return newErr("%w", err)
-	}
-
+) {
+	var r = rb.RegisteredResource(pathTmplStr)
 	if r == nil {
-		return newErr("%w", ErrNonExistentResource)
+		panicWithErr("%w", errNonExistentResource)
 	}
 
-	err = r.WrapRequestPasser(mws...)
-	if err != nil {
-		return newErr("%w", err)
-	}
-
-	return nil
+	r.WrapRequestPasser(mws...)
 }
 
 // WrapRequestHandlerAt wraps the request handler of the resource at the path.
 // The handler is wrapped in the middlewares' passed order. If the resource
-// doesn't exist, an error is returned.
+// doesn't exist, the method panics.
 //
 // The request handler calls the HTTP method handler of the responder depending
 // on the request's method. Unlike the request passer, the request handler is
 // called only when the responder is going to handle the request.
 //
 // The scheme and trailing slash property values in the URL template must be
-// compatible with the resource's properties, otherwise the method returns an
-// error.
+// compatible with the resource's properties, otherwise the method panics.
 func (rb *_ResponderBase) WrapRequestHandlerAt(
 	pathTmplStr string,
 	mws ...Middleware,
-) error {
-	var r, err = rb.RegisteredResource(pathTmplStr)
-	if err != nil {
-		return newErr("%w", err)
-	}
-
+) {
+	var r = rb.RegisteredResource(pathTmplStr)
 	if r == nil {
-		return newErr("%w", ErrNonExistentResource)
+		panicWithErr("%w", errNonExistentResource)
 	}
 
-	err = r.WrapRequestHandler(mws...)
-	if err != nil {
-		return newErr("%w", err)
-	}
-
-	return nil
+	r.WrapRequestHandler(mws...)
 }
 
 // WrapPathHandlerOf wraps the handlers of the HTTP methods of the resource
@@ -1847,30 +1753,20 @@ func (rb *_ResponderBase) WrapRequestHandlerAt(
 // or "!".
 //
 // If the resource or the handler of any HTTP method doesn't exist, the method
-// returns an error.
+// panics.
 //
 // The scheme and trailing slash property values in the path template must be
-// compatible with the resource's properties, otherwise the method returns an
-// error.
+// compatible with the resource's properties, otherwise the method panics.
 func (rb *_ResponderBase) WrapPathHandlerOf(
 	methods, pathTmplStr string,
 	mws ...Middleware,
-) error {
-	var r, err = rb.RegisteredResource(pathTmplStr)
-	if err != nil {
-		return newErr("%w", err)
-	}
-
+) {
+	var r = rb.RegisteredResource(pathTmplStr)
 	if r == nil {
-		return newErr("%w", err)
+		panicWithErr("%w", errNonExistentResource)
 	}
 
-	err = r.WrapHandlerOf(methods, mws...)
-	if err != nil {
-		return newErr("%w", err)
-	}
-
-	return nil
+	r.WrapHandlerOf(methods, mws...)
 }
 
 // -------------------------
@@ -1908,19 +1804,14 @@ func (rb *_ResponderBase) SetConfigurationForSubtree(config Config) {
 // resource, the handler for a not-found resource is called.
 func (rb *_ResponderBase) WrapSubtreeRequestPassers(
 	mws ...Middleware,
-) error {
-	var err = traverseAndCall(
+) {
+	traverseAndCall(
 		rb._Responders(),
 		func(_r _Responder) error {
-			return _r.WrapRequestPasser(mws...)
+			_r.WrapRequestPasser(mws...)
+			return nil
 		},
 	)
-
-	if err != nil {
-		return newErr("%w", err)
-	}
-
-	return nil
 }
 
 // WrapSubtreeRequestHandlers wraps the request handlers of the resources in
@@ -1932,26 +1823,29 @@ func (rb *_ResponderBase) WrapSubtreeRequestPassers(
 // called only when the responder is going to handle the request.
 func (rb *_ResponderBase) WrapSubtreeRequestHandlers(
 	mws ...Middleware,
-) error {
-	var err = traverseAndCall(
+) {
+	traverseAndCall(
 		rb._Responders(),
 		func(_r _Responder) error {
-			var err = _r.WrapRequestHandler(mws...)
-			// Subtree below hosts cannot return the ErrDormantHost.
-			// It's enough to check the ErrDormantResource.
-			if errors.Is(err, ErrDormantResource) {
-				return nil
-			}
+			defer func() {
+				var v = recover()
+				if v == nil {
+					return
+				}
 
-			return err
+				var err, validErr = v.(error)
+
+				// Subtree below hosts cannot return the ErrDormantHost.
+				// It's enough to check the ErrDormantResource.
+				if !validErr || !errors.Is(err, errDormantResource) {
+					panic(v)
+				}
+			}()
+
+			_r.WrapRequestHandler(mws...)
+			return nil
 		},
 	)
-
-	if err != nil {
-		return newErr("%w", err)
-	}
-
-	return nil
 }
 
 // WrapSubtreeHandlersOf wraps the HTTP method handlers of the resources in
@@ -1967,13 +1861,11 @@ func (rb *_ResponderBase) WrapSubtreeRequestHandlers(
 func (rb *_ResponderBase) WrapSubtreeHandlersOf(
 	methods string,
 	mws ...Middleware,
-) error {
+) {
 	var err = wrapEveryHandlerOf(methods, rb._Responders(), mws...)
 	if err != nil {
-		return newErr("%w", err)
+		panicWithErr("%w", err)
 	}
-
-	return nil
 }
 
 // -------------------------
