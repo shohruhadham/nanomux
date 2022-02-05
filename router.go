@@ -1545,7 +1545,10 @@ func (ro *Router) _Responders() []_Responder {
 // ServeHTTP is the Router's implementation of the http.Handler interface.
 func (ro *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var args = getArgs(r.URL, nil)
-	ro.requestPasser(w, r, args)
+	if !ro.requestPasser(w, r, args) {
+		notFoundResourceHandler(w, r, args)
+	}
+
 	putArgsInThePool(args)
 }
 

@@ -334,7 +334,10 @@ func (rb *Resource) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var args = getArgs(r.URL, rb.derived)
 	args.nextPathSegment() // First call returns '/'.
 	if rb.tmpl == rootTmpl {
-		rb.handleOrPassRequest(w, r, args)
+		if !rb.handleOrPassRequest(w, r, args) {
+			notFoundResourceHandler(w, r, args)
+		}
+
 		putArgsInThePool(args)
 		return
 	}
@@ -355,7 +358,10 @@ func (rb *Resource) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		var matched bool
 		matched, args.hostPathValues = rb.tmpl.Match(ps, args.hostPathValues)
 		if matched {
-			rb.handleOrPassRequest(w, r, args)
+			if !rb.handleOrPassRequest(w, r, args) {
+				notFoundResourceHandler(w, r, args)
+			}
+
 			putArgsInThePool(args)
 			return
 		}
