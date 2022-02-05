@@ -335,7 +335,7 @@ func (t *Template) HasPattern() bool {
 // templates.
 func (t *Template) SimilarityWith(anotherT *Template) Similarity {
 	if anotherT == nil {
-		panic(ErrNilArgument)
+		panicWithErr("%w", errNilArgument)
 	}
 
 	if t.IsStatic() {
@@ -513,13 +513,13 @@ func (t *Template) Match(
 	return true, values
 }
 
-// Apply puts the values in the place of the wildcard segment and regular
-// expression segments if they match. When ignoreMissing is true, Apply
-// ignores the missing values for the segments instead of returning an error.
-func (t *Template) Apply(values TemplateValues, ignoreMissing bool) (
-	string,
-	error,
-) {
+// TryToApply puts the values in the place of the wildcard segment and
+// regular expression segments if they match, otherwise returns an error.
+// When ignoreMissing is true, the method ignores the missing values.
+func (t *Template) TryToApply(
+	values TemplateValues,
+	ignoreMissing bool,
+) (string, error) {
 	var lslices = len(t.slices)
 	var strb = strings.Builder{}
 
@@ -555,6 +555,18 @@ func (t *Template) Apply(values TemplateValues, ignoreMissing bool) (
 	}
 
 	return strb.String(), nil
+}
+
+// Apply puts the values in the place of the wildcard segment and regular
+// expression segments if they match, otherwise panics. When ignoreMissing
+// is true, Apply ignores the missing values.
+func (t *Template) Apply(values TemplateValues, ignoreMissing bool) string {
+	var str, err = t.TryToApply(values, ignoreMissing)
+	if err != nil {
+		panicWithErr("%w", err)
+	}
+
+	return str
 }
 
 // String returns the template's string. The pattern is omitted from

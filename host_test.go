@@ -13,7 +13,7 @@ import (
 // --------------------------------------------------
 
 func setHandlers(t *testing.T, h *Host) {
-	if err := h.SetHandlerFor(
+	h.SetHandlerFor(
 		"get post custom",
 		func(w http.ResponseWriter, r *http.Request, args *Args) bool {
 			var hasValue, ok = args.ResponderSharedData().(bool)
@@ -56,9 +56,7 @@ func setHandlers(t *testing.T, h *Host) {
 			w.Write([]byte(strb.String()))
 			return true
 		},
-	); err != nil {
-		t.Fatal(err)
-	}
+	)
 }
 
 func requestHandlerHosts(t *testing.T) []*Host {
@@ -810,41 +808,17 @@ func TestHostBase_ServeHTTP(t *testing.T) {
 
 	var ro = NewRouter()
 	for i := 0; i < 2; i++ {
-		var err = ro.RegisterHost(hs[i])
-		if err != nil {
-			t.Fatal(err)
-		}
+		ro.RegisterHost(hs[i])
 	}
 
-	var err = ro.WrapAllHandlersOf("custom", customMethodMw)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ro.WrapAllHandlersOf("custom", customMethodMw)
+	ro.WrapAllHandlersOf("!", notAlloweddMethodsMw)
 
-	err = ro.WrapAllHandlersOf("!", notAlloweddMethodsMw)
-	if err != nil {
-		t.Fatal(err)
-	}
+	hs[2].WrapHandlerOf("custom", customMethodMw)
+	hs[2].WrapHandlerOf("!", notAlloweddMethodsMw)
 
-	err = hs[2].WrapHandlerOf("custom", customMethodMw)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = hs[2].WrapHandlerOf("!", notAlloweddMethodsMw)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = hs[3].WrapHandlerOf("custom", customMethodMw)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = hs[3].WrapHandlerOf("!", notAlloweddMethodsMw)
-	if err != nil {
-		t.Fatal(err)
-	}
+	hs[3].WrapHandlerOf("custom", customMethodMw)
+	hs[3].WrapHandlerOf("!", notAlloweddMethodsMw)
 
 	cases = []_RequestRoutingCase{
 		{

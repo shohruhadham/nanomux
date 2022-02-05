@@ -1537,16 +1537,12 @@ func TestResourceBase_registerResourceUnder(t *testing.T) {
 	}
 
 	var static = NewDormantResource("static")
-	err = static.SetHandlerFor(
+	static.SetHandlerFor(
 		"get",
 		func(http.ResponseWriter, *http.Request, *Args) bool {
 			return true
 		},
 	)
-
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	err = parent.registerResourceUnder("", static)
 	if err != nil {
@@ -1766,23 +1762,10 @@ func TestResourceBase_keepResourceOrItsSubresources(t *testing.T) {
 }
 
 func TestResourceBase_Resource(t *testing.T) {
-	var r = NewDormantResource("r")
-	var static1, err = r.Resource("static1")
-	if err != nil {
-		t.Fatalf("Resource.Resource() err = %v, want nil", err)
-	}
-
-	var pattern *Resource
-	pattern, err = r.Resource("static2/{name:pattern}/")
-	if err != nil {
-		t.Fatalf("Resource.Resource() err = %v, want nil", err)
-	}
-
-	var wildcard *Resource
-	wildcard, err = r.Resource("https:///{name:pattern2}/{wildcard}")
-	if err != nil {
-		t.Fatal(err)
-	}
+	var root = NewDormantResource("/")
+	var static1 = root.Resource("static1")
+	var pattern = root.Resource("static2/{name:pattern}/")
+	var wildcard = root.Resource("https:///{name:pattern2}/{wildcard}")
 
 	var cases = []struct {
 		name         string
@@ -1805,12 +1788,7 @@ func TestResourceBase_Resource(t *testing.T) {
 		{"pattern #2", "https:///static2/{name:pattern}/", nil, true},
 		{"pattern #3", "static2/{name:pattern}", nil, true},
 
-		{
-			"wildcard #1",
-			"https:///{name:pattern2}/{wildcard}",
-			wildcard,
-			false,
-		},
+		{"wildcard #1", "https:///{name:pattern2}/{wildcard}", wildcard, false},
 		{"wildcard #2", "{name:pattern2}/{wildcard}", nil, true},
 		{"wildcard #3", "https:///{name:pattern2}/{wildcard}/", nil, true},
 
@@ -1840,7 +1818,6 @@ func TestResourceBase_Resource(t *testing.T) {
 		},
 
 		{"new wildcard", "{name:pattern2}/{newWildcard}", nil, true},
-
 		{
 			"pattern with no name",
 			"static2/{name1:pattern1}{name2:pattern2}",
@@ -1851,46 +1828,32 @@ func TestResourceBase_Resource(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			var r, err = r.Resource(c.tmplStr)
-			if (err != nil) != c.wantErr {
-				t.Fatalf(
-					"Resource.Resource() err = %v, wantErr = %t",
-					err,
-					c.wantErr,
-				)
-			}
+			defer checkPanic(t, c.wantErr)
 
+			var r = root.Resource(c.tmplStr)
 			if c.wantResource != nil && r != c.wantResource {
-				t.Fatalf("Resource.Resource() couldn't gejt resource")
+				t.Fatalf("ResourceBase.Resource() couldn't get resource")
 			}
 		})
 	}
 }
 
 func TestResourceBase_ResourceUsingConfig(t *testing.T) {
-	var r = NewDormantResource("r")
-	var static, err = r.ResourceUsingConfig("static", Config{SubtreeHandler: true})
-	if err != nil {
-		t.Fatalf("Resource.ResourceUsingConfig() err = %v, want nil", err)
-	}
+	var root = NewDormantResource("/")
+	var static = root.ResourceUsingConfig(
+		"static",
+		Config{SubtreeHandler: true},
+	)
 
-	var pattern *Resource
-	pattern, err = r.ResourceUsingConfig("{name:pattern}/", Config{
-		HandleThePathAsIs: true,
-	})
+	var pattern = root.ResourceUsingConfig(
+		"{name:pattern}/",
+		Config{HandleThePathAsIs: true},
+	)
 
-	if err != nil {
-		t.Fatalf("Resource.ResourceUsingConfig() err = %v, want nil", err)
-	}
-
-	var wildcard *Resource
-	wildcard, err = r.ResourceUsingConfig("https:///{wildcard}", Config{
-		RedirectInsecureRequest: true,
-	})
-
-	if err != nil {
-		t.Fatalf("Resource.ResourceUsingConfig() err = %v, want nil", err)
-	}
+	var wildcard = root.ResourceUsingConfig(
+		"https:///{wildcard}",
+		Config{RedirectInsecureRequest: true},
+	)
 
 	var cases = []struct {
 		name    string
@@ -2028,7 +1991,13 @@ func TestResourceBase_ResourceUsingConfig(t *testing.T) {
 			true,
 		},
 
-		{"only host", "http://example.com", Config{SubtreeHandler: true}, nil, true},
+		{
+			"only host",
+			"http://example.com",
+			Config{SubtreeHandler: true},
+			nil,
+			true,
+		},
 
 		{
 			"new pattern #1",
@@ -2095,17 +2064,12 @@ func TestResourceBase_ResourceUsingConfig(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			var r, err = r.ResourceUsingConfig(c.tmplStr, c.config)
-			if (err != nil) != c.wantErr {
-				t.Fatalf(
-					"Resource.ResourceUsingConfig() err = %v, want nil",
-					err,
-				)
-			}
+			defer checkPanic(t, c.wantErr)
 
+			var r = root.ResourceUsingConfig(c.tmplStr, c.config)
 			if c.wantR != nil && r != c.wantR {
 				t.Fatalf(
-					"Resource.ResourceUsingConfig() couldn't get resource",
+					"ResourceBase.ResourceUsingConfig() couldn't get resource",
 				)
 			}
 		})
@@ -2117,83 +2081,62 @@ func TestResourceBase_RegisterResource(t *testing.T) {
 		parent      = NewDormantResource("parent")
 		child1      = NewDormantResource("{name:pattern}")
 		child2      = NewDormantResource("{name:pattern}")
-		grandChild1 = NewDormantResource("grandChild1")
-		grandChild2 = NewDormantResource("grandChild2")
-		grandChild3 = NewDormantResource("/parent/{name:pattern}/grandChild3")
-		grandChild4 = NewDormantResource("parent/{name:pattern}/{grandChild4}")
+		grandchild1 = NewDormantResource("grandchild1")
+		grandchild2 = NewDormantResource("grandchild2")
+		grandchild3 = NewDormantResource("/parent/{name:pattern}/grandchild3")
+		grandchild4 = NewDormantResource("parent/{name:pattern}/{grandchild4}")
 	)
 
-	if err := child1.RegisterResource(grandChild1); err != nil {
-		t.Fatalf("ResourceBase.RegisterResource() err = %v, want nil", err)
-	}
+	child1.RegisterResource(grandchild1)
+	parent.RegisterResource(child1)
+	child2.RegisterResource(grandchild2)
+	parent.RegisterResource(child2)
+	parent.RegisterResource(grandchild3)
+	child1.RegisterResource(grandchild4)
 
-	if err := parent.RegisterResource(child1); err != nil {
-		t.Fatalf("ResourceBase.RegisterResource() err = %v, want nil", nil)
-	}
-
-	if err := child2.RegisterResource(grandChild2); err != nil {
-		t.Fatalf("ResourceBase.RegisterResource() err = %v, want nil", err)
-	}
-
-	if err := parent.RegisterResource(child2); err != nil {
-		t.Fatalf("ResourceBase.RegisterResource() err = %v, want nil", err)
-	}
-
-	if err := parent.RegisterResource(grandChild3); err != nil {
-		t.Fatalf("ResourceBase.RegisterResource() err = %v, want nil", err)
-	}
-
-	if err := child1.RegisterResource(grandChild4); err != nil {
-		t.Fatalf("ResourceBase.RegisterResource() err = %v, want nil", err)
-	}
+	var fnName = "ResourceBase.RegisterResoruce()"
 
 	var rb = parent
 	if len(rb.patternResources) != 1 && rb.patternResources[0] != child1 {
-		t.Fatalf(
-			"ResourceBase.RegisterResource() couldn't keep own child",
-		)
+		t.Fatalf(fnName + " couldn't keep own child")
 	}
 
 	var childB = rb.patternResources[0]
 	if len(childB.staticResources) != 3 {
-		t.Fatalf("ResourceBase.RegisterResource() couldn't keep grandChild2")
+		t.Fatalf(fnName + " couldn't keep grandchild2")
 	}
 
-	if childB.wildcardResource != grandChild4 {
-		t.Fatalf(
-			"ResourceBase.RegisterResource() couldn't register grandChild4",
-		)
+	if childB.wildcardResource != grandchild4 {
+		t.Fatalf(fnName + " couldn't register grandChild4")
 	}
 
-	if err := parent.RegisterResource(nil); err == nil {
-		t.Fatalf("ResourceBase.RegisterResource() err = nil, want non-nil")
-	}
+	testPanicker(t, true, func() { parent.RegisterResource(nil) })
+	testPanicker(t, true, func() { parent.RegisterResource(newRootResource()) })
+	testPanicker(t, true, func() { parent.RegisterResource(grandchild1) })
+	testPanicker(
+		t, true,
+		func() {
+			var r = NewDormantResource(
+				"http://example.com/parent/prefix/resource",
+			)
 
-	if err := parent.RegisterResource(newRootResource()); err == nil {
-		t.Fatalf("ResourceBase.RegisterResource() err = nil, want non-nil")
-	}
-
-	if err := parent.RegisterResource(grandChild1); err == nil {
-		t.Fatalf("ResourceBase.RegisterResource() err = nil, want non-nil")
-	}
-
-	var r = NewDormantResource("http://example.com/parent/prefix/resource")
-	if err := grandChild2.RegisterResource(r); err == nil {
-		t.Fatalf("ResourceBase.RegisterResource() err = nil, want non-nil")
-	}
+			grandchild2.RegisterResource(r)
+		},
+	)
 
 	var h = NewDormantHost("example.com")
 	h.registerResource(parent)
 
-	r = NewDormantResource("http://example.com/parent/prefix/resource")
-	if err := grandChild2.RegisterResource(r); err == nil {
-		t.Fatalf("ResourceBase.RegisterResource() err = nil, want non-nil")
-	}
+	testPanicker(
+		t, false,
+		func() {
+			var r = NewDormantResource(
+				"http://example.com/parent/prefix/resource",
+			)
 
-	r = NewDormantResource("http://example.com/parent/prefix/resource")
-	if err := parent.RegisterResource(r); err != nil {
-		t.Fatalf("ResourceBase.RegisterResource() err = %v, want nil", err)
-	}
+			parent.RegisterResource(r)
+		},
+	)
 
 	rb = parent
 	if rb.staticResources["prefix"].Template().Content() != "prefix" {
@@ -2202,144 +2145,142 @@ func TestResourceBase_RegisterResource(t *testing.T) {
 
 	rb = rb.staticResources["prefix"]
 	if rb.staticResources["resource"].Template().Content() != "resource" {
-		t.Fatalf("ResourceBase.RegisterResource() failed to register resource")
+		t.Fatalf(fnName + " failed to register resource")
 	}
 
-	r = NewDormantResource(
-		"http://example.com/parent/{name:pattern}/grandChild2/{r10}",
+	var r = NewDormantResource(
+		"http://example.com/parent/{name:pattern}/grandchild2/{r10}",
 	)
 
-	if err := grandChild2.RegisterResource(r); err != nil {
-		t.Fatalf("ResourceBase.RegisterResource() err = %v, want nil", err)
+	testPanicker(t, false, func() { grandchild2.RegisterResource(r) })
+
+	if grandchild2.wildcardResource != r {
+		t.Fatalf(fnName + " failed to register resource")
 	}
 
-	if grandChild2.wildcardResource != r {
-		t.Fatalf("ResourceBase.RegisterResource() failed to register resource")
-	}
+	r = NewDormantResource("/parent/{name:pattern}/grandchild2/r11")
 
-	r = NewDormantResource("/parent/{name:pattern}/grandChild2/r11")
-	if _, err := r.Resource("{name:123}"); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := grandChild2.RegisterResource(r); err == nil {
-		t.Fatalf("ResourceBase.RegisterResource() err = nil, want non-nil")
-	}
+	testPanicker(t, false, func() { r.Resource("{name:123}") })
+	testPanicker(t, true, func() { grandchild2.RegisterResource(r) })
 }
 
 func TestResourceBase_RegisterResourceUnder(t *testing.T) {
 	var (
 		parent = NewDormantResource("parent")
 		child1 = NewDormantResource("resource1")
-		child2 = NewDormantResource("/parent/{name:pattern}/{grandchild}/resource2")
-		child3 = NewDormantResource("/parent/{name:pattern}/{grandchild}/resource3")
+		child2 = NewDormantResource(
+			"/parent/{name:pattern}/{grandchild}/resource2",
+		)
+
+		child3 = NewDormantResource(
+			"/parent/{name:pattern}/{grandchild}/resource3",
+		)
 	)
 
-	if err := parent.RegisterResourceUnder(
-		"/{name:pattern}",
-		child1,
-	); err != nil {
-		t.Fatalf("ResourceBase.RegisterResourceUnder() err = %v, want nil", err)
-	}
+	testPanicker(
+		t, false,
+		func() { parent.RegisterResourceUnder("/{name:pattern}", child1) },
+	)
 
-	if err := parent.RegisterResourceUnder(
-		"/{name:pattern}/{grandchild}/",
-		child2,
-	); err != nil {
-		t.Fatalf("ResourceBase.RegisterResourceUnder() err = %v, want nil", err)
-	}
+	testPanicker(
+		t, false,
+		func() {
+			parent.RegisterResourceUnder(
+				"/{name:pattern}/{grandchild}",
+				child2,
+			)
+		},
+	)
 
-	if err := parent.RegisterResourceUnder(
-		"{name:pattern}/{grandchild}",
-		child3,
-	); err != nil {
-		t.Fatalf("ResourceBase.RegisterResourceUnder() err = %v, want nil", err)
-	}
+	testPanicker(
+		t, false,
+		func() {
+			parent.RegisterResourceUnder(
+				"{name:pattern}/{grandchild}",
+				child3,
+			)
+		},
+	)
+
+	var fnName = "ResourceBase.RegisterResourceUnder"
 
 	var rb = parent
 	if len(rb.patternResources) != 1 {
-		t.Fatalf(
-			"ResourceBase.RegisterResourceUnder() failed to register prefix[0]",
-		)
+		t.Fatalf(fnName + " failed to register prefix[0]")
 	}
 
 	rb = rb.patternResources[0]
 	if len(rb.staticResources) != 1 ||
 		rb.staticResources["resource1"] != child1 {
-		t.Fatalf(
-			"ResourceBase.RegisterResourceUnder() failed to register resource1",
-		)
+		t.Fatalf(fnName + " failed to register resource1")
 	}
 
 	if rb.wildcardResource == nil {
-		t.Fatalf(
-			"ResourceBase.RegisterResourceUnder() failed to register prefix[1]",
-		)
+		t.Fatalf(fnName + " failed to register prefix[1]")
 	}
 
 	rb = rb.wildcardResource
 	if len(rb.staticResources) != 2 {
-		t.Fatalf(
-			"ResourceBase.RegisterResourceUnder() failed to register resource2 and resource3",
-		)
+		t.Fatalf(fnName + " failed to register resource2 and resource3")
 	}
 
-	if err := parent.RegisterResourceUnder("child", nil); err == nil {
-		t.Fatalf(
-			"ResourceBase.RegisterResourceUnder() err == nil, want non-nil",
-		)
-	}
+	testPanicker(t, true, func() { parent.RegisterResourceUnder("child", nil) })
+	testPanicker(t, true, func() { parent.RegisterResourceUnder("", child1) })
+	testPanicker(
+		t, true,
+		func() {
+			var r = NewDormantResource(
+				"/parent/{name2:pattern2}/{grandchild}/r4",
+			)
 
-	if err := parent.RegisterResourceUnder("", child1); err == nil {
-		t.Fatalf(
-			"ResourceBase.RegisterResourceUnder() err == nil, want non-nil",
-		)
-	}
-
-	var r = NewDormantResource("/parent/{name2:pattern2}/{grandchild}/r4")
-	if err := parent.RegisterResourceUnder(
-		"/{name:pattern}/{grandchild}",
-		r, // child4 has different prefix template
-	); err == nil {
-		t.Fatalf("ResourceBase.RegisterResourceUnder() err = nil, want non-nil")
-	}
-
-	var child, err = parent.Resource("{name:pattern}")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	r = NewDormantResource("parent/{name:pattern}/{grandchild}/{resource4}")
-	if err = child.RegisterResourceUnder(
-		"{grandchild}/resource2",
-		r,
-	); err == nil {
-		t.Fatalf("ResourceBase.RegisterResourceUnder() err = nil, want non-nil")
-	}
-
-	r = NewDormantResource("parent/{name:pattern}/{grandchild}/{resource4}")
-	if err = child.registerResourceUnder("{grandchild}", r); err != nil {
-		t.Fatalf("ResourceBase.RegisterResourceUnder() err = %v, want nil", err)
-	}
-
-	r = NewDormantResource("/parent/{name:pattern}/{resource5:abc}")
-	if _, err = r.Resource("{name:123}"); err != nil {
-		t.Fatal(err)
-	}
-
-	if err = parent.RegisterResourceUnder("/{name:pattern}", r); err == nil {
-		t.Fatalf(
-			"ResourceBase.RegisterResourceUnder() err = nil, want non-nil",
-		)
-	}
-
-	r = NewDormantResource(
-		"http://example.com/parent/{name:pattern}/grandchild2/resource5",
+			parent.RegisterResourceUnder(
+				"/{name:pattern}/{grandchild}",
+				r, // r has different prefix template
+			)
+		},
 	)
 
-	if err := child.RegisterResourceUnder("grandchild2", r); err == nil {
-		t.Fatalf("ResourceBase.RegisterResourceUnder() err = nil, want non-nil")
-	}
+	var child = parent.Resource("{name:pattern}")
+	testPanicker(
+		t, true,
+		func() {
+			var r = NewDormantResource(
+				"parent/{name:pattern}/{grandchild}/{resource4}",
+			)
+
+			child.RegisterResourceUnder("{grandchild}/resource2", r)
+		},
+	)
+
+	testPanicker(
+		t, false,
+		func() {
+			var r = NewDormantResource(
+				"parent/{name:pattern}/{grandchild}/{resource4}",
+			)
+
+			child.registerResourceUnder("{grandchild}", r)
+		},
+	)
+
+	var r = NewDormantResource("/parent/{name:pattern}/{resource5:abc}")
+	r.Resource("{name:123}")
+
+	testPanicker(
+		t, true,
+		func() { parent.RegisterResourceUnder("/{name:pattern}", r) },
+	)
+
+	testPanicker(
+		t, true,
+		func() {
+			var r = NewDormantResource(
+				"http://example.com/parent/{name:pattern}/grandchild2/resource5",
+			)
+
+			child.RegisterResourceUnder("grandchild2", r)
+		},
+	)
 
 	var h = NewDormantHost("example.com")
 	h.registerResource(parent)
@@ -2347,61 +2288,32 @@ func TestResourceBase_RegisterResourceUnder(t *testing.T) {
 		"http://example.com/parent/{name:pattern}/grandchild2/resource5",
 	)
 
-	if err := child.RegisterResourceUnder("grandchild2", r); err != nil {
-		t.Fatalf("ResourceBase.RegisterResourceUnder() err = %v, want nil", err)
-	}
+	testPanicker(
+		t, false,
+		func() { child.RegisterResourceUnder("grandchild2", r) },
+	)
 
-	rb = parent
-	if rb.patternResources[0] != child {
-		t.Fatalf(
-			"ResourceBase.RegisterResourceUnder() failed to pattern child",
-		)
+	if parent.patternResources[0] != child {
+		t.Fatalf(fnName + " failed to pattern child")
 	}
 
 	child = child.staticResources["grandchild2"]
 	if child == nil {
-		t.Fatalf(
-			"ResourceBase.RegisterResourceUnder() failed to register granschild2",
-		)
+		t.Fatalf(fnName + " failed to register granschild2")
 	}
 
 	if child.staticResources["resource5"] != r {
-		t.Fatalf(
-			"ResourceBase.RegisterResourceUnder() failed to register resource5",
-		)
+		t.Fatalf(fnName + " failed to register resource5")
 	}
 }
 
 func TestResourceBase_RegisteredResource(t *testing.T) {
 	var root = NewDormantResource("/")
-	var static1, err = root.Resource("static")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var static2 *Resource
-	static2, err = root.Resource("$staticR1:staticR1")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var pattern1 *Resource
-	pattern1, err = root.Resource("{patternR1:pattern}")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var pattern2 *Resource
-	pattern2, err = root.Resource("$patternR2:{name:pattern}{wildcard}")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var wildcard *Resource
-	wildcard, err = root.Resource("{wildcard}")
-	if err != nil {
-		t.Fatal(err)
-	}
+	var static1 = root.Resource("static")
+	var static2 = root.Resource("$staticR1:staticR1")
+	var pattern1 = root.Resource("{patternR1:pattern}")
+	var pattern2 = root.Resource("$patternR2:{name:pattern}{wildcard}")
+	var wildcard = root.Resource("{wildcard}")
 
 	var cases = []struct {
 		name    string
@@ -2432,14 +2344,9 @@ func TestResourceBase_RegisteredResource(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got, err := root.RegisteredResource(c.tmplStr)
-			if (err != nil) != c.wantErr {
-				t.Fatalf(
-					"ResourceBase.RegisteredResource() error = %v, want %v",
-					err, c.wantErr,
-				)
-			}
+			defer checkPanic(t, c.wantErr)
 
+			var got = root.RegisteredResource(c.tmplStr)
 			if got != c.want {
 				t.Fatalf(
 					"ResourceBase.RegisteredResource() = %v, want %v",
@@ -2453,33 +2360,12 @@ func TestResourceBase_RegisteredResource(t *testing.T) {
 func TestResourceBase_ChildResourceNamed(t *testing.T) {
 	var parent = NewDormantResource("resource")
 
-	var _, err = parent.Resource("$r1:static1")
-	if err != nil {
-		t.Fatal(err)
-	}
+	parent.Resource("$r1:static1")
+	parent.Resource("{name:pattern1}")
 
-	_, err = parent.Resource("{name:pattern1}")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var wildcard *Resource
-	wildcard, err = parent.Resource("$resource:{wildcard}")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var static *Resource
-	static, err = parent.Resource("$static:static2")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var pattern *Resource
-	pattern, err = parent.Resource("{vName:pattern}")
-	if err != nil {
-		t.Fatal(err)
-	}
+	var wildcard = parent.Resource("$resource:{wildcard}")
+	var static = parent.Resource("$static:static2")
+	var pattern = parent.Resource("{vName:pattern}")
 
 	if got := parent.ChildResourceNamed("resource"); got != wildcard {
 		t.Fatalf("ResourceBase.ChildResourceNamed() = %v, want %v", got, wildcard)
@@ -2503,33 +2389,13 @@ func TestResourceBase_ChildResources(t *testing.T) {
 		root   = NewDormantResource("/")
 		length = 5
 		rs     = make([]*Resource, length)
-		err    error
 	)
 
-	rs[0], err = root.Resource("static1")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	rs[1], err = root.Resource("static2")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	rs[2], err = root.Resource("{name1:pattern1}")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	rs[3], err = root.Resource("{name2:pattern2}")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	rs[4], err = root.Resource("{wildcard}")
-	if err != nil {
-		t.Fatal(err)
-	}
+	rs[0] = root.Resource("static1")
+	rs[1] = root.Resource("static2")
+	rs[2] = root.Resource("{name1:pattern1}")
+	rs[3] = root.Resource("{name2:pattern2}")
+	rs[4] = root.Resource("{wildcard}")
 
 	var gotRs = root.ChildResources()
 	if len(gotRs) != length {
@@ -2562,31 +2428,11 @@ func TestResourceBase_HasChildResource(t *testing.T) {
 	var parent = NewDormantResource("parent")
 	var rs = make([]*Resource, 5)
 
-	var err error
-	rs[0], err = parent.Resource("static1")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	rs[1], err = parent.Resource("static2")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	rs[2], err = parent.Resource("$pattern1:{name:pattern1}")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	rs[3], err = parent.Resource("$pattern2:{name:pattern2}")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	rs[4], err = parent.Resource("{wildcard}")
-	if err != nil {
-		t.Fatal(err)
-	}
+	rs[0] = parent.Resource("static1")
+	rs[1] = parent.Resource("static2")
+	rs[2] = parent.Resource("$pattern1:{name:pattern1}")
+	rs[3] = parent.Resource("$pattern2:{name:pattern2}")
+	rs[4] = parent.Resource("{wildcard}")
 
 	var cases = []struct {
 		name string
@@ -2626,10 +2472,7 @@ func TestResourceBase_HasAnyChildResources(t *testing.T) {
 		t.Fatalf("ResourceBase.HasAnyChildResource() = true, want false")
 	}
 
-	if _, err := parent.Resource("{child}"); err != nil {
-		t.Fatal(err)
-	}
-
+	parent.Resource("{child}")
 	if !parent.HasAnyChildResources() {
 		t.Fatalf("ResourceBase.HasAnyChildResource() = false, want true")
 	}
@@ -2641,24 +2484,16 @@ func TestResourceBase_SetImplementation(t *testing.T) {
 
 	// Number of handlers with default options handler.
 	var nHandlers = len(toUpperSplitByCommaSpace(rhTypeHTTPMethods)) + 1
+	var fnName = "ResourceBase.SetImplementation()"
 
-	var err = r.SetImplementation(impl)
-	if err != nil {
-		t.Fatalf("ResourceBase.SetImplementation() err = %v, want nil", err)
-	}
+	testPanicker(t, false, func() { r.SetImplementation(impl) })
 
 	if n := len(r._RequestHandlerBase.mhPairs); n != nHandlers {
-		t.Fatalf(
-			"ResourceBase.SetImplementation() len(handlers) = %d, want %d",
-			n,
-			nHandlers,
-		)
+		t.Fatalf(fnName+" len(handlers) = %d, want %d", n, nHandlers)
 	}
 
 	if r._RequestHandlerBase.notAllowedHTTPMethodsHandler == nil {
-		t.Fatalf(
-			"ResourceBase.SetImplementation() failed to set not allowed methods' handler",
-		)
+		t.Fatalf(fnName + " failed to set not allowed methods' handler")
 	}
 }
 
@@ -2666,16 +2501,11 @@ func TestResourceBase_Implementation(t *testing.T) {
 	var r = NewDormantResource("/")
 	var rh = &implType{}
 
-	var err = r.SetImplementation(rh)
-	if err != nil {
-		t.Fatal(err)
-	}
+	r.SetImplementation(rh)
 
 	var _rh = r.Implementation()
 	if _rh != rh {
-		t.Fatalf(
-			"ResourceBase.Implementation() failed to return impl",
-		)
+		t.Fatalf("ResourceBase.Implementation() failed to return impl")
 	}
 }
 
@@ -2685,78 +2515,47 @@ func TestResourceBase_SetHandlerFor(t *testing.T) {
 		return true
 	}
 
-	var err = r.SetHandlerFor("get", handler)
-	if err != nil {
-		t.Fatalf("ResourceBase.SetHandlerFor() = %v, want nil", err)
-	}
+	testPanicker(t, false, func() { r.SetHandlerFor("get", handler) })
+	testPanicker(t, false, func() { r.SetHandlerFor("custom post", handler) })
+	testPanicker(t, false, func() { r.SetHandlerFor("!", handler) })
+	testPanicker(t, false, func() { r.SetHandlerFor("GET", handler) })
 
-	err = r.SetHandlerFor("custom post", handler)
-	if err != nil {
-		t.Fatalf("ResourceBase.SetHandlerFor() = %v, want nil", err)
-	}
-
-	err = r.SetHandlerFor("!", handler)
-	if err != nil {
-		t.Fatalf("ResourceBase.SetHandlerFor() = %v, want nil", err)
-	}
-
-	err = r.SetHandlerFor("GET", handler)
-	if err != nil {
-		t.Fatalf("ResourceBase.SetHandlerFor() = %v, want nil", err)
-	}
+	var fnName = "ResourceBase.SetHandlerfor()"
 
 	if r._RequestHandlerBase == nil {
-		t.Fatalf(
-			"ResourceBase.SetHandlerFor() didn't create new _RequestHandlerBase",
-		)
+		t.Fatalf(fnName + " didn't create new _RequestHandlerBase")
 	}
 
 	// Count of handlers with default options handler.
 	if count := len(r.mhPairs); count != 4 {
-		t.Fatalf(
-			"ResourceBase.SetHandlerFor(): count of handlers = %d, want %d",
-			count,
-			3,
-		)
+		t.Fatalf(fnName+" count of handlers = %d, want %d", count, 3)
 	}
 
 	if _, h := r.mhPairs.get("GET"); h == nil {
-		t.Fatalf(
-			"ResourceBase.SetHandlerFor() failed to set handler for GET",
-		)
+		t.Fatalf(fnName + " failed to set handler for GET")
 	}
 
 	if _, h := r.mhPairs.get("POST"); h == nil {
-		t.Fatalf(
-			"ResourceBase.SetHandlerFor() failed to set handler for POST",
-		)
+		t.Fatalf(fnName + " failed to set handler for POST")
 	}
 
 	if _, h := r.mhPairs.get("CUSTOM"); h == nil {
-		t.Fatalf(
-			"ResourceBase.SetHandlerFor() failed to set handler for CUSTOM",
-		)
+		t.Fatalf(fnName + " failed to set handler for CUSTOM")
 	}
 
 	if r.notAllowedHTTPMethodsHandler == nil {
-		t.Fatalf(
-			"ResourceBase.SetHandlerFor() failed to set the not allowed methods' handler",
-		)
+		t.Fatalf(fnName + " failed to set the not allowed methods' handler")
 	}
 
-	if r.SetHandlerFor("PUT", nil) == nil {
-		t.Fatalf("ResourceBase.SetHandlerFor() = nil, want non-nil")
-	}
-
-	if r.SetHandlerFor("", handler) == nil {
-		t.Fatalf("ResourceBase.SetHandlerFor() = nil, want non-nil")
-	}
+	testPanicker(t, true, func() { r.SetHandlerFor("PUT", nil) })
+	testPanicker(t, true, func() { r.SetHandlerFor("", handler) })
 }
 
 func TestResourceBase_HandlerOf(t *testing.T) {
 	var strb strings.Builder
 	var r = NewDormantResource("resource")
-	var err = r.SetHandlerFor(
+
+	r.SetHandlerFor(
 		"get",
 		func(http.ResponseWriter, *http.Request, *Args) bool {
 			strb.WriteString("get")
@@ -2764,11 +2563,7 @@ func TestResourceBase_HandlerOf(t *testing.T) {
 		},
 	)
 
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = r.SetHandlerFor(
+	r.SetHandlerFor(
 		"put post",
 		func(http.ResponseWriter, *http.Request, *Args) bool {
 			strb.WriteString("put post")
@@ -2776,11 +2571,7 @@ func TestResourceBase_HandlerOf(t *testing.T) {
 		},
 	)
 
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = r.SetHandlerFor(
+	r.SetHandlerFor(
 		"custom",
 		func(http.ResponseWriter, *http.Request, *Args) bool {
 			strb.WriteString("custom")
@@ -2788,21 +2579,13 @@ func TestResourceBase_HandlerOf(t *testing.T) {
 		},
 	)
 
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = r.SetHandlerFor(
+	r.SetHandlerFor(
 		"!",
 		func(http.ResponseWriter, *http.Request, *Args) bool {
 			strb.WriteString("!")
 			return true
 		},
 	)
-
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	var getH = r.HandlerOf("get")
 	getH(nil, nil, nil)
@@ -2862,63 +2645,65 @@ func TestResourceBase_WrapRequestPasser(t *testing.T) {
 		},
 	)
 
-	var err = r.WrapRequestPasser(
-		func(next Handler) Handler {
-			return func(
-				w http.ResponseWriter,
-				r *http.Request,
-				args *Args,
-			) bool {
-				strb.WriteByte('B')
-				return next(w, r, args)
-			}
-		},
-		func(next Handler) Handler {
-			return func(
-				w http.ResponseWriter,
-				r *http.Request,
-				args *Args,
-			) bool {
-				strb.WriteByte('C')
-				return next(w, r, args)
-			}
+	var fnName = "ResourceBase.WrapRequestPasser()"
+
+	testPanicker(
+		t,
+		false,
+		func() {
+			r.WrapRequestPasser(
+				func(next Handler) Handler {
+					return func(
+						w http.ResponseWriter,
+						r *http.Request,
+						args *Args,
+					) bool {
+						strb.WriteByte('B')
+						return next(w, r, args)
+					}
+				},
+				func(next Handler) Handler {
+					return func(
+						w http.ResponseWriter,
+						r *http.Request,
+						args *Args,
+					) bool {
+						strb.WriteByte('C')
+						return next(w, r, args)
+					}
+				},
+			)
 		},
 	)
-
-	if err != nil {
-		t.Fatalf("ResourceBase.WrapRequestPasser() = %v, want nil", err)
-	}
 
 	r.requestPasser(nil, nil, nil)
 	if strb.String() != "CBA" {
-		t.Fatalf(
-			"ResourceBase.WrapRequestPasser() failed to wrap resource's request passer",
-		)
+		t.Fatalf(fnName + " failed to wrap resource's request passer")
 	}
 
-	err = r.WrapRequestPasser(
-		func(next Handler) Handler {
-			return func(
-				w http.ResponseWriter,
-				r *http.Request,
-				args *Args,
-			) bool {
-				strb.WriteByte('D')
-				return next(w, r, args)
-			}
+	testPanicker(
+		t,
+		false,
+		func() {
+			r.WrapRequestPasser(
+				func(next Handler) Handler {
+					return func(
+						w http.ResponseWriter,
+						r *http.Request,
+						args *Args,
+					) bool {
+						strb.WriteByte('D')
+						return next(w, r, args)
+					}
+				},
+			)
 		},
 	)
-
-	if err != nil {
-		t.Fatalf("ResourceBase.WrapRequestPasser() = %v, want nil", err)
-	}
 
 	strb.Reset()
 	r.requestPasser(nil, nil, nil)
 	if strb.String() != "DCBA" {
-		t.Fatalf(
-			"ResourceBase.WrapRequestPasser() failed to wrap resource's request passer",
-		)
+		t.Fatalf(fnName + " failed to wrap resource's request passer")
 	}
 }
 
@@ -2926,7 +2711,7 @@ func TestResourceBase_WrapRequestHandler(t *testing.T) {
 	var r = NewDormantResource("static")
 	var strb strings.Builder
 
-	var err = r.SetHandlerFor(
+	r.SetHandlerFor(
 		"get",
 		func(http.ResponseWriter, *http.Request, *Args) bool {
 			strb.WriteByte('A')
@@ -2934,69 +2719,67 @@ func TestResourceBase_WrapRequestHandler(t *testing.T) {
 		},
 	)
 
-	if err != nil {
-		t.Fatal(err)
-	}
+	var fnName = "ResourceBase.WrapRequestHandler()"
 
-	err = r.WrapRequestHandler(
-		func(next Handler) Handler {
-			return func(
-				w http.ResponseWriter,
-				r *http.Request,
-				args *Args,
-			) bool {
-				strb.WriteByte('B')
-				return next(w, r, args)
-			}
-		},
-		func(next Handler) Handler {
-			return func(
-				w http.ResponseWriter,
-				r *http.Request,
-				args *Args,
-			) bool {
-				strb.WriteByte('C')
-				return next(w, r, args)
-			}
+	testPanicker(
+		t,
+		false,
+		func() {
+			r.WrapRequestHandler(
+				func(next Handler) Handler {
+					return func(
+						w http.ResponseWriter,
+						r *http.Request,
+						args *Args,
+					) bool {
+						strb.WriteByte('B')
+						return next(w, r, args)
+					}
+				},
+				func(next Handler) Handler {
+					return func(
+						w http.ResponseWriter,
+						r *http.Request,
+						args *Args,
+					) bool {
+						strb.WriteByte('C')
+						return next(w, r, args)
+					}
+				},
+			)
 		},
 	)
-
-	if err != nil {
-		t.Fatalf("ResourceBase.WrapRequestHandler() = %v, want nil", err)
-	}
 
 	var w = httptest.NewRecorder()
 	var req = httptest.NewRequest("GET", "/static", nil)
 	r.requestHandler(w, req, nil)
 	if strb.String() != "CBA" {
-		t.Fatalf(
-			"ResourceBase.WrapRequestHandler() failed to wrap resource's request handler",
-		)
+		t.Fatalf(fnName + " failed to wrap resource's request handler")
 	}
 
-	err = r.WrapRequestHandler(
-		func(next Handler) Handler {
-			return func(
-				w http.ResponseWriter,
-				r *http.Request,
-				args *Args,
-			) bool {
-				strb.WriteByte('D')
-				return next(w, r, args)
-			}
+	testPanicker(
+		t,
+		false,
+		func() {
+			r.WrapRequestHandler(
+				func(next Handler) Handler {
+					return func(
+						w http.ResponseWriter,
+						r *http.Request,
+						args *Args,
+					) bool {
+						strb.WriteByte('D')
+						return next(w, r, args)
+					}
+				},
+			)
 		},
 	)
-
-	if err != nil {
-		t.Fatalf("ResourceBase.WrapRequestHandler() = %v, want nil", err)
-	}
 
 	strb.Reset()
 	r.requestHandler(w, req, nil)
 	if strb.String() != "DCBA" {
-		t.Fatalf(
-			"ResourceBase.WrapRequestHandler() failed to wrap resource's request handler",
-		)
+		t.Fatalf(fnName + " failed to wrap resource's request handler")
 	}
 }
 
@@ -3004,25 +2787,21 @@ func TestResourceBase_WrapHandlerOf(t *testing.T) {
 	var r = NewDormantResource("/")
 	var strb strings.Builder
 
-	if err := r.SetHandlerFor(
+	r.SetHandlerFor(
 		"get post put",
 		func(http.ResponseWriter, *http.Request, *Args) bool {
 			strb.WriteByte('A')
 			return true
 		},
-	); err != nil {
-		t.Fatal(err)
-	}
+	)
 
-	if err := r.SetHandlerFor(
+	r.SetHandlerFor(
 		"!",
 		func(http.ResponseWriter, *http.Request, *Args) bool {
 			strb.WriteByte('A')
 			return true
 		},
-	); err != nil {
-		t.Fatal(err)
-	}
+	)
 
 	var mws = []Middleware{
 		func(next Handler) Handler {
@@ -3047,76 +2826,50 @@ func TestResourceBase_WrapHandlerOf(t *testing.T) {
 		},
 	}
 
-	if err := r.WrapHandlerOf("post put", mws...); err != nil {
-		t.Fatalf("ResourceBase.WrapHandlerOf() error = %v, want nil", err)
-	}
+	var fnName = "ResourceBase.WrapHandlerOf()"
 
-	if err := r.WrapHandlerOf("!", mws...); err != nil {
-		t.Fatalf("ResourceBase.WrapHandlerOf() error = %v, want nil", err)
-	}
-
-	if err := r.WrapHandlerOf("*", mws...); err != nil {
-		t.Fatalf("ResourceBase.WrapHandlerOf() error = %v, want nil", err)
-	}
+	testPanicker(t, false, func() { r.WrapHandlerOf("post put", mws...) })
+	testPanicker(t, false, func() { r.WrapHandlerOf("!", mws...) })
+	testPanicker(t, false, func() { r.WrapHandlerOf("*", mws...) })
 
 	var handler = r.HandlerOf("post")
 	handler(nil, nil, nil)
 	if strb.String() != "CBCBA" {
-		t.Fatal("ResourceBase.WrapHandlerOf() failed to wrap the POST handler")
+		t.Fatal(fnName + " failed to wrap the POST handler")
 	}
 
 	strb.Reset()
 	handler = r.HandlerOf("put")
 	handler(nil, nil, nil)
 	if strb.String() != "CBCBA" {
-		t.Fatal("ResourceBase.WrapHandlerOf() failed to wrap the PUT handler")
+		t.Fatal(fnName + " failed to wrap the PUT handler")
 	}
 
 	strb.Reset()
 	handler = r.HandlerOf("get")
 	handler(nil, nil, nil)
 	if strb.String() != "CBA" {
-		t.Fatal(
-			"ResourceBase.WrapHandlerOf() failed to wrap the GET handler",
-		)
+		t.Fatal(fnName + " failed to wrap the GET handler")
 	}
 
 	strb.Reset()
 	handler = r.HandlerOf("!")
 	handler(nil, nil, nil)
 	if strb.String() != "CBA" {
-		t.Fatal(
-			"ResourceBase.WrapHandlerOf() failed to wrap the not allowed methods' handler",
-		)
+		t.Fatal(fnName + " failed to wrap the not allowed methods' handler")
 	}
 }
 
 func TestResourceBase_SetGetSharedDataAt(t *testing.T) {
 	var root = NewDormantResource("/")
-	var r00, err = root.Resource("r00")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var r10 *Resource
-	r10, err = r00.Resource("https:///{r10:abc}")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var r20 *Resource
-	r20, err = r10.Resource("{r20}/")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var r11 *Resource
-	r11, err = r00.Resource("r11")
-	if err != nil {
-		t.Fatal(err)
-	}
+	var r00 = root.Resource("r00")
+	var r10 = r00.Resource("https:///{r10:abc}")
+	var r20 = r10.Resource("{r20}/")
+	var r11 = r00.Resource("r11")
 
 	var data = 1
+	var fnNameSet = "ResourceBase.SetSharedDataAt()"
+	var fnNameGet = "ResourceBase.SharedDataAt(0"
 
 	var cases = []struct {
 		name, path string
@@ -3133,36 +2886,26 @@ func TestResourceBase_SetGetSharedDataAt(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			var err = root.SetSharedDataAt(c.path, data)
-			if (err != nil) != c.wantErr {
-				t.Fatalf(
-					"ResourceBase.SetSharedDataAt() = %v, wantErr = %t",
-					err,
-					c.wantErr,
-				)
-			}
+			testPanicker(
+				t,
+				c.wantErr,
+				func() { root.SetSharedDataAt(c.path, data) },
+			)
 
 			if c.r == nil {
 				return
 			}
 
 			if c.r.SharedData() != data {
-				t.Fatalf("ResourceBase.SetConfigurationAt() has failed")
+				t.Fatalf(fnNameSet+" has failed at %s", c.name)
 			}
 
-			var retrievedData interface{}
-			retrievedData, err = root.SharedDataAt(c.path)
-			if (err != nil) != c.wantErr {
-				t.Fatalf(
-					"ResourceBase.SharedDataAt() err = %v, wantErr = %v",
-					err,
-					c.wantErr,
-				)
-			}
+			defer checkPanic(t, c.wantErr)
 
+			var retrievedData = root.SharedDataAt(c.path)
 			if !c.wantErr && retrievedData != data {
 				t.Fatalf(
-					"ResourceBase.SharedDataAt() data = %v, want %v",
+					fnNameGet+" data = %v, want %v",
 					retrievedData,
 					data,
 				)
@@ -3173,28 +2916,10 @@ func TestResourceBase_SetGetSharedDataAt(t *testing.T) {
 
 func TestResourceBase_SetConfigurationAt(t *testing.T) {
 	var root = NewDormantResource("/")
-	var r00, err = root.Resource("r00")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var r10 *Resource
-	r10, err = r00.Resource("https:///{r10:abc}")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var r20 *Resource
-	r20, err = r10.Resource("{r20}/")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var r11 *Resource
-	r11, err = r00.Resource("r11")
-	if err != nil {
-		t.Fatal(err)
-	}
+	var r00 = root.Resource("r00")
+	var r10 = r00.Resource("https:///{r10:abc}")
+	var r20 = r10.Resource("{r20}/")
+	var r11 = r00.Resource("r11")
 
 	var config = Config{
 		Secure:                  true,
@@ -3217,14 +2942,11 @@ func TestResourceBase_SetConfigurationAt(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			var err = root.SetConfigurationAt(c.path, config)
-			if (err != nil) != c.wantErr {
-				t.Fatalf(
-					"ResourceBase.SetConfigurationAt() = %v, wantErr = %t",
-					err,
-					c.wantErr,
-				)
-			}
+			testPanicker(
+				t,
+				c.wantErr,
+				func() { root.SetConfigurationAt(c.path, config) },
+			)
 
 			if c.r == nil {
 				return
@@ -3266,26 +2988,13 @@ func TestResourceBase_ConfigurationAt(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			if !c.wantErr {
-				var _, err = root.Resource(c.path)
-				if err != nil {
-					t.Fatal(err)
-				}
-
-				err = root.SetConfigurationAt(c.path, config)
-				if (err != nil) != c.wantErr {
-					t.Fatal(err)
-				}
+				root.Resource(c.path)
+				root.SetConfigurationAt(c.path, config)
 			}
 
-			var gotConfig, err = root.ConfigurationAt(c.pathToCheck)
-			if (err != nil) != c.wantErr {
-				t.Fatalf(
-					"ResourceBase.ConfigurationAt() = %v, wantErr = %t",
-					err,
-					c.wantErr,
-				)
-			}
+			defer checkPanic(t, c.wantErr)
 
+			var gotConfig = root.ConfigurationAt(c.pathToCheck)
 			if !c.wantErr {
 				if gotConfig != config {
 					t.Fatalf("ResourceBase.ConfigurationAt() has failed")
@@ -3317,25 +3026,17 @@ func TestResourceBase_SetImplemenetationAt(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			var err = root.SetImplementationAt(c.path, impl)
-			if (err != nil) != c.wantErr {
-				t.Fatalf(
-					"ResourceBase.SetImplementationAt() = %v, wantErr = %t",
-					err,
-					c.wantErr,
-				)
-			}
+			testPanicker(
+				t,
+				c.wantErr,
+				func() { root.SetImplementationAt(c.path, impl) },
+			)
 
 			if c.wantErr {
 				return
 			}
 
-			var r *Resource
-			r, err = root.Resource(c.path)
-			if err != nil {
-				t.Fatal(err)
-			}
-
+			var r = root.Resource(c.path)
 			if r.Implementation() != impl {
 				t.Fatalf(
 					"ResourceBase.SetImplementationAt() has failed to set impl",
@@ -3381,24 +3082,13 @@ func TestResourceBase_ImplementationAt(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			var err error
 			if !c.wantErr {
-				err = root.SetImplementationAt(c.path, rh)
-				if (err != nil) != c.wantErr {
-					t.Fatal(err)
-				}
+				root.SetImplementationAt(c.path, rh)
 			}
 
-			var gotRh Impl
-			gotRh, err = root.ImplementationAt(c.path)
-			if (err != nil) != c.wantErr {
-				t.Fatalf(
-					"ResourceBase.ImplementationAt() err = %v, wantErr = %t",
-					err,
-					c.wantErr,
-				)
-			}
+			defer checkPanic(t, c.wantErr)
 
+			var gotRh = root.ImplementationAt(c.path)
 			if !c.wantErr && gotRh != rh {
 				t.Fatalf(
 					"ResourceBase.ImplementationAt() has failed to return impl",
@@ -3413,6 +3103,8 @@ func TestResourceBase_SetPathHandlerFor(t *testing.T) {
 	var h = func(http.ResponseWriter, *http.Request, *Args) bool { return true }
 	var ms = toUpperSplitByCommaSpace(rhTypeHTTPMethods)
 	ms = append(ms, "OPTIONS")
+
+	var fnName = "ResourceBase.SetPathHandlerFor()"
 
 	var cases = []struct {
 		name, path string
@@ -3430,38 +3122,27 @@ func TestResourceBase_SetPathHandlerFor(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			var err = root.SetPathHandlerFor(rhTypeHTTPMethods, c.path, h)
-			if (err != nil) != c.wantErr {
-				t.Fatalf(
-					"ResourceBase.SetPathHandlerFor() = %v, wantErr = %t",
-					err,
-					c.wantErr,
-				)
-			}
+			testPanicker(
+				t,
+				c.wantErr,
+				func() { root.SetPathHandlerFor(rhTypeHTTPMethods, c.path, h) },
+			)
 
-			err = root.SetPathHandlerFor("!", c.path, h)
-			if (err != nil) != c.wantErr {
-				t.Fatalf(
-					"ResourceBase.SetPathHandlerFor() = %v, wantErr = %t",
-					err,
-					c.wantErr,
-				)
-			}
+			testPanicker(
+				t,
+				c.wantErr,
+				func() { root.SetPathHandlerFor("!", c.path, h) },
+			)
 
 			if c.wantErr {
 				return
 			}
 
-			var r *Resource
-			r, err = root.Resource(c.path)
-			if err != nil {
-				t.Fatal(err)
-			}
-
+			var r = root.Resource(c.path)
 			for _, m := range ms {
 				if r.HandlerOf(m) == nil {
 					t.Fatalf(
-						"ResourceBase.SetPathHandlerFor() has failed to set the handler of the HTTP method %s",
+						fnName+" has failed to set the handler of the HTTP method %s",
 						m,
 					)
 				}
@@ -3469,7 +3150,7 @@ func TestResourceBase_SetPathHandlerFor(t *testing.T) {
 
 			if r.HandlerOf("!") == nil {
 				t.Fatalf(
-					"ResourceBase.SetPathHandlerFor() has failed to set the not allowed methods' handler",
+					fnName + " has failed to set the not allowed methods' handler",
 				)
 			}
 		})
@@ -3502,46 +3183,20 @@ func TestResourceBase_PathHandlerOf(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			if !c.wantErr {
-				var err = root.SetPathHandlerFor(
-					rhTypeHTTPMethods,
-					c.path,
-					h,
-				)
-
-				if err != nil {
-					t.Fatal(err)
-				}
-
-				err = root.SetPathHandlerFor("!", c.path, h)
-				if err != nil {
-					t.Fatal(err)
-				}
+				root.SetPathHandlerFor(rhTypeHTTPMethods, c.path, h)
+				root.SetPathHandlerFor("!", c.path, h)
 			}
 
-			for _, m := range ms {
-				var h, err = root.PathHandlerOf(m, c.path)
-				if (err != nil) != c.wantErr {
-					t.Fatalf(
-						"ResourceBase.PathHandlerOf() err = %v, wantErr = %t",
-						err,
-						c.wantErr,
-					)
-				}
+			defer checkPanic(t, c.wantErr)
 
+			for _, m := range ms {
+				var h = root.PathHandlerOf(m, c.path)
 				if !c.wantErr && h == nil {
 					t.Fatalf("ResourceBase.PathHandlerOf() has failed")
 				}
 			}
 
-			var h, err = root.PathHandlerOf("!", c.path)
-			if (err != nil) != c.wantErr {
-				t.Fatalf(
-					"ResourceBase.PathHandlerOf() err = %v, wantErr = %t",
-					err,
-					c.wantErr,
-				)
-			}
-
+			var h = root.PathHandlerOf("!", c.path)
 			if !c.wantErr && h == nil {
 				t.Fatalf(
 					"ResourceBase.PathHandlerOf() has failed to return the not allowed methods' handler",
@@ -3604,22 +3259,15 @@ func TestResourceBase_WrapRequestPasserAt(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			var err error
 			if !c.wantErr {
-				_, err = root.Resource(c.path)
-				if err != nil {
-					t.Fatal(err)
-				}
+				root.Resource(c.path)
 			}
 
-			err = root.WrapRequestPasserAt(c.path, mws...)
-			if (err != nil) != c.wantErr {
-				t.Fatalf(
-					"ResourceBase.WrapRequestPasserAt() err = %v, wantErr = %t",
-					err,
-					c.wantErr,
-				)
-			}
+			testPanicker(
+				t,
+				c.wantErr,
+				func() { root.WrapRequestPasserAt(c.path, mws...) },
+			)
 
 			if !c.wantErr {
 				strb.Reset()
@@ -3629,7 +3277,8 @@ func TestResourceBase_WrapRequestPasserAt(t *testing.T) {
 
 				var str = strb.String()
 				if str != c.wantStr {
-					t.Fatalf("ResourceBase.WrapRequestPasserAt() gotStr = %s, want = %s",
+					t.Fatalf(
+						"ResourceBase.WrapRequestPasserAt() gotStr = %s, want = %s",
 						str,
 						c.wantStr,
 					)
@@ -3641,6 +3290,9 @@ func TestResourceBase_WrapRequestPasserAt(t *testing.T) {
 
 func TestResourceBase_WrapRequestHandlerAt(t *testing.T) {
 	var root = NewDormantResource("/")
+	var handler = func(w http.ResponseWriter, r *http.Request, _ *Args) bool {
+		return true
+	}
 
 	var strb strings.Builder
 	var mws = []Middleware{
@@ -3666,6 +3318,8 @@ func TestResourceBase_WrapRequestHandlerAt(t *testing.T) {
 		},
 	}
 
+	var fnName = "ResourceBase.WrapRequestHandlerAt()"
+
 	var cases = []struct {
 		name, path, requestPath string
 		wantErr                 bool
@@ -3683,29 +3337,15 @@ func TestResourceBase_WrapRequestHandlerAt(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			var err error
 			if !c.wantErr {
-				err = root.SetPathHandlerFor(
-					"get",
-					c.path,
-					func(http.ResponseWriter, *http.Request, *Args) bool {
-						return true
-					},
-				)
-
-				if err != nil {
-					t.Fatal(err)
-				}
+				root.SetPathHandlerFor("get", c.path, handler)
 			}
 
-			err = root.WrapRequestHandlerAt(c.path, mws...)
-			if (err != nil) != c.wantErr {
-				t.Fatalf(
-					"ResourceBase.WrapPathRequestHandler() err = %v, wantErr = %t",
-					err,
-					c.wantErr,
-				)
-			}
+			testPanicker(
+				t,
+				c.wantErr,
+				func() { root.WrapRequestHandlerAt(c.path, mws...) },
+			)
 
 			if !c.wantErr {
 				strb.Reset()
@@ -3715,10 +3355,7 @@ func TestResourceBase_WrapRequestHandlerAt(t *testing.T) {
 
 				var str = strb.String()
 				if str != "ab" {
-					t.Fatalf(
-						"ResourceBase.WrapPathRequestHandler() gotStr = %s, want = ab",
-						str,
-					)
+					t.Fatalf(fnName+" gotStr = %s, want = ab", str)
 				}
 			}
 		})
@@ -3765,6 +3402,8 @@ func TestResourceBasse_WrapPathHandlerOf(t *testing.T) {
 		},
 	}
 
+	var fnName = "ResourceBase.WrapPathHandlerOf()"
+
 	var cases = []struct {
 		name, path, requestPath string
 		wantErr                 bool
@@ -3786,46 +3425,28 @@ func TestResourceBasse_WrapPathHandlerOf(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			var err error
-
 			if !c.wantErr {
-				err = root.SetPathHandlerFor("get put", c.path, h)
-				if err != nil {
-					t.Fatal(err)
-				}
-
-				err = root.SetPathHandlerFor("!", c.path, h)
-				if err != nil {
-					t.Fatal(err)
-				}
+				root.SetPathHandlerFor("get put", c.path, h)
+				root.SetPathHandlerFor("!", c.path, h)
 			}
 
-			err = root.WrapPathHandlerOf("put", c.path, mws...)
-			if (err != nil) != c.wantErr {
-				t.Fatalf(
-					"ResourceBase.WrapPathHandlerOf() err = %v, wantErr = %t",
-					err,
-					c.wantErr,
-				)
-			}
+			testPanicker(
+				t,
+				c.wantErr,
+				func() { root.WrapPathHandlerOf("put", c.path, mws...) },
+			)
 
-			err = root.WrapPathHandlerOf("!", c.path, mws...)
-			if (err != nil) != c.wantErr {
-				t.Fatalf(
-					"ResourceBase.WrapPathHandlerOf() err = %v, wantErr = %t",
-					err,
-					c.wantErr,
-				)
-			}
+			testPanicker(
+				t,
+				c.wantErr,
+				func() { root.WrapPathHandlerOf("!", c.path, mws...) },
+			)
 
-			err = root.WrapPathHandlerOf("*", c.path, mws...)
-			if (err != nil) != c.wantErr {
-				t.Fatalf(
-					"ResourceBase.WrapPathHandlerOf() err = %v, wantErr = %t",
-					err,
-					c.wantErr,
-				)
-			}
+			testPanicker(
+				t,
+				c.wantErr,
+				func() { root.WrapPathHandlerOf("*", c.path, mws...) },
+			)
 
 			if !c.wantErr {
 				strb.Reset()
@@ -3834,11 +3455,7 @@ func TestResourceBasse_WrapPathHandlerOf(t *testing.T) {
 				root.ServeHTTP(w, r)
 				var str = strb.String()
 				if str != "ab" {
-					t.Fatalf(
-						"ResourceBase.WrapPathHandlerOf() gotStr = %s, want = %s",
-						str,
-						"ab",
-					)
+					t.Fatalf(fnName+" gotStr = %s, want = %s", str, "ab")
 				}
 
 				strb.Reset()
@@ -3847,11 +3464,7 @@ func TestResourceBasse_WrapPathHandlerOf(t *testing.T) {
 
 				str = strb.String()
 				if str != "abab" {
-					t.Fatalf(
-						"ResourceBase.WrapPathHandlerOf() gotStr = %s, want = %s",
-						str,
-						"abab",
-					)
+					t.Fatalf(fnName, " gotStr = %s, want = %s", str, "abab")
 				}
 
 				strb.Reset()
@@ -3860,11 +3473,7 @@ func TestResourceBasse_WrapPathHandlerOf(t *testing.T) {
 
 				str = strb.String()
 				if str != "ab" {
-					t.Fatalf(
-						"ResourceBase.WrapPathHandlerOf() gotStr = %s, want = %s",
-						str,
-						"abab",
-					)
+					t.Fatalf(fnName, " gotStr = %s, want = %s", str, "abab")
 				}
 			}
 		})
@@ -3887,22 +3496,15 @@ func TestResourceBase_SetSharedDataForSubtree(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		var _, err = root.Resource(c.path)
-		if err != nil {
-			t.Fatal(err)
-		}
+		root.Resource(c.path)
 	}
 
 	root.SetSharedDataForSubtree(data)
 
 	{
-		var r, err = root.RegisteredResource("https:///{r01}/r12")
-		if err != nil {
-			t.Fatal(err)
-		}
-
+		var r = root.RegisteredResource("https:///{r01}/r12")
 		if r == nil {
-			t.Fatal(ErrNonExistentResource)
+			t.Fatal(errNonExistentResource)
 		}
 
 		var retrievedData = r.SharedData()
@@ -3917,13 +3519,9 @@ func TestResourceBase_SetSharedDataForSubtree(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			var r, err = root.RegisteredResource(c.path)
-			if err != nil {
-				t.Fatal(err)
-			}
-
+			var r = root.RegisteredResource(c.path)
 			if r == nil {
-				t.Fatal(ErrNonExistentResource)
+				t.Fatal(errNonExistentResource)
 			}
 
 			if r.SharedData() != data {
@@ -3953,10 +3551,7 @@ func TestResourceBase_SetConfigurationForSubtree(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		var _, err = root.Resource(c.path)
-		if err != nil {
-			t.Fatal(err)
-		}
+		root.Resource(c.path)
 	}
 
 	root.SetConfigurationForSubtree(config)
@@ -3969,13 +3564,9 @@ func TestResourceBase_SetConfigurationForSubtree(t *testing.T) {
 	config.LeniencyOnUncleanPath = true
 
 	{
-		var r, err = root.RegisteredResource("https:///{r01}/r12")
-		if err != nil {
-			t.Fatal(err)
-		}
-
+		var r = root.RegisteredResource("https:///{r01}/r12")
 		if r == nil {
-			t.Fatal(ErrNonExistentResource)
+			t.Fatal(errNonExistentResource)
 		}
 
 		var gotConfig = r.Configuration()
@@ -3990,13 +3581,9 @@ func TestResourceBase_SetConfigurationForSubtree(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			var r, err = root.RegisteredResource(c.pathToCheck)
-			if err != nil {
-				t.Fatal(err)
-			}
-
+			var r = root.RegisteredResource(c.pathToCheck)
 			if r == nil {
-				t.Fatal(ErrNonExistentResource)
+				t.Fatal(errNonExistentResource)
 			}
 
 			if r.Configuration() != config {
@@ -4047,12 +3634,8 @@ func TestResourceBase_WrapSubtreeRequestPassers(t *testing.T) {
 		},
 	}
 
-	var err error
 	for _, c := range cases {
-		_, err = root.Resource(c.urlTmpl)
-		if err != nil {
-			t.Fatal(err)
-		}
+		root.Resource(c.urlTmpl)
 	}
 
 	var strb = strings.Builder{}
@@ -4079,13 +3662,11 @@ func TestResourceBase_WrapSubtreeRequestPassers(t *testing.T) {
 		},
 	}
 
-	err = root.WrapSubtreeRequestPassers(mws...)
-	if err != nil {
-		t.Fatalf(
-			"ResourceBase.WrapSubtreeRequestPassers() err = %v, want nil",
-			err,
-		)
-	}
+	testPanicker(
+		t,
+		false,
+		func() { root.WrapSubtreeRequestPassers(mws...) },
+	)
 
 	for _, c := range cases {
 		var rr = httptest.NewRecorder()
@@ -4106,6 +3687,10 @@ func TestResourceBase_WrapSubtreeRequestPassers(t *testing.T) {
 
 func TestResourceBase_WrapSubtreeRequestHandlers(t *testing.T) {
 	var root = NewDormantResource("/")
+	var handler = func(w http.ResponseWriter, r *http.Request, _ *Args) bool {
+		return true
+	}
+
 	var cases = []struct {
 		name, urlTmpl, requestURL string
 		wantErr                   bool
@@ -4160,20 +3745,9 @@ func TestResourceBase_WrapSubtreeRequestHandlers(t *testing.T) {
 		},
 	}
 
-	var err error
 	for _, c := range cases {
 		if !c.wantErr {
-			err = root.SetPathHandlerFor(
-				"get",
-				c.urlTmpl,
-				func(http.ResponseWriter, *http.Request, *Args) bool {
-					return true
-				},
-			)
-
-			if err != nil {
-				t.Fatal(err)
-			}
+			root.SetPathHandlerFor("get", c.urlTmpl, handler)
 		}
 	}
 
@@ -4201,13 +3775,11 @@ func TestResourceBase_WrapSubtreeRequestHandlers(t *testing.T) {
 		},
 	}
 
-	err = root.WrapSubtreeRequestHandlers(mws...)
-	if err != nil {
-		t.Fatalf(
-			"ResourceBase.WrapSubtreeRequestHandlers() err = %v, want nil",
-			err,
-		)
-	}
+	testPanicker(
+		t,
+		false,
+		func() { root.WrapSubtreeRequestHandlers(mws...) },
+	)
 
 	for _, c := range cases {
 		var rr = httptest.NewRecorder()
@@ -4227,17 +3799,14 @@ func TestResourceBase_WrapSubtreeRequestHandlers(t *testing.T) {
 
 func TestResourceBase_WrapSubtreeHandlersOf(t *testing.T) {
 	var h = NewDormantHost("http://example.com")
+	var r00 = h.Resource("https:///r00")
+	var r01 = h.Resource("r01")
 
-	var r00, err = h.Resource("https:///r00")
-	if err != nil {
-		t.Fatal(err)
+	var handler = func(w http.ResponseWriter, r *http.Request, _ *Args) bool {
+		return true
 	}
 
-	var r01 *Resource
-	r01, err = h.Resource("r01")
-	if err != nil {
-		t.Fatal(err)
-	}
+	var fnName = "ResourceBase.WrapSubtreeHandlersOf()"
 
 	var cases = []struct{ name, urlTmpl, requestURL string }{
 		// r00
@@ -4277,27 +3846,9 @@ func TestResourceBase_WrapSubtreeHandlersOf(t *testing.T) {
 
 	var impl = &implType{}
 	for _, c := range cases {
-		var r *Resource
-		r, err = h.Resource(c.urlTmpl)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		err = r.SetImplementation(impl)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		err = r.SetHandlerFor(
-			"!",
-			func(http.ResponseWriter, *http.Request, *Args) bool {
-				return true
-			},
-		)
-
-		if err != nil {
-			t.Fatal(err)
-		}
+		var r = h.Resource(c.urlTmpl)
+		r.SetImplementation(impl)
+		r.SetHandlerFor("!", handler)
 	}
 
 	var strb = strings.Builder{}
@@ -4324,15 +3875,17 @@ func TestResourceBase_WrapSubtreeHandlersOf(t *testing.T) {
 		},
 	}
 
-	err = r00.WrapSubtreeHandlersOf("get custom", mws...)
-	if err != nil {
-		t.Fatalf("ResourceBase.WrapSubtreeHandlersOf() err = %v, want nil", err)
-	}
+	testPanicker(
+		t,
+		false,
+		func() { r00.WrapSubtreeHandlersOf("get custom", mws...) },
+	)
 
-	err = r00.WrapSubtreeHandlersOf("*", mws...)
-	if err != nil {
-		t.Fatalf("ResourceBase.WrapSubtreeHandlersOf() err = %v, want nil", err)
-	}
+	testPanicker(
+		t,
+		false,
+		func() { r00.WrapSubtreeHandlersOf("*", mws...) },
+	)
 
 	for i := 1; i < 3; i++ {
 		t.Run(cases[i].name, func(t *testing.T) {
@@ -4343,7 +3896,7 @@ func TestResourceBase_WrapSubtreeHandlersOf(t *testing.T) {
 			h.ServeHTTP(rr, r)
 			if strb.String() != "ABAB" {
 				t.Fatalf(
-					"ResourceBase.WrapSubtreeHandlersOf() has failed to wrap the GET method's handler",
+					fnName + " has failed to wrap the GET method's handler",
 				)
 			}
 
@@ -4353,7 +3906,7 @@ func TestResourceBase_WrapSubtreeHandlersOf(t *testing.T) {
 			h.ServeHTTP(rr, r)
 			if strb.String() != "ABAB" {
 				t.Fatalf(
-					"ResourceBase.WrapSubtreeHandlersOf() has failed to wrap the CUSTOM method's handler",
+					fnName + " has failed to wrap the CUSTOM method's handler",
 				)
 			}
 
@@ -4363,7 +3916,7 @@ func TestResourceBase_WrapSubtreeHandlersOf(t *testing.T) {
 			h.ServeHTTP(rr, r)
 			if strb.String() != "AB" {
 				t.Fatalf(
-					"ResourceBase.WrapSubtreeHandlersOf() has failed to wrap the POST method's handler",
+					fnName + " has failed to wrap the POST method's handler",
 				)
 			}
 
@@ -4373,21 +3926,23 @@ func TestResourceBase_WrapSubtreeHandlersOf(t *testing.T) {
 			h.ServeHTTP(rr, r)
 			if strb.Len() != 0 {
 				t.Fatalf(
-					"ResourceBase.WrapSubtreeHandlersOf() has wrapped the not allowed methods' handler",
+					fnName + " has wrapped the not allowed methods' handler",
 				)
 			}
 		})
 	}
 
-	err = r01.WrapSubtreeHandlersOf("post", mws...)
-	if err != nil {
-		t.Fatalf("ResourceBase.WrapSubtreeHandlersOf() err = %v, want nil", err)
-	}
+	testPanicker(
+		t,
+		false,
+		func() { r01.WrapSubtreeHandlersOf("post", mws...) },
+	)
 
-	err = r01.WrapSubtreeHandlersOf("!", mws...)
-	if err != nil {
-		t.Fatalf("ResourceBase.WrapSubtreeHandlersOf() err = %v, want nil", err)
-	}
+	testPanicker(
+		t,
+		false,
+		func() { r01.WrapSubtreeHandlersOf("!", mws...) },
+	)
 
 	for i := 4; i < 6; i++ {
 		t.Run(cases[i].name, func(t *testing.T) {
@@ -4398,7 +3953,7 @@ func TestResourceBase_WrapSubtreeHandlersOf(t *testing.T) {
 			h.ServeHTTP(rr, r)
 			if strb.Len() != 0 {
 				t.Fatalf(
-					"ResourceBase.WrapSubtreeHandlersOf() has wrappped the unspecified GET method's handler",
+					fnName + " has wrappped the unspecified GET method's handler",
 				)
 			}
 
@@ -4407,7 +3962,7 @@ func TestResourceBase_WrapSubtreeHandlersOf(t *testing.T) {
 			h.ServeHTTP(rr, r)
 			if strb.Len() != 0 {
 				t.Fatalf(
-					"ResourceBase.WrapSubtreeHandlersOf() has wrappped the unspecified CUSTOM method's handler",
+					fnName + " has wrappped the unspecified CUSTOM method's handler",
 				)
 			}
 
@@ -4416,7 +3971,7 @@ func TestResourceBase_WrapSubtreeHandlersOf(t *testing.T) {
 			h.ServeHTTP(rr, r)
 			if strb.String() != "AB" {
 				t.Fatalf(
-					"ResourceBase.WrapSubtreeHandlersOf() has failed to wrap the POST method's handler",
+					fnName + " has failed to wrap the POST method's handler",
 				)
 			}
 
@@ -4426,7 +3981,7 @@ func TestResourceBase_WrapSubtreeHandlersOf(t *testing.T) {
 			h.ServeHTTP(rr, r)
 			if strb.String() != "AB" {
 				t.Fatalf(
-					"ResourceBase.WrapSubtreeHandlersOf() has failed to wrap the not allowed methods' handler",
+					fnName + " has failed to wrap the not allowed methods' handler",
 				)
 			}
 		})
@@ -4435,39 +3990,22 @@ func TestResourceBase_WrapSubtreeHandlersOf(t *testing.T) {
 
 func TestResourceBase__Responders(t *testing.T) {
 	var (
-		r   = NewDormantResource("/")
-		rs  = make([]*Resource, 5)
-		err error
+		r  = NewDormantResource("/")
+		rs = make([]*Resource, 5)
 	)
 
-	rs[0], err = r.Resource("static1")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	rs[1], err = r.Resource("static2")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	rs[2], err = r.Resource("{vName1:pattern1}")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	rs[3], err = r.Resource("{vName2:pattern2}")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	rs[4], err = r.Resource("{wildcard}")
-	if err != nil {
-		t.Fatal(err)
-	}
+	rs[0] = r.Resource("static1")
+	rs[1] = r.Resource("static2")
+	rs[2] = r.Resource("{vName1:pattern1}")
+	rs[3] = r.Resource("{vName2:pattern2}")
+	rs[4] = r.Resource("{wildcard}")
 
 	var gotRs = r._Responders()
 	if len(gotRs) != 5 {
-		t.Fatalf("ResourceBase._Resources(): len(got) = %d, want 5", len(gotRs))
+		t.Fatalf(
+			"ResourceBase._Responders(): len(got) = %d, want 5",
+			len(gotRs),
+		)
 	}
 
 	for _, r := range rs {
@@ -4481,7 +4019,7 @@ func TestResourceBase__Responders(t *testing.T) {
 
 		if !found {
 			t.Fatalf(
-				"ResourceBase._Resources() failed to return resource %q",
+				"ResourceBase._Responders() failed to return resource %q",
 				r.Template().String(),
 			)
 		}
@@ -4516,10 +4054,7 @@ func TestResourceBase_requestHandlerBase(t *testing.T) {
 func addRequestHandlerSubresources(t *testing.T, r _Responder, i, limit int) {
 	t.Helper()
 
-	var rr *Resource
-	var err error
-
-	if err = r.SetHandlerFor(
+	r.SetHandlerFor(
 		"get post custom",
 		func(w http.ResponseWriter, r *http.Request, args *Args) bool {
 			var hasValue, ok = args.ResponderSharedData().(bool)
@@ -4560,17 +4095,13 @@ func addRequestHandlerSubresources(t *testing.T, r _Responder, i, limit int) {
 			w.Write([]byte(strb.String()))
 			return true
 		},
-	); err != nil {
-		t.Fatal(err)
-	}
+	)
 
+	var rr *Resource
 	var istr = strconv.Itoa(i)
-	if i++; i <= limit {
-		rr, err = r.Resource("sr" + istr + "1")
-		if err != nil {
-			t.Fatal(err)
-		}
 
+	if i++; i <= limit {
+		rr = r.Resource("sr" + istr + "1")
 		addRequestHandlerSubresources(t, rr, i, limit)
 
 		rr = NewDormantResourceUsingConfig(
@@ -4578,27 +4109,18 @@ func addRequestHandlerSubresources(t *testing.T, r _Responder, i, limit int) {
 			Config{SubtreeHandler: true},
 		)
 
-		if err = r.RegisterResource(rr); err != nil {
-			t.Fatal(err)
-		}
-
+		r.RegisterResource(rr)
 		addRequestHandlerSubresources(t, rr, i, limit)
 
 		rr = NewDormantResource("https:///sr" + istr + "3")
-		if err = r.RegisterResource(rr); err != nil {
-			t.Fatal(err)
-		}
-
+		r.RegisterResource(rr)
 		addRequestHandlerSubresources(t, rr, i, limit)
 
 		rr = NewDormantResourceUsingConfig("https:///sr"+istr+"4/", Config{
 			SubtreeHandler: true,
 		})
 
-		if err = r.RegisterResource(rr); err != nil {
-			t.Fatal(err)
-		}
-
+		r.RegisterResource(rr)
 		addRequestHandlerSubresources(t, rr, i, limit)
 
 		rr = NewDormantResourceUsingConfig(
@@ -4608,10 +4130,7 @@ func addRequestHandlerSubresources(t *testing.T, r _Responder, i, limit int) {
 
 		rr.SetSharedData(true)
 
-		if err = r.RegisterResource(rr); err != nil {
-			t.Fatal(err)
-		}
-
+		r.RegisterResource(rr)
 		addRequestHandlerSubresources(t, rr, i, limit)
 
 		rr = NewDormantResourceUsingConfig(
@@ -4626,10 +4145,7 @@ func addRequestHandlerSubresources(t *testing.T, r _Responder, i, limit int) {
 
 		rr.SetSharedData(true)
 
-		if err = r.RegisterResource(rr); err != nil {
-			t.Fatal(err)
-		}
-
+		r.RegisterResource(rr)
 		addRequestHandlerSubresources(t, rr, i, limit)
 
 		rr = NewDormantResourceUsingConfig(
@@ -4639,10 +4155,7 @@ func addRequestHandlerSubresources(t *testing.T, r _Responder, i, limit int) {
 
 		rr.SetSharedData(true)
 
-		if err = r.RegisterResource(rr); err != nil {
-			t.Fatal(err)
-		}
-
+		r.RegisterResource(rr)
 		addRequestHandlerSubresources(t, rr, i, limit)
 
 		rr = NewDormantResourceUsingConfig(
@@ -4652,11 +4165,7 @@ func addRequestHandlerSubresources(t *testing.T, r _Responder, i, limit int) {
 		)
 
 		rr.SetSharedData(true)
-
-		if err = r.RegisterResource(rr); err != nil {
-			t.Fatal(err)
-		}
-
+		r.RegisterResource(rr)
 		addRequestHandlerSubresources(t, rr, i, limit)
 
 		rr = NewDormantResourceUsingConfig(
@@ -4669,10 +4178,7 @@ func addRequestHandlerSubresources(t *testing.T, r _Responder, i, limit int) {
 
 		rr.SetSharedData(true)
 
-		if err = r.RegisterResource(rr); err != nil {
-			t.Fatal(err)
-		}
-
+		r.RegisterResource(rr)
 		addRequestHandlerSubresources(t, rr, i, limit)
 
 		rr = NewDormantResourceUsingConfig(
@@ -4687,10 +4193,7 @@ func addRequestHandlerSubresources(t *testing.T, r _Responder, i, limit int) {
 
 		rr.SetSharedData(true)
 
-		if err = r.RegisterResource(rr); err != nil {
-			t.Fatal(err)
-		}
-
+		r.RegisterResource(rr)
 		addRequestHandlerSubresources(t, rr, i, limit)
 
 		rr = NewDormantResourceUsingConfig(
@@ -4704,10 +4207,7 @@ func addRequestHandlerSubresources(t *testing.T, r _Responder, i, limit int) {
 
 		rr.SetSharedData(true)
 
-		if err = r.RegisterResource(rr); err != nil {
-			t.Fatal(err)
-		}
-
+		r.RegisterResource(rr)
 		addRequestHandlerSubresources(t, rr, i, limit)
 	}
 }
@@ -7424,7 +6924,7 @@ func TestResourceBase_ServeHTTP(t *testing.T) {
 		})
 	}
 
-	var err = resource.WrapSubtreeHandlersOf(
+	resource.WrapSubtreeHandlersOf(
 		"custom",
 		func(next Handler) Handler {
 			return func(
@@ -7450,7 +6950,7 @@ func TestResourceBase_ServeHTTP(t *testing.T) {
 		},
 	)
 
-	err = resource.WrapSubtreeHandlersOf(
+	resource.WrapSubtreeHandlersOf(
 		"!",
 		func(next Handler) Handler {
 			return func(
@@ -7476,41 +6976,19 @@ func TestResourceBase_ServeHTTP(t *testing.T) {
 		},
 	)
 
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	var rs []*Resource
 	var rr *Resource
-	rr, err = resource.RegisteredResource("sr01")
-	if err != nil {
-		t.Fatal(err)
-	}
 
+	rr = resource.RegisteredResource("sr01")
 	rs = append(rs, rr)
 
-	rr, err = resource.RegisteredResource("sr02")
-	if err != nil {
-		t.Fatal(err)
-	}
-
+	rr = resource.RegisteredResource("sr02")
 	rs = append(rs, rr)
 
-	rr, err = resource.RegisteredResource(
-		"https:///$pr02:{name0:pr02}:{id0:\\d?}",
-	)
-
-	if err != nil {
-		t.Fatal(err)
-	}
-
+	rr = resource.RegisteredResource("https:///$pr02:{name0:pr02}:{id0:\\d?}")
 	rs = append(rs, rr)
 
-	rr, err = resource.RegisteredResource("https:///{wr0}")
-	if err != nil {
-		t.Fatal(err)
-	}
-
+	rr = resource.RegisteredResource("https:///{wr0}")
 	rs = append(rs, rr)
 
 	cases = []_RequestRoutingCase{

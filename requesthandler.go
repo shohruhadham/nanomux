@@ -261,18 +261,18 @@ func (rhb *_RequestHandlerBase) setHandlerFor(
 	h Handler,
 ) error {
 	if h == nil {
-		return newErr("%w", ErrNilArgument)
+		return newErr("%w", errNilArgument)
 	}
 
 	var ms = toUpperSplitByCommaSpace(methods)
 	var lms = len(ms)
 	if lms == 0 {
-		return newErr("%w", ErrNoHTTPMethod)
+		return newErr("%w", errNoHTTPMethod)
 	}
 
 	if lms == 1 && ms[0] == "!" {
 		if len(rhb.mhPairs) == 0 {
-			return newErr("%w", ErrNoHandlerExists)
+			return newErr("%w", errNoHandlerExists)
 		}
 
 		rhb.notAllowedHTTPMethodsHandler = h
@@ -326,17 +326,17 @@ func (rhb *_RequestHandlerBase) wrapHandlerOf(
 	mws ...Middleware,
 ) error {
 	if len(mws) == 0 {
-		return newErr("%w", ErrNoMiddleware)
+		return newErr("%w", errNoMiddleware)
 	}
 
 	if len(rhb.mhPairs) == 0 {
-		return newErr("%w", ErrNoHandlerExists)
+		return newErr("%w", errNoHandlerExists)
 	}
 
 	var ms = toUpperSplitByCommaSpace(methods)
 	var lms = len(ms)
 	if lms == 0 {
-		return newErr("%w", ErrNoHTTPMethod)
+		return newErr("%w", errNoHTTPMethod)
 	}
 
 	if lms == 1 {
@@ -344,7 +344,7 @@ func (rhb *_RequestHandlerBase) wrapHandlerOf(
 			rhb.notAllowedHTTPMethodsHandler = rhb.handlerOf("!")
 			for i, mw := range mws {
 				if mw == nil {
-					return newErr("%w at index %d", ErrNoMiddleware, i)
+					return newErr("%w at index %d", errNoMiddleware, i)
 				}
 
 				rhb.notAllowedHTTPMethodsHandler = mw(
@@ -357,7 +357,7 @@ func (rhb *_RequestHandlerBase) wrapHandlerOf(
 			for _, mhp := range rhb.mhPairs {
 				for i, mw := range mws {
 					if mw == nil {
-						return newErr("%w at index %d", ErrNoMiddleware, i)
+						return newErr("%w at index %d", errNoMiddleware, i)
 					}
 
 					mhp.handler = mw(mhp.handler)
@@ -373,14 +373,14 @@ func (rhb *_RequestHandlerBase) wrapHandlerOf(
 		if _, h := rhb.mhPairs.get(m); h != nil {
 			for i, mw := range mws {
 				if mw == nil {
-					return newErr("%w at index %d", ErrNoMiddleware, i)
+					return newErr("%w at index %d", errNoMiddleware, i)
 				}
 
 				h = mw(h)
 				rhb.mhPairs.set(m, h)
 			}
 		} else {
-			return newErr("%w for the method %q", ErrNoHandlerExists, m)
+			return newErr("%w for the method %q", errNoHandlerExists, m)
 		}
 	}
 
@@ -482,7 +482,7 @@ var permanentRedirectCode = http.StatusPermanentRedirect
 func SetPermanentRedirectCode(code int) error {
 	if code != http.StatusMovedPermanently &&
 		code != http.StatusPermanentRedirect {
-		return newErr("%w", ErrConflictingStatusCode)
+		return newErr("%w", errConflictingStatusCode)
 	}
 
 	permanentRedirectCode = code
@@ -532,7 +532,7 @@ var permanentRedirectHandler = func(
 // without, or vice versa.
 func SetPermanentRedirectHandler(fn RedirectHandler) error {
 	if fn == nil {
-		return newErr("%w", ErrNilArgument)
+		return newErr("%w", errNilArgument)
 	}
 
 	permanentRedirectHandler = fn
@@ -552,7 +552,7 @@ func WrapPermanentRedirectHandler(
 	mw func(RedirectHandler) RedirectHandler,
 ) error {
 	if mw == nil {
-		return newErr("%w", ErrNilArgument)
+		return newErr("%w", errNilArgument)
 	}
 
 	permanentRedirectHandler = mw(permanentRedirectHandler)
@@ -574,7 +574,7 @@ var notFoundResourceHandler Handler = func(
 // not-found resources.
 func SetHandlerForNotFoundResource(handler Handler) error {
 	if handler == nil {
-		return newErr("%w", ErrNilArgument)
+		return newErr("%w", errNilArgument)
 	}
 
 	notFoundResourceHandler = handler
@@ -590,7 +590,7 @@ func HandlerOfNotFoundResource() Handler {
 // with the passed middleware.
 func WrapHandlerOfNotFoundResource(mw Middleware) error {
 	if mw == nil {
-		return newErr("%w", ErrNilArgument)
+		return newErr("%w", errNilArgument)
 	}
 
 	notFoundResourceHandler = mw(notFoundResourceHandler)
