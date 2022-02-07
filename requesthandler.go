@@ -171,8 +171,8 @@ func (mhps *_MethodHandlerPairs) set(method string, handler Handler) {
 // provides them with the functionality to manage them. It also handles the
 // HTTP request by calling the responsible handler of the request's HTTP method.
 type _RequestHandlerBase struct {
-	mhPairs                      _MethodHandlerPairs
-	notAllowedHTTPMethodsHandler Handler
+	mhPairs                     _MethodHandlerPairs
+	notAllowedHTTPMethodHandler Handler
 }
 
 // -------------------------
@@ -275,7 +275,7 @@ func (rhb *_RequestHandlerBase) setHandlerFor(
 			return newErr("%w", errNoHandlerExists)
 		}
 
-		rhb.notAllowedHTTPMethodsHandler = h
+		rhb.notAllowedHTTPMethodHandler = h
 		return nil
 	}
 
@@ -306,11 +306,11 @@ func (rhb *_RequestHandlerBase) handlerOf(method string) Handler {
 	}
 
 	if ms[0] == "!" {
-		if rhb.notAllowedHTTPMethodsHandler != nil {
-			return rhb.notAllowedHTTPMethodsHandler
+		if rhb.notAllowedHTTPMethodHandler != nil {
+			return rhb.notAllowedHTTPMethodHandler
 		}
 
-		return rhb.handleNotAllowedHTTPMethods
+		return rhb.handleNotAllowedHTTPMethod
 	}
 
 	if rhb.mhPairs != nil {
@@ -341,14 +341,14 @@ func (rhb *_RequestHandlerBase) wrapHandlerOf(
 
 	if lms == 1 {
 		if ms[0] == "!" {
-			rhb.notAllowedHTTPMethodsHandler = rhb.handlerOf("!")
+			rhb.notAllowedHTTPMethodHandler = rhb.handlerOf("!")
 			for i, mw := range mws {
 				if mw == nil {
 					return newErr("%w at index %d", errNoMiddleware, i)
 				}
 
-				rhb.notAllowedHTTPMethodsHandler = mw(
-					rhb.notAllowedHTTPMethodsHandler,
+				rhb.notAllowedHTTPMethodHandler = mw(
+					rhb.notAllowedHTTPMethodHandler,
 				)
 			}
 
@@ -402,11 +402,11 @@ func (rhb *_RequestHandlerBase) handleRequest(
 		return handler(w, r, args)
 	}
 
-	if rhb.notAllowedHTTPMethodsHandler != nil {
-		return rhb.notAllowedHTTPMethodsHandler(w, r, args)
+	if rhb.notAllowedHTTPMethodHandler != nil {
+		return rhb.notAllowedHTTPMethodHandler(w, r, args)
 	}
 
-	return rhb.handleNotAllowedHTTPMethods(w, r, args)
+	return rhb.handleNotAllowedHTTPMethod(w, r, args)
 }
 
 func (rhb *_RequestHandlerBase) handleOptionsHTTPMethod(
@@ -422,7 +422,7 @@ func (rhb *_RequestHandlerBase) handleOptionsHTTPMethod(
 	return true
 }
 
-func (rhb *_RequestHandlerBase) handleNotAllowedHTTPMethods(
+func (rhb *_RequestHandlerBase) handleNotAllowedHTTPMethod(
 	w http.ResponseWriter,
 	r *http.Request,
 	_ *Args,
@@ -471,32 +471,35 @@ func (rhb *_RequestHandlerBase) ServeHTTP(
 
 var permanentRedirectCode = http.StatusPermanentRedirect
 
-// SetPermanentRedirectCode sets the status code that will be used to redirect
-// requests. Requests can be redirected to an "https" from an "http", to a URL
-// with a trailing slash from one without, or vice versa. It's either 301
+// SetPermanentRedirectCode sets the status code for permanent redirects.
+// It's used to redirect requests to an "https" from an "http", to a URL with
+// a trailing slash from one without, or vice versa. The code is either 301
 // (moved permanently) or 308 (permanent redirect). The difference between the
 // 301 and 308 status codes is that with the 301 status code, the request's
 // HTTP method may change. For example, some clients change the POST HTTP
 // method to GET. The 308 status code does not allow this behavior. By default,
 // the 308 status code is sent.
-func SetPermanentRedirectCode(code int) error {
+//
+// Responders may have their own permanent redirect status code set.
+func SetPermanentRedirectCode(code int) {
 	if code != http.StatusMovedPermanently &&
 		code != http.StatusPermanentRedirect {
-		return newErr("%w", errConflictingStatusCode)
+		panicWithErr("%w", errConflictingStatusCode)
 	}
 
 	permanentRedirectCode = code
-	return nil
 }
 
-// PermanentRedirectCode returns the status code that is sent when redirecting
-// requests. Requests can be redirected to an "https" from an "http", to a URL
-// with a trailing slash from one without, or vice versa. It's either 301
-// (moved permanently) or 308 (permanent redirect). The difference between the
-// 301 and 308 status codes is that with the 301 status code, the request's
-// HTTP method may change. For example, some clients change the POST HTTP
-// method to GET. The 308 status code does not allow this behavior. By default,
-// the 308 status code is sent.
+// PermanentRedirectCode returns the status code sent to redirect requests
+// permanently. The code is used to redirect requests to an "https" from an
+// "http", to a URL with a trailing slash from one without, or vice versa.
+// It's either 301 (moved permanently) or 308 (permanent redirect).
+// The difference between the 301 and 308 status codes is that with the 301
+// status code, the request's HTTP method may change. For example, some
+// clients change the POST HTTP method to GET. The 308 status code does
+// not allow this behavior. By default, the 308 status code is sent.
+//
+// Responders may have their own permanent redirect status code.
 func PermanentRedirectCode() int {
 	return permanentRedirectCode
 }
@@ -504,8 +507,6 @@ func PermanentRedirectCode() int {
 // -------------------------
 
 // RedirectHandler is the type of handler that is used for request redirecting.
-// This type of handler is used to redirect requests to an "https" from an
-// "http", to a URL with a trailing slash from a URL without, or vice versa.
 type RedirectHandler func(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -514,49 +515,66 @@ type RedirectHandler func(
 	args *Args,
 ) bool
 
-// permanentRedirectHandler is the default redirect handler.
-var permanentRedirectHandler = func(
+// commonRedirectHandler is the default redirect handler.
+var commonRedirectHandler = func(
 	w http.ResponseWriter,
 	r *http.Request,
 	url string,
 	code int,
 	_ *Args,
 ) bool {
+	w.Header()["Content-Type"] = nil
 	http.Redirect(w, r, url, code)
 	return true
 }
 
-// SetPermanentRedirectHandler can be used to set a custom implementation
-// of the redirect handler function. The handler is used to redirect requests
-// to an "https" from an "http", to a URL with a trailing slash from a URL
-// without, or vice versa.
-func SetPermanentRedirectHandler(fn RedirectHandler) error {
+// SetCommonRedirectHandler can be used to set a custom implementation of the
+// common redirect handler function. The handler is mostly used to redirect
+// requests to an "https" from an "http", to a URL with a trailing slash from
+// a URL without, or vice versa. It's also used when responders have been
+// instructed to redirect requests to a new location.
+//
+// Responders may have their own redirect handler set.
+func SetCommonRedirectHandler(fn RedirectHandler) {
 	if fn == nil {
-		return newErr("%w", errNilArgument)
+		panicWithErr("%w", errNilArgument)
 	}
 
-	permanentRedirectHandler = fn
-	return nil
+	commonRedirectHandler = fn
 }
 
-// PermanentRedirectHandler returns the redirect handler function. The handler
-// is used to redirect requests to an "https" from an "http", to a URL with a
-// trailing slash from one without, or vice versa.
-func PermanentRedirectHandler() RedirectHandler {
-	return permanentRedirectHandler
+// CommonRedirectHandler returns the common redirect handler function. The
+// handler is mostly used to redirect requests to an "https" from an "http",
+// to a URL with a trailing slash from one without, or vice versa. It is also
+// used when responders have been instructed to redirect requests to a new
+// location.
+func CommonRedirectHandler() RedirectHandler {
+	return commonRedirectHandler
 }
 
-// WrapPermanentRedirectHandler is used to wrap the permanent redirect
-// handler with the middleware.
-func WrapPermanentRedirectHandler(
-	mw func(RedirectHandler) RedirectHandler,
-) error {
-	if mw == nil {
-		return newErr("%w", errNilArgument)
+// WrapCommonRedirectHandler is used to wrap the common redirect handler
+// with middlewares in their passed order. This function can be used when the
+// handler's default implementation is sufficient and only the response headers
+// need to be changed, or other additional functionality is required.
+//
+// The redirect handler is mostly used to redirect requests to an "https" from
+// an "http", to a URL with a trailing slash from a URL without, or vice versa.
+// It's also used when responders have been instructed to redirect requests to
+// a new location.
+func WrapCommonRedirectHandler(
+	mws ...func(RedirectHandler) RedirectHandler,
+) {
+	if len(mws) == 0 {
+		panicWithErr("%w", errNoMiddleware)
 	}
 
-	permanentRedirectHandler = mw(permanentRedirectHandler)
-	return nil
+	for i, mw := range mws {
+		if mw == nil {
+			panicWithErr("%w at index %d", errNilArgument, i)
+		}
+
+		commonRedirectHandler = mw(commonRedirectHandler)
+	}
 }
 
 // --------------------------------------------------
@@ -570,29 +588,35 @@ var notFoundResourceHandler Handler = func(
 	return true
 }
 
-// SetHandlerForNotFoundResource can be used to set a custom handler for
+// SetHandlerForNotFoundResources can be used to set a custom handler for
 // not-found resources.
-func SetHandlerForNotFoundResource(handler Handler) error {
+func SetHandlerForNotFoundResources(handler Handler) {
 	if handler == nil {
-		return newErr("%w", errNilArgument)
+		panicWithErr("%w", errNilArgument)
 	}
 
 	notFoundResourceHandler = handler
-	return nil
 }
 
-// HandlerOfNotFoundResource returns the handler of not-found resources.
-func HandlerOfNotFoundResource() Handler {
+// HandlerOfNotFoundResources returns the handler of not-found resources.
+func HandlerOfNotFoundResources() Handler {
 	return notFoundResourceHandler
 }
 
-// WrapHandlerOfNotFoundResource wraps the handler of not-found resources
-// with the passed middleware.
-func WrapHandlerOfNotFoundResource(mw Middleware) error {
-	if mw == nil {
-		return newErr("%w", errNilArgument)
+// WrapHandlerOfNotFoundResources wraps the handler of not-found resources
+// with middlewares in their passed order. This function can be used when the
+// handler's default implementation is sufficient but additional functionality
+// is required.
+func WrapHandlerOfNotFoundResources(mws ...Middleware) {
+	if len(mws) == 0 {
+		panicWithErr("%w", errNoMiddleware)
 	}
 
-	notFoundResourceHandler = mw(notFoundResourceHandler)
-	return nil
+	for i, mw := range mws {
+		if mw == nil {
+			panicWithErr("%w at index %d", errNilArgument, i)
+		}
+
+		notFoundResourceHandler = mw(notFoundResourceHandler)
+	}
 }

@@ -32,6 +32,7 @@ func createDormantHost(tmpl *Template) (*Host, error) {
 	var h = &Host{}
 	h.derived = h
 	h.tmpl = tmpl
+	h.requestReceiver = h.handleOrPassRequest
 	h.requestPasser = h.passRequest
 	return h, nil
 }
@@ -84,6 +85,7 @@ func createHost(tmplStr string, impl Impl, config *Config) (*Host, error) {
 
 	h.derived = h
 	h.tmpl = tmpl
+	h.requestReceiver = h.handleOrPassRequest
 	h.requestPasser = h.passRequest
 	return h, nil
 }
@@ -222,9 +224,9 @@ func NewHostUsingConfig(
 // ServeHTTP is the Host's implementation of the http.Handler interface.
 // It is called when the host is used directly.
 func (hb *Host) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	var host = r.URL.Host
+	var host = r.Host
 	if host == "" {
-		host = r.Host
+		host = r.URL.Host
 	}
 
 	var args = getArgs(r.URL, hb.derived)
@@ -243,7 +245,7 @@ func (hb *Host) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		)
 
 		if matched {
-			if !hb.handleOrPassRequest(w, r, args) {
+			if !hb.requestReceiver(w, r, args) {
 				notFoundResourceHandler(w, r, args)
 			}
 
@@ -346,13 +348,16 @@ func (hb *Host) handleOrPassRequest(
 	}
 
 	if newURL != nil {
-		return permanentRedirectHandler(
-			w,
-			r,
-			newURL.String(),
-			permanentRedirectCode,
-			args,
-		)
+		var prc = permanentRedirectCode
+		if hb.permanentRedirectCode > 0 {
+			prc = hb.permanentRedirectCode
+		}
+
+		if hb.redirectHandler != nil {
+			return hb.redirectHandler(w, r, newURL.String(), prc, args)
+		}
+
+		return commonRedirectHandler(w, r, newURL.String(), prc, args)
 	}
 
 	return hb.requestHandler(w, r, args)
