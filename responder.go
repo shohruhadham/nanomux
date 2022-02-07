@@ -21,21 +21,19 @@ type _Responder interface {
 
 	Router() *Router
 
+	// -------------------------
+
 	setParent(p _Parent) error
 	parent() _Parent
 
 	respondersInThePath() []_Responder
-
-	SetSharedData(data interface{})
-	SharedData() interface{}
 
 	setConfigFlags(flag _ConfigFlags)
 	updateConfigFlags(cfs _ConfigFlags)
 	configFlags() _ConfigFlags
 	configCompatibility(secure, tslash bool, cfs *_ConfigFlags) error
 
-	SetConfiguration(config Config)
-	Configuration() Config
+	// -------------------------
 
 	IsSubtreeHandler() bool
 	IsSecure() bool
@@ -78,6 +76,8 @@ type _Responder interface {
 	registerResourceUnder(prefixPath string, r *Resource) error
 	keepResourceOrItsChildResources(r *Resource) error
 
+	// -------------------------
+
 	Resource(pathTmplStr string) *Resource
 	ResourceUsingConfig(pathTmplStr string, config Config) *Resource
 	RegisterResource(r *Resource)
@@ -92,6 +92,12 @@ type _Responder interface {
 
 	// -------------------------
 
+	SetSharedData(data interface{})
+	SharedData() interface{}
+
+	SetConfiguration(config Config)
+	Configuration() Config
+
 	SetImplementation(impl Impl)
 	Implementation() Impl
 
@@ -101,6 +107,14 @@ type _Responder interface {
 	WrapRequestPasser(mws ...Middleware)
 	WrapRequestHandler(mws ...Middleware)
 	WrapHandlerOf(methods string, mws ...Middleware)
+
+	SetPermanentRedirectCode(code int)
+	PermanentRedirectCode() int
+	SetRedirectHandler(handler RedirectHandler)
+	RedirectHandler() RedirectHandler
+	WrapRedirectHandler(mws ...func(RedirectHandler) RedirectHandler)
+
+	RedirectTo(url string, redirectCode int)
 
 	// -------------------------
 
@@ -119,6 +133,17 @@ type _Responder interface {
 	WrapRequestPasserAt(pathTmplStr string, mws ...Middleware)
 	WrapRequestHandlerAt(pathTmplStr string, mws ...Middleware)
 	WrapPathHandlerOf(methods, pathTmplStr string, mws ...Middleware)
+
+	SetPermanentRedirectCodeAt(pathTmplStr string, code int)
+	PermanentRedirectCodeAt(pathTmplStr string) int
+	SetRedirectHandlerAt(pathTmplStr string, handler RedirectHandler)
+	RedirectHandlerAt(pathTmplStr string) RedirectHandler
+	WrapRedirectHandlerAt(
+		pathTmplStr string,
+		mws ...func(RedirectHandler) RedirectHandler,
+	)
+
+	RedirectPath(pathTmplStr, url string, redirectCode int)
 
 	// -------------------------
 
@@ -153,8 +178,12 @@ type _ResponderBase struct {
 	wildcardResource *Resource
 
 	*_RequestHandlerBase
-	requestPasser  Handler
-	requestHandler Handler
+	requestReceiver Handler
+	requestPasser   Handler
+	requestHandler  Handler
+
+	permanentRedirectCode int
+	redirectHandler       RedirectHandler
 
 	cfs        _ConfigFlags
 	sharedData interface{}
@@ -247,44 +276,6 @@ func (rb *_ResponderBase) respondersInThePath() []_Responder {
 
 // -------------------------
 
-// SetSharedData sets the data shared between handlers. It's useful when the
-// responder wasn't created from an implementation.
-//
-// Shared data can be retrieved using the *Args arguments ResponderSharedData
-// method. If the shared data can be modified, accessing it must be
-// synchronized with a mutex or some other synchronization method.
-//
-// Example:
-//
-// 	type SharedData struct {
-//		*sync.Mutex // Must be initilized.
-//		X SomeType
-// 	}
-//
-// 	...
-//
-// 	func SomeHandler(
-//		w http.ResponseWriter,
-//		r *http.Request,
-//		args *nanomux.Args,
-//	) {
-// 		var sharedData = args.ResponderSharedData().(*SharedData)
-//		sharedData.Lock()
-//		defer sharedData.Unlock()
-//		sharedData.X = someValue
-//		...
-// 	}
-func (rb *_ResponderBase) SetSharedData(data interface{}) {
-	rb.sharedData = data
-}
-
-// SharedData returns the data set by SetSharedData.
-func (rb *_ResponderBase) SharedData() interface{} {
-	return rb.sharedData
-}
-
-// -------------------------
-
 // setConfigFlags is used to add config flags.
 func (rb *_ResponderBase) setConfigFlags(flag _ConfigFlags) {
 	rb.cfs.set(flag)
@@ -343,16 +334,7 @@ func (rb *_ResponderBase) configCompatibility(
 	return nil
 }
 
-// SetConfiguration sets the config for the responder. If the responder
-// has been configured before, it's reconfigured.
-func (rb *_ResponderBase) SetConfiguration(config Config) {
-	rb.updateConfigFlags(flagActive | config.asFlags())
-}
-
-// Configuration returns the configuration of responder.
-func (rb *_ResponderBase) Configuration() Config {
-	return rb.cfs.asConfig()
-}
+// -------------------------
 
 // IsSubtreeHandler returns true if the responder was configured to
 // be a subtree handler.
@@ -968,6 +950,8 @@ func (rb *_ResponderBase) keepResourceOrItsChildResources(r *Resource) error {
 	)
 }
 
+// -------------------------
+
 // Resource uses the path template to find an existing resource or to create
 // a new one below in the hierarchy of the responder and returns it. If the
 // path template contains prefix segments that don't have existing resources,
@@ -1405,6 +1389,57 @@ func (rb *_ResponderBase) HasAnyChildResources() bool {
 	return false
 }
 
+// --------------------------------------------------
+
+// SetSharedData sets the data shared between handlers. It's useful when the
+// responder wasn't created from an implementation.
+//
+// Shared data can be retrieved using the *Args arguments ResponderSharedData
+// method. If the shared data can be modified, accessing it must be
+// synchronized with a mutex or some other synchronization method.
+//
+// Example:
+//
+// 	type SharedData struct {
+//		*sync.Mutex // Must be initilized.
+//		X SomeType
+// 	}
+//
+// 	...
+//
+// 	func SomeHandler(
+//		w http.ResponseWriter,
+//		r *http.Request,
+//		args *nanomux.Args,
+//	) {
+// 		var sharedData = args.ResponderSharedData().(*SharedData)
+//		sharedData.Lock()
+//		defer sharedData.Unlock()
+//		sharedData.X = someValue
+//		...
+// 	}
+func (rb *_ResponderBase) SetSharedData(data interface{}) {
+	rb.sharedData = data
+}
+
+// SharedData returns the data set by SetSharedData.
+func (rb *_ResponderBase) SharedData() interface{} {
+	return rb.sharedData
+}
+
+// -------------------------
+
+// SetConfiguration sets the config for the responder. If the responder
+// has been configured before, it's reconfigured.
+func (rb *_ResponderBase) SetConfiguration(config Config) {
+	rb.updateConfigFlags(flagActive | config.asFlags())
+}
+
+// Configuration returns the configuration of responder.
+func (rb *_ResponderBase) Configuration() Config {
+	return rb.cfs.asConfig()
+}
+
 // -------------------------
 
 // SetImplementation sets the HTTP method handlers from the passed impl.
@@ -1435,14 +1470,15 @@ func (rb *_ResponderBase) Implementation() Impl {
 
 // -------------------------
 
-// SetHandlerFor sets the handler function as a request handler for the
-// HTTP methods.
+// SetHandlerFor sets the handler function as a request handler for the HTTP
+// methods.
 //
 // The argument methods is a list of HTTP methods separated by a comma and/or
 // space. An exclamation mark "!" denotes the handler of the not allowed HTTP
-// methods and must be used alone. Which means that setting the not allowed
-// HTTP methods' handler must happen in a separate call. Examples of methods:
-// "GET", "PUT, POST", "SHARE, LOCK" or "!".
+// method and must be used alone. That is, setting the not allowed HTTP method
+// handler must happen in a separate call. The responder must have at least one
+// HTTP method handler before the not allowed HTTP method handler is set.
+// Examples of methods: "GET", "PUT, POST", "SHARE, LOCK" or "!".
 func (rb *_ResponderBase) SetHandlerFor(methods string, handler Handler) {
 	if rb._RequestHandlerBase == nil {
 		var rhb = &_RequestHandlerBase{}
@@ -1468,12 +1504,11 @@ func (rb *_ResponderBase) SetHandlerFor(methods string, handler Handler) {
 	}
 }
 
-// HandlerOf returns the HTTP method's handler of the responder. If the
-// handler doesn't exist, nil is returned.
+// HandlerOf returns the HTTP method handler of the responder. If the handler
+// doesn't exist, nil is returned.
 //
 // The argument method is an HTTP method. An exclamation mark "!" can be used
-// to get the handler of HTTP methods that are not allowed. Examples: "GET",
-// "POST" or "!".
+// to get the not allowed HTTP method handler. Examples: "GET", "POST" or "!".
 func (rb *_ResponderBase) HandlerOf(method string) Handler {
 	if rb._RequestHandlerBase == nil {
 		return nil
@@ -1505,7 +1540,8 @@ func (rb *_ResponderBase) WrapRequestPasser(mws ...Middleware) {
 }
 
 // WrapRequestHandler wraps the responder's request handler with the middlewares
-// in their passed order.
+// in their passed order. For the request handler to be wrapped, the responder
+// must have at least one HTTP method handler.
 //
 // The request handler calls the HTTP method handler of the responder depending
 // on the request's method. Unlike the request passer, the request handler is
@@ -1538,11 +1574,10 @@ func (rb *_ResponderBase) WrapRequestHandler(mws ...Middleware) {
 //
 // The argument methods is a list of HTTP methods separated by a comma and/or
 // space. An exclamation mark "!" denotes the handler of the not allowed HTTP
-// methods, and an asterisk "*" denotes all the handlers of HTTP methods in
-// use. Both must be used alone. Which means that wrapping the not allowed HTTP
-// methods' handler and all handlers of HTTP methods in use must happen in
-// separate calls. Examples of methods: "GET", "PUT POST", "SHARE, LOCK", "*"
-// or "!".
+// method, and an asterisk "*" denotes all the handlers of HTTP methods in use.
+// Both must be used alone. That is, wrapping the not allowed HTTP method
+// handler and all the handlers of HTTP methods in use must happen in separate
+// calls. Examples of methods: "GET", "PUT POST", "SHARE, LOCK", "*" or "!".
 func (rb *_ResponderBase) WrapHandlerOf(
 	methods string,
 	mws ...Middleware,
@@ -1563,10 +1598,143 @@ func (rb *_ResponderBase) WrapHandlerOf(
 
 // -------------------------
 
-// SetSharedDataAt sets the shared data for the existing resource at the path.
+// SetPermanentRedirectCode sets the status code for permanent redirects.
+// It's used to redirect requests to an "https" from an "http", to a URL with
+// a trailing slash from one without, or vice versa. The code is either 301
+// (moved permanently) or 308 (permanent redirect). The difference between the
+// 301 and 308 status codes is that with the 301 status code, the request's
+// HTTP method may change. For example, some clients change the POST HTTP
+// method to GET. The 308 status code does not allow this behavior. By default,
+// the 308 status code is sent.
+func (rb *_ResponderBase) SetPermanentRedirectCode(code int) {
+	if code != http.StatusMovedPermanently &&
+		code != http.StatusPermanentRedirect {
+		panicWithErr("%w", errConflictingStatusCode)
+	}
+
+	rb.permanentRedirectCode = code
+}
+
+// PermanentRedirectCode returns the responder's status code sent to redirect
+// requests permanently. The code is used to redirect requests to an "https"
+// from an "http", to a URL with a trailing slash from one without, or vice
+// versa. It's either 301 (moved permanently) or 308 (permanent redirect).
+// The difference between the 301 and 308 status codes is that with the 301
+// status code, the request's HTTP method may change. For example, some
+// clients change the POST HTTP method to GET. The 308 status code does
+// not allow this behavior. By default, the 308 status code is sent.
+func (rb *_ResponderBase) PermanentRedirectCode() int {
+	return rb.permanentRedirectCode
+}
+
+// SetRedirectHandler can be used to set a custom implementation of the
+// redirect handler function. The handler is mostly used to redirect requests
+// to an "https" from an "http", to a URL with a trailing slash from a URL
+// without, or vice versa. It is also used when the responder has been
+// instructed to redirect requests to a new location.
+func (rb *_ResponderBase) SetRedirectHandler(handler RedirectHandler) {
+	if handler == nil {
+		panicWithErr("%w", errNilArgument)
+	}
+
+	rb.redirectHandler = handler
+}
+
+// RedirectHandler returns the redirect handler function. The handler is
+// mostly used to redirect requests to an "https" from an "http", to a URL
+// with a trailing slash from one without, or vice versa. It is also used
+// when the responder has been instructed to redirect requests to a new
+// location.
+func (rb *_ResponderBase) RedirectHandler() RedirectHandler {
+	return rb.redirectHandler
+}
+
+// WrapRedirectHandler is used to wrap the redirect handler with middlewares
+// in their passed order. The method can be used when the handler's default
+// implementation is sufficient and only the response headers need to be
+// changed, or other additional functionality is required.
+//
+// The redirect handler is mostly used to redirect requests to an "https" from
+// an "http", to a URL with a trailing slash from a URL without, or vice versa.
+// It's also used when responder has been instructed to redirect requests to
+// a new location.
+func (rb *_ResponderBase) WrapRedirectHandler(
+	mws ...func(RedirectHandler) RedirectHandler,
+) {
+	if len(mws) == 0 {
+		panicWithErr("%w", errNoMiddleware)
+	}
+
+	for i, mw := range mws {
+		if mw == nil {
+			panicWithErr("%w at index %d", errNilArgument, i)
+		}
+
+		if rb.redirectHandler == nil {
+			rb.redirectHandler = commonRedirectHandler
+		}
+
+		rb.redirectHandler = mw(rb.redirectHandler)
+	}
+}
+
+// RedirectTo instructs the responder to redirect requests to another URL.
+// After that, requests made to the responder or below the subtree will all be
+// redirected.
+//
+// The RedirectTo method must not be used for redirects from "http" to "https"
+// or from no trailing slash to trailing slash. Those redirects are handled
+// automatically by the NanoMux when the responder is configured properly.
+//
+// Example:
+// 	var host = NewDormantHost("http://example.com")
+// 	host.RedirectTo("http://www.example.com", http.StatusPermanentRedirect)
+func (rb *_ResponderBase) RedirectTo(url string, redirectCode int) {
+	rb.requestReceiver = func(
+		w http.ResponseWriter,
+		r *http.Request,
+		args *Args,
+	) bool {
+		// The urlStr must be copied. Because it's a captured value,
+		// changes to it will be permanent.
+		var urlStr = url
+
+		var rPath = args.RemainingPath()
+		var lrPath = len(rPath)
+		if lrPath > 0 {
+			if rPath[0] == '/' {
+				if urlStr[len(url)-1] != '/' {
+					urlStr += rPath
+				} else {
+					urlStr += rPath[1:]
+				}
+			} else {
+				if urlStr[len(url)-1] == '/' {
+					urlStr += rPath
+				} else {
+					urlStr += "/" + rPath
+				}
+			}
+		}
+
+		w.Header()["Content-Type"] = nil
+		if rb.redirectHandler == nil {
+			return commonRedirectHandler(w, r, urlStr, redirectCode, args)
+		}
+
+		return rb.redirectHandler(w, r, urlStr, redirectCode, args)
+	}
+}
+
+// --------------------------------------------------
+
+// SetSharedDataAt sets the shared data for the resource at the path. If the
+// resource doesn't exist, it will be created.
 //
 // The scheme and trailing slash property values in the path template must be
-// compatible with the resource's properties, otherwise the method panics.
+// compatible with the existing resource's properties, otherwise the method
+// panics. A newly created resource is configured with the values in the path
+// template.
 func (rb *_ResponderBase) SetSharedDataAt(
 	pathTmplStr string,
 	data interface{},
@@ -1593,6 +1761,8 @@ func (rb *_ResponderBase) SharedDataAt(
 
 	return r.SharedData()
 }
+
+// -------------------------
 
 // SetConfigurationAt sets the config for the existing resource at the path.
 // If the resource was configured before, it will be reconfigured.
@@ -1626,15 +1796,16 @@ func (rb *_ResponderBase) ConfigurationAt(pathTmplStr string) Config {
 	return r.Configuration()
 }
 
+// -------------------------
+
 // SetImplementationAt sets the HTTP method handlers for a resource at the path
 // from the passed Impl. If the resource doesn't exist, the method creates it.
 // The resource keeps the impl for future retrieval. Existing handlers of the
 // resource are discarded.
 //
 // The scheme and trailing slash property values in the path template must be
-// compatible with the existing resource's properties, otherwise the method
-// panics. A newly created resource is configured with the values in the path
-// template.
+// compatible with the existing resource's properties. A newly created resource
+// is configured with the values in the path template.
 func (rb *_ResponderBase) SetImplementationAt(
 	pathTmplStr string,
 	rh Impl,
@@ -1652,25 +1823,27 @@ func (rb *_ResponderBase) SetImplementationAt(
 func (rb *_ResponderBase) ImplementationAt(pathTmplStr string) Impl {
 	var r = rb.RegisteredResource(pathTmplStr)
 	if r == nil {
-		panicWithErr("%w", errNonExistentResource)
+		return nil
 	}
 
 	return r.Implementation()
 }
+
+// -------------------------
 
 // SetPathHandlerFor sets the HTTP methods' handler function for a resource
 // at the path. If the resource doesn't exist, it will be created.
 //
 // The argument methods is a list of HTTP methods separated by a comma and/or
 // space. An exclamation mark "!" denotes the handler of the not allowed HTTP
-// methods and must be used alone. Which means that setting the not allowed
-// HTTP methods' handler must happen in a separate call. Examples of methods:
-// "GET", "PUT, POST", "SHARE, LOCK" or "!".
+// method and must be used alone. That is, setting the not allowed HTTP
+// method handler must happen in a separate call. The responder must have at
+// least one HTTP method handler before the not allowed HTTP method handler
+// is set. Examples of methods: "GET", "PUT, POST", "SHARE, LOCK" or "!".
 //
 // The scheme and trailing slash property values in the path template must be
-// compatible with the existing resource's properties, otherwise the method
-// panics. A newly created resource is configured with the values in the path
-// template.
+// compatible with the existing resource's properties. A newly created resource
+// is configured with the values in the path template.
 func (rb *_ResponderBase) SetPathHandlerFor(
 	methods, pathTmplStr string,
 	handler Handler,
@@ -1679,34 +1852,34 @@ func (rb *_ResponderBase) SetPathHandlerFor(
 	r.SetHandlerFor(methods, handler)
 }
 
-// PathHandlerOf returns the HTTP method's handler of the resource at the path.
-// If the resource doesn't exist, nil is returned.
+// PathHandlerOf returns the HTTP method handler of the resource at the path.
+// If the resource or the handler doesn't exist, nil is returned.
 //
 // The argument method is an HTTP method. An exclamation mark "!" can be used
-// to get the handler of HTTP methods that are not allowed. Examples: "GET",
-// "POST" or "!".
+// to get the not allowed HTTP method handler. Examples: "GET", "POST" or "!".
 //
 // The scheme and trailing slash property values in the path template must be
-// compatible with the resource's properties, otherwise the method panics.
+// compatible with the resource's properties.
 func (rb *_ResponderBase) PathHandlerOf(method, pathTmplStr string) Handler {
 	var r = rb.RegisteredResource(pathTmplStr)
 	if r == nil {
-		panicWithErr("%w", errNonExistentResource)
+		return nil
 	}
 
 	return r.HandlerOf(method)
 }
 
-// WrapRequestPasserAt wraps the request passer of the resource at the path.
-// The request passer is wrapped in the middlewares' passed order. If the
-// resource doesn't exist, the method panics.
+// -------------------------
+
+// WrapRequestPasserAt wraps the request passer of the existing resource at the
+// path. The request passer is wrapped in the middlewares' passed order.
 //
 // The request passer is responsible for finding the next resource that matches
 // the next path segment and passing the request to it. If there is no matching
 // resource, the handler for a not-found resource is called.
 //
 // The scheme and trailing slash property values in the path template must be
-// compatible with the resource's properties, otherwise the method panics.
+// compatible with the resource's properties.
 func (rb *_ResponderBase) WrapRequestPasserAt(
 	pathTmplStr string,
 	mws ...Middleware,
@@ -1719,16 +1892,15 @@ func (rb *_ResponderBase) WrapRequestPasserAt(
 	r.WrapRequestPasser(mws...)
 }
 
-// WrapRequestHandlerAt wraps the request handler of the resource at the path.
-// The handler is wrapped in the middlewares' passed order. If the resource
-// doesn't exist, the method panics.
+// WrapRequestHandlerAt wraps the request handler of the existing resource at
+// the path. The handler is wrapped in the middlewares' passed order.
 //
 // The request handler calls the HTTP method handler of the responder depending
 // on the request's method. Unlike the request passer, the request handler is
 // called only when the responder is going to handle the request.
 //
 // The scheme and trailing slash property values in the URL template must be
-// compatible with the resource's properties, otherwise the method panics.
+// compatible with the resource's properties.
 func (rb *_ResponderBase) WrapRequestHandlerAt(
 	pathTmplStr string,
 	mws ...Middleware,
@@ -1743,6 +1915,8 @@ func (rb *_ResponderBase) WrapRequestHandlerAt(
 
 // WrapPathHandlerOf wraps the handlers of the HTTP methods of the resource
 // at the path. The handlers are wrapped in the middlewares' passed order.
+// The resource and all HTTP method handlers stated in the methods argument
+// must exist.
 //
 // The argument methods is a list of HTTP methods separated by a comma and/or
 // space. An exclamation mark "!" denotes the handler of the not allowed HTTP
@@ -1752,11 +1926,8 @@ func (rb *_ResponderBase) WrapRequestHandlerAt(
 // separate calls. Examples of methods: "GET", "PUT POST", "SHARE, LOCK", "*"
 // or "!".
 //
-// If the resource or the handler of any HTTP method doesn't exist, the method
-// panics.
-//
 // The scheme and trailing slash property values in the path template must be
-// compatible with the resource's properties, otherwise the method panics.
+// compatible with the resource's properties.
 func (rb *_ResponderBase) WrapPathHandlerOf(
 	methods, pathTmplStr string,
 	mws ...Middleware,
@@ -1770,6 +1941,111 @@ func (rb *_ResponderBase) WrapPathHandlerOf(
 }
 
 // -------------------------
+
+// SetPermanentRedirectCodeAt sets the status code of the responder at the path
+// for permanent redirects. It's used to redirect requests to an "https" from
+// an "http", to a URL with a trailing slash from one without, or vice versa.
+// The code is either 301 (moved permanently) or 308 (permanent redirect).
+// The difference between the 301 and 308 status codes is that with the 301
+// status code, the request's HTTP method may change. For example, some clients
+// change the POST HTTP method to GET. The 308 status code does not allow this
+// behavior. By default, the 308 status code is sent.
+func (rb *_ResponderBase) SetPermanentRedirectCodeAt(
+	pathTmplStr string,
+	code int,
+) {
+	var r = rb.Resource(pathTmplStr)
+	r.SetPermanentRedirectCode(code)
+}
+
+// PermanentRedirectCodeAt returns the status code of the resource at the path
+// sent to redirect requests permanently. The code is used to redirect requests
+// to an "https" from an "http", to a URL with a trailing slash from one
+// without, or vice versa. It's either 301 (moved permanently) or 308
+// (permanent redirect). The difference between the 301 and 308 status codes is
+// that with the 301 status code, the request's HTTP method may change. For
+// example, some clients change the POST HTTP method to GET. The 308 status
+// code does not allow this behavior. By default, the 308 status code is sent.
+func (rb *_ResponderBase) PermanentRedirectCodeAt(pathTmplStr string) int {
+	var r = rb.RegisteredResource(pathTmplStr)
+	if r == nil {
+		panicWithErr("%w", errNonExistentResource)
+	}
+
+	return r.permanentRedirectCode
+}
+
+// SetRedirectHandlerAt sets the custom implementation of the redirect handler
+// for a resource at the path. The handler is mostly used to redirect requests
+// to an "https" from an "http", to a URL with a trailing slash from a URL
+// without, or vice versa. It is also used when the resource has been
+// instructed to redirect requests to a new location.
+func (rb *_ResponderBase) SetRedirectHandlerAt(
+	pathTmplStr string,
+	handler RedirectHandler,
+) {
+	var r = rb.Resource(pathTmplStr)
+	r.SetRedirectHandler(handler)
+}
+
+// RedirectHandlerAt returns the redirect handler function of the resource at
+// the path. The handler is mostly used to redirect requests to an "https" from
+// an "http", to a URL with a trailing slash from one without, or vice versa.
+// It is also used when the resource has been instructed to redirect requests
+// to a new location.
+func (rb *_ResponderBase) RedirectHandlerAt(
+	pathTmplStr string,
+) RedirectHandler {
+	var r = rb.RegisteredResource(pathTmplStr)
+	if r == nil {
+		panicWithErr("%w", errNonExistentResource)
+	}
+
+	return r.redirectHandler
+}
+
+// WrapRedirectHandlerAt wraps the redirect handler of the resource at the path
+// with middlewares in their passed order. The method can be used when the
+// handler's default implementation is sufficient and only the response headers
+// need to be altered, or some other additional functionality is required.
+//
+// The redirect handler is mostly used to redirect requests to an "https" from
+// an "http", to a URL with a trailing slash from a URL without, or vice versa.
+// It's also used when resource has been instructed to redirect requests to
+// a new location.
+func (rb *_ResponderBase) WrapRedirectHandlerAt(
+	pathTmplStr string,
+	mws ...func(RedirectHandler) RedirectHandler,
+) {
+	var r = rb.Resource(pathTmplStr)
+	r.WrapRedirectHandler(mws...)
+}
+
+// RedirectPath instructs the resource at the path to redirect requests to
+// another URL. After that, requests made to the resource or below its subtree
+// will all be redirected.
+//
+// The RedirectPath method must not be used for redirects from http to htts
+// or from no trailing slash to trailing slash. Those redirects are handled
+// automatically by the NanoMux when the resources are configured properly.
+//
+// Example:
+// 	var host = NewDormantHost("http://example.com")
+// 	host.RedirectPath(
+// 		"/reality",
+// 		"http://example.com/simulation",
+// 		http.StatusMovedPermanently,
+// 	)
+func (rb *_ResponderBase) RedirectPath(
+	pathTmplStr,
+	url string,
+	redirectCode int,
+) {
+	var r = rb.Resource(pathTmplStr)
+	r.RedirectTo(url, redirectCode)
+}
+
+// --------------------------------------------------
 
 // SetSharedDataForSubtree sets the shared data for all the resources below
 // in the hierarchy.
@@ -1917,7 +2193,7 @@ func (rb *_ResponderBase) passRequest(
 	if len(ps) > 0 {
 		if sr := rb.staticResources[ps]; sr != nil {
 			args._r = sr.derived
-			args.handled = sr.handleOrPassRequest(w, r, args)
+			args.handled = sr.requestReceiver(w, r, args)
 			args.currentPathSegmentIdx = currentPathSegmentIdx
 			return args.handled
 		}
@@ -1931,7 +2207,7 @@ func (rb *_ResponderBase) passRequest(
 
 			if matched {
 				args._r = pr.derived
-				args.handled = pr.handleOrPassRequest(w, r, args)
+				args.handled = pr.requestReceiver(w, r, args)
 				args.currentPathSegmentIdx = currentPathSegmentIdx
 				return args.handled
 			}
@@ -1944,7 +2220,7 @@ func (rb *_ResponderBase) passRequest(
 			)
 
 			args._r = rb.wildcardResource.derived
-			args.handled = rb.wildcardResource.handleOrPassRequest(w, r, args)
+			args.handled = rb.wildcardResource.requestReceiver(w, r, args)
 			args.currentPathSegmentIdx = currentPathSegmentIdx
 			return args.handled
 		}

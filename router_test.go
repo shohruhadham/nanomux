@@ -552,7 +552,7 @@ func TestRouter_SetImplementationAt(t *testing.T) {
 					)
 				}
 
-				if rhb.notAllowedHTTPMethodsHandler == nil {
+				if rhb.notAllowedHTTPMethodHandler == nil {
 					t.Fatalf(
 						"Router.SetImplementationAt(): failed to set the not allowed methods' handler",
 					)
@@ -706,7 +706,7 @@ func TestRouter_SetURLHandlerFor(t *testing.T) {
 						)
 					}
 
-					if _r.notAllowedHTTPMethodsHandler == nil {
+					if _r.notAllowedHTTPMethodHandler == nil {
 						t.Fatalf(
 							fnName + " notAllowedMethodsHandler == nil",
 						)
@@ -720,7 +720,7 @@ func TestRouter_SetURLHandlerFor(t *testing.T) {
 						)
 					}
 
-					if _r.notAllowedHTTPMethodsHandler == nil {
+					if _r.notAllowedHTTPMethodHandler == nil {
 						t.Fatalf(
 							fnName + " notAllowedMethodsHandler == nil",
 						)
@@ -3790,7 +3790,7 @@ func TestRouter_ServeHTTP(t *testing.T) {
 		return true
 	}
 
-	SetPermanentRedirectHandler(permanentRedirectFunc)
+	SetCommonRedirectHandler(permanentRedirectFunc)
 
 	w = httptest.NewRecorder()
 	r = httptest.NewRequest("GET", "http://name.example.com///..//.//", nil)
@@ -3799,7 +3799,7 @@ func TestRouter_ServeHTTP(t *testing.T) {
 		t.Fatalf("SetPermanentRedirectHandler() failed")
 	}
 
-	WrapPermanentRedirectHandler(
+	WrapCommonRedirectHandler(
 		func(wrapper RedirectHandler) RedirectHandler {
 			return func(
 				w http.ResponseWriter,
@@ -3822,7 +3822,7 @@ func TestRouter_ServeHTTP(t *testing.T) {
 		t.Fatalf("WrapPermanentRedirectHandler() failed")
 	}
 
-	SetHandlerForNotFoundResource(Handler(
+	SetHandlerForNotFoundResources(Handler(
 		func(http.ResponseWriter, *http.Request, *Args) bool {
 			strb.Reset()
 			strb.WriteString("not found resource handler")
@@ -3837,7 +3837,7 @@ func TestRouter_ServeHTTP(t *testing.T) {
 		t.Fatalf("SetHandlerForNotFoundResource() failed")
 	}
 
-	WrapHandlerOfNotFoundResource(
+	WrapHandlerOfNotFoundResources(
 		func(next Handler) Handler {
 			return func(
 				w http.ResponseWriter,

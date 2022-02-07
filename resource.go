@@ -22,11 +22,12 @@ func createDormantResource(tmpl *Template) (*Resource, error) {
 		return nil, newErr("%w", errNilArgument)
 	}
 
-	var rb = &Resource{}
-	rb.derived = rb
-	rb.tmpl = tmpl
-	rb.requestPasser = rb.passRequest
-	return rb, nil
+	var r = &Resource{}
+	r.derived = r
+	r.tmpl = tmpl
+	r.requestReceiver = r.handleOrPassRequest
+	r.requestPasser = r.passRequest
+	return r, nil
 }
 
 // createResource creates an instance of the Resource. The impl and config
@@ -91,6 +92,7 @@ func createResource(
 
 	r.derived = r
 	r.tmpl = tmpl
+	r.requestReceiver = r.handleOrPassRequest
 	r.requestPasser = r.passRequest
 	return r, nil
 }
@@ -315,8 +317,8 @@ func (rb *Resource) Host() *Host {
 // Parent returns the parent resource of the receiver resource if it was
 // registered under the resource. Otherwise, the method returns nil.
 func (rb *Resource) Parent() *Resource {
-	var r, _ = rb.papa.(*Resource)
-	return r
+	var p, _ = rb.papa.(*Resource)
+	return p
 }
 
 // -------------------------
@@ -334,7 +336,7 @@ func (rb *Resource) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var args = getArgs(r.URL, rb.derived)
 	args.nextPathSegment() // First call returns '/'.
 	if rb.tmpl == rootTmpl {
-		if !rb.handleOrPassRequest(w, r, args) {
+		if !rb.requestReceiver(w, r, args) {
 			notFoundResourceHandler(w, r, args)
 		}
 
@@ -358,7 +360,7 @@ func (rb *Resource) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		var matched bool
 		matched, args.hostPathValues = rb.tmpl.Match(ps, args.hostPathValues)
 		if matched {
-			if !rb.handleOrPassRequest(w, r, args) {
+			if !rb.requestReceiver(w, r, args) {
 				notFoundResourceHandler(w, r, args)
 			}
 
@@ -465,13 +467,16 @@ func (rb *Resource) handleOrPassRequest(
 	}
 
 	if newURL != nil {
-		return permanentRedirectHandler(
-			w,
-			r,
-			newURL.String(),
-			permanentRedirectCode,
-			args,
-		)
+		var prc = permanentRedirectCode
+		if rb.permanentRedirectCode > 0 {
+			prc = rb.permanentRedirectCode
+		}
+
+		if rb.redirectHandler != nil {
+			return rb.redirectHandler(w, r, newURL.String(), prc, args)
+		}
+
+		return commonRedirectHandler(w, r, newURL.String(), prc, args)
 	}
 
 	// At this point, the request may have been modified by subresources.

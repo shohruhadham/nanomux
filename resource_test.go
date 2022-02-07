@@ -2492,7 +2492,7 @@ func TestResourceBase_SetImplementation(t *testing.T) {
 		t.Fatalf(fnName+" len(handlers) = %d, want %d", n, nHandlers)
 	}
 
-	if r._RequestHandlerBase.notAllowedHTTPMethodsHandler == nil {
+	if r._RequestHandlerBase.notAllowedHTTPMethodHandler == nil {
 		t.Fatalf(fnName + " failed to set not allowed methods' handler")
 	}
 }
@@ -2543,7 +2543,7 @@ func TestResourceBase_SetHandlerFor(t *testing.T) {
 		t.Fatalf(fnName + " failed to set handler for CUSTOM")
 	}
 
-	if r.notAllowedHTTPMethodsHandler == nil {
+	if r.notAllowedHTTPMethodHandler == nil {
 		t.Fatalf(fnName + " failed to set the not allowed methods' handler")
 	}
 
