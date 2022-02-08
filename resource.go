@@ -467,6 +467,14 @@ func (rb *Resource) handleOrPassRequest(
 	}
 
 	if newURL != nil {
+		if newURL.Scheme == "" {
+			if r.TLS == nil {
+				newURL.Scheme = "http"
+			} else {
+				newURL.Scheme = "https"
+			}
+		}
+
 		var prc = permanentRedirectCode
 		if rb.permanentRedirectCode > 0 {
 			prc = rb.permanentRedirectCode

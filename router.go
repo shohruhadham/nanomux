@@ -557,7 +557,7 @@ func (ro *Router) PermanentRedirectCodeAt(urlTmplStr string) int {
 //
 // The handler is mostly used to redirect requests to an "https" from an
 // "http", to a URL with a trailing slash from a URL without, or vice versa.
-// It is also used when the resource has been instructed to redirect requests
+// It is also used when the resource has been configured to redirect requests
 // to a new location.
 func (ro *Router) SetRedirectHandlerAt(
 	urlTmplStr string,
@@ -579,7 +579,7 @@ func (ro *Router) SetRedirectHandlerAt(
 //
 // The handler is mostly used to redirect requests to an "https" from an
 // "http", to a URL with a trailing slash from a URL without, or vice versa.
-// It is also used when the resource has been instructed to redirect requests
+// It is also used when the resource has been configured to redirect requests
 // to a new location.
 func (ro *Router) RedirectHandlerAt(urlTmplStr string) RedirectHandler {
 	var _r, rIsHost, err = ro.registered_Responder(urlTmplStr)
@@ -614,7 +614,7 @@ func (ro *Router) RedirectHandlerAt(urlTmplStr string) RedirectHandler {
 //
 // The redirect handler is mostly used to redirect requests to an "https" from
 // an "http", to a URL with a trailing slash from a URL without, or vice versa.
-// It's also used when resource has been instructed to redirect requests to
+// It's also used when resource has been configured to redirect requests to
 // a new location.
 func (ro *Router) WrapRedirectHandlerAt(
 	urlTmplStr string,
@@ -628,33 +628,36 @@ func (ro *Router) WrapRedirectHandlerAt(
 	_r.WrapRedirectHandler(mws...)
 }
 
-// RedirectURL instructs the responder at the URL to redirect requests to
-// another URL. After that, requests made to the responder or below its subtree
-// will all be redirected. If the responder doesn't exist, it will be created.
+// RedirectAnyRequestAt configures the responder at the path to redirect
+// requests to another URL. Requests made to the responder or its subtree will
+// all be redirected. Neither the request passer nor the request handler of the
+// responder will be called. Subtree resources specified in the request's URL
+// are not required to exist. If the responder doesn't exist, it will be
+// created.
 //
 // The scheme and trailing slash property values in the URL template must
 // be compatible with the existing responder's properties. A newly created
 // responder is configured with the values in the URL template.
 //
-// The RedirectURL method must not be used for redirects from "http" to "https"
-// or from a URL with no trailing slash to a URL with a trailing slash or vice
-// versa. Those redirects are handled automatically by the NanoMux when the
-// responder is configured properly.
+// The RedirectAnyRequestAt method must not be used for redirects from "http"
+// to "https" or from a URL with no trailing slash to a URL with a trailing
+// slash or vice versa. Those redirects are handled automatically by the
+// NanoMux when the responder is configured properly.
 //
 // Example:
 // 	var router = NewRouter()
-// 	router.RedirectURL(
+// 	router.RedirectAnyRequestAt(
 // 		"http://example.com/simulation",
 // 		"http://example.com/reality",
 // 		http.StatusMovedPermanently,
 // 	)
-func (ro *Router) RedirectURL(urlTmplStr, url string, redirectCode int) {
+func (ro *Router) RedirectAnyRequestAt(urlTmplStr, url string, redirectCode int) {
 	var _r, err = ro._Responder(urlTmplStr)
 	if err != nil {
 		panicWithErr("%w", err)
 	}
 
-	_r.RedirectTo(url, redirectCode)
+	_r.RedirectAnyRequestTo(url, redirectCode)
 }
 
 // --------------------------------------------------

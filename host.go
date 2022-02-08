@@ -348,6 +348,14 @@ func (hb *Host) handleOrPassRequest(
 	}
 
 	if newURL != nil {
+		if newURL.Scheme == "" {
+			if r.TLS == nil {
+				newURL.Scheme = "http"
+			} else {
+				newURL.Scheme = "https"
+			}
+		}
+
 		var prc = permanentRedirectCode
 		if hb.permanentRedirectCode > 0 {
 			prc = hb.permanentRedirectCode
