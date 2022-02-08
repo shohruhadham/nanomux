@@ -108,14 +108,14 @@ func createResource(
 // When the URL template contains a host and/or prefix path segment templates,
 // the resource keeps them. Templates are used when the resource is being
 // registered. When the resource is being registered by a router, the host and
-// path segment templates indicate where in the hierarchy it must be placed.
+// path segment templates indicate where in the tree it must be placed.
 // When the resource is being registered by a host, the host template is checked
 // for compatibility, and the prefix path segment templates show where in the
-// hierarchy the resource must be placed under the host. When the resource
+// tree the resource must be placed under the host. When the resource
 // is being registered by another resource, the host and prefix path segment
 // templates are checked for compatibility with the registering resource's host
 // and corresponding prefix path segments. If there are remaining path segments
-// that come below the registering resource, they show where in the hierarchy
+// that come below the registering resource, they show where in the tree
 // the resource must be placed under the registering resource.
 func NewDormantResource(urlTmplStr string) *Resource {
 	var r, err = createResource(urlTmplStr, nil, nil)
@@ -136,14 +136,14 @@ func NewDormantResource(urlTmplStr string) *Resource {
 // When the URL template contains a host and/or prefix path segment templates,
 // the resource keeps them. Templates are used when the resource is being
 // registered. When the resource is being registered by a router, the host and
-// path segment templates indicate where in the hierarchy it must be placed.
+// path segment templates indicate where in the tree it must be placed.
 // When the resource is being registered by a host, the host template is checked
 // for compatibility, and the prefix path segment templates show where in the
-// hierarchy the resource must be placed under the host. When the resource
+// tree the resource must be placed under the host. When the resource
 // is being registered by another resource, the host and prefix path segment
 // templates are checked for compatibility with the registering resource's host
 // and corresponding prefix path segments. If there are remaining path segments
-// that come below the registering resource, they show where in the hierarchy
+// that come below the registering resource, they show where in the tree
 // the resource must be placed under the registering resource.
 func NewDormantResourceUsingConfig(urlTmplStr string, config Config) *Resource {
 	var r, err = createResource(urlTmplStr, nil, &config)
@@ -188,14 +188,14 @@ func NewDormantResourceUsingConfig(urlTmplStr string, config Config) *Resource {
 // When the URL template contains a host and/or prefix path segment templates,
 // the resource keeps them. Templates are used when the resource is being
 // registered. When the resource is being registered by a router, the host and
-// path segment templates indicate where in the hierarchy it must be placed.
+// path segment templates indicate where in the tree it must be placed.
 // When the resource is being registered by a host, the host template is checked
 // for compatibility, and the prefix path segment templates show where in the
-// hierarchy the resource must be placed under the host. When the resource
+// tree the resource must be placed under the host. When the resource
 // is being registered by another resource, the host and prefix path segment
 // templates are checked for compatibility with the registering resource's host
 // and corresponding prefix path segments. If there are remaining path segments
-// that come below the registering resource, they show where in the hierarchy
+// that come below the registering resource, they show where in the tree
 // the resource must be placed under the registering resource.
 func NewResource(urlTmplStr string, impl Impl) *Resource {
 	if impl == nil {
@@ -247,14 +247,14 @@ func NewResource(urlTmplStr string, impl Impl) *Resource {
 // When the URL template contains a host and/or prefix path segment templates,
 // the resource keeps them. Templates are used when the resource is being
 // registered. When the resource is being registered by a router, the host and
-// path segment templates indicate where in the hierarchy it must be placed.
+// path segment templates indicate where in the tree it must be placed.
 // When the resource is being registered by a host, the host template is checked
 // for compatibility, and the prefix path segment templates show where in the
-// hierarchy the resource must be placed under the host. When the resource
+// tree the resource must be placed under the host. When the resource
 // is being registered by another resource, the host and prefix path segment
 // templates are checked for compatibility with the registering resource's host
 // and corresponding prefix path segments. If there are remaining path segments
-// that come below the registering resource, they show where in the hierarchy
+// that come below the registering resource, they show where in the tree
 // the resource must be placed under the registering resource.
 func NewResourceUsingConfig(
 	urlTmplStr string,
@@ -303,7 +303,7 @@ func (rb *Resource) urlTmpl() *_URLTmpl {
 // -------------------------
 
 // Host returns the host of the resource if the resource is registered in the
-// hierarchy under the host.
+// tree under the host.
 func (rb *Resource) Host() *Host {
 	for p := rb.papa; p != nil; p = p.parent() {
 		if h, ok := p.(*Host); ok {
@@ -395,9 +395,9 @@ func (rb *Resource) handleOrPassRequest(
 	args *Args,
 ) bool {
 	if rb.IsSubtreeHandler() {
-		// If there is no resource in the hierarchy below that matches the
+		// If there is no resource in the tree below that matches the
 		// request's path, this resource handles the request.
-		// subtreeExists indicates this to the resources below in the hierarchy,
+		// subtreeExists indicates this to the resources below in the tree,
 		// so the notFoundResourceHandler is not called.
 		args.subtreeExists = true
 	}
@@ -419,7 +419,7 @@ func (rb *Resource) handleOrPassRequest(
 
 	if !rb.canHandleRequest() {
 		// If rb is a subtree handler that cannot handle a request, this
-		// prevents other subtree handlers above the hierarchy from handling
+		// prevents other subtree handlers above the tree from handling
 		// the request.
 		return notFoundResourceHandler(w, r, args)
 	}

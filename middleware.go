@@ -80,5 +80,4 @@ func wrapEveryHandlerOf(
 	}
 
 	return nil
-
 }

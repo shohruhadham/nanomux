@@ -4,7 +4,6 @@
 package nanomux
 
 import (
-	"errors"
 	"net/http"
 	"net/url"
 	"strings"
@@ -254,7 +253,7 @@ func (rb *_ResponderBase) parent() _Parent {
 	return rb.papa
 }
 
-// respondersInThePath returns all the responders above in the hierarchy
+// respondersInThePath returns all the responders above in the tree
 // (including the host and the resource itself).
 func (rb *_ResponderBase) respondersInThePath() []_Responder {
 	var resources []_Responder
@@ -428,7 +427,7 @@ func (rb *_ResponderBase) checkNamesAreUniqueInTheURL(tmpl *Template) error {
 
 // checkNamesOfTheChildrenAreUniqueInTheURL checks whether the child resources
 // of the argument resource have unique names above in the receiver resource's
-// hierarchy.
+// tree.
 func (rb *_ResponderBase) checkNamesOfTheChildrenAreUniqueInTheURL(
 	r *Resource,
 ) error {
@@ -605,7 +604,7 @@ func (rb *_ResponderBase) resourceWithTemplate(tmpl *Template) (
 	return nil, nil
 }
 
-// registeredResource returns the child resource below in the hierarchy if it
+// registeredResource returns the child resource below in the tree if it
 // can be reached with the path template.
 //
 // Unlike other methods, registeredResoure accepts a path template string that
@@ -749,7 +748,7 @@ func (rb *_ResponderBase) registerResource(r *Resource) error {
 }
 
 // segmentResources finds or creates and returns the resources below in the
-// hierarchy using the argument path segment templates. Newly created resources
+// tree using the argument path segment templates. Newly created resources
 // will be registered one under the other in the order given in the argument
 // slice. But they won't be registered under the last existing resource. It's
 // the responsibility of the caller.
@@ -808,7 +807,7 @@ func (rb *_ResponderBase) segmentResources(pathSegments []string) (
 }
 
 // pathSegmentResources finds or creates and returns the resources below
-// in the hierarchy using the argument path template. Newly created resources
+// in the tree using the argument path template. Newly created resources
 // will be registered one under the other in the order given in the path
 // template string. But they won't be registered under the last existing
 // resource. It's the responsibility of the caller.
@@ -843,9 +842,9 @@ func (rb *_ResponderBase) pathSegmentResources(pathTmplStr string) (
 	return
 }
 
-// registerResourceUnder registeres the argument resource below in the hierarchy
+// registerResourceUnder registeres the argument resource below in the tree
 // of the responder under the given prefix path segments. It also creates and
-// registers the prefix path segment resources below in the hierarchy, if they
+// registers the prefix path segment resources below in the tree, if they
 // don't exist.
 func (rb *_ResponderBase) registerResourceUnder(
 	prefixPath string,
@@ -953,15 +952,14 @@ func (rb *_ResponderBase) keepResourceOrItsChildResources(r *Resource) error {
 // -------------------------
 
 // Resource uses the path template to find an existing resource or to create
-// a new one below in the hierarchy of the responder and returns it. If the
+// a new one below in the tree of the responder and returns it. If the
 // path template contains prefix segments that don't have existing resources,
 // the method also creates new resources for them.
 //
 // If the resource exists, its scheme and trailing slash properties are
-// compared to the values given in the path template. If there is a difference,
-// the method panics. If the method creates a new resource, its scheme and
-// trailing slash properties are configured using the values given within the
-// path template.
+// compared to the values given in the path template. They must match. If the
+// method creates a new resource, its scheme and trailing slash properties are
+// configured using the values given within the path template.
 //
 // The names given to the path segment resources must be unique in the path and
 // among their respective siblings.
@@ -1022,15 +1020,15 @@ func (rb *_ResponderBase) Resource(pathTmplStr string) *Resource {
 }
 
 // ResourceUsingConfig uses the path template and config to find an existing
-// resource or to create a new one below in the hierarchy of the responder and
+// resource or to create a new one below in the tree of the responder and
 // returns it. If the path template contains prefix segments that don't have
 // existing resources, the method also creates new resources for them.
 //
 // If the resource exists, its configuration is compared to the argument config.
 // Also, its scheme and trailing slash properties are compared to the values
-// given in the path template. If there is a difference, the method panics.
-// If the method creates a new resource, it's configured using theconfig and
-// the values given in the path template.
+// given in the path template. The configuration, scheme, and trailing slash
+// properties must match. If the method creates a new resource, it's configured
+// using the config and the values given in the path template.
 //
 // The names of the path segment resources must be unique within the path and
 // among their respective siblings.
@@ -1098,12 +1096,12 @@ func (rb *_ResponderBase) ResourceUsingConfig(
 	return oldLast.(*Resource)
 }
 
-// RegisterResource registers the argument resource below in the hierarchy of
+// RegisterResource registers the argument resource below in the tree of
 // the responder.
 //
 // If the argument resource has a URL template, its corresponding host and path
 // segments must be compatible with the templates of the host and path segment
-// resources above in the hierarchy. The remaining path segments are used as the
+// resources above in the tree. The remaining path segments are used as the
 // prefix path segments of the argument resource below the responder. If there
 // are compatible resources with the remaining path segments below the
 // responder, the argument resource will be registered under them. Otherwise,
@@ -1160,7 +1158,7 @@ func (rb *_ResponderBase) RegisterResource(r *Resource) {
 //
 // If the argument resource has a URL template, its host and path segment
 // templates must be compatible with the corresponding host and path segment
-// resources in the hierarchy and with the argument prefix path segments.
+// resources in the tree and with the argument prefix path segments.
 // If there are existing resources compatible with the prefix path segments,
 // the argument resource will be registered under them, otherwise new resources
 // will be created for the missing segments.
@@ -1256,7 +1254,7 @@ func (rb *_ResponderBase) RegisterResourceUnder(
 	}
 }
 
-// RegisteredResource returns the resource in the hierarchy below the responder
+// RegisteredResource returns the resource in the tree below the responder
 // if it can be reached with the path template. In the path template, names can
 // be used instead of the complete segment templates.
 //
@@ -1265,7 +1263,7 @@ func (rb *_ResponderBase) RegisterResourceUnder(
 //		https:///$childResourceName/$grandChildResourceName
 //
 // The scheme and trailing slash properties must be compatible with the
-// resource's otherwise the method panics.
+// resource's.
 func (rb *_ResponderBase) RegisteredResource(pathTmplStr string) *Resource {
 	var (
 		hTmplStr       string
@@ -1476,31 +1474,16 @@ func (rb *_ResponderBase) Implementation() Impl {
 // The argument methods is a list of HTTP methods separated by a comma and/or
 // space. An exclamation mark "!" denotes the handler of the not allowed HTTP
 // method and must be used alone. That is, setting the not allowed HTTP method
-// handler must happen in a separate call. The responder must have at least one
-// HTTP method handler before the not allowed HTTP method handler is set.
-// Examples of methods: "GET", "PUT, POST", "SHARE, LOCK" or "!".
+// handler must happen in a separate call. Examples of methods: "GET", "PUT,
+// POST", "SHARE, LOCK" or "!".
 func (rb *_ResponderBase) SetHandlerFor(methods string, handler Handler) {
 	if rb._RequestHandlerBase == nil {
-		var rhb = &_RequestHandlerBase{}
-		var err = rhb.setHandlerFor(methods, handler)
-		if err != nil {
-			if errors.Is(err, errNoHandlerExists) {
-				if _, ok := rb.derived.(*Host); ok {
-					panicWithErr("%w %s", errDormantHost, err)
-				}
+		rb.setRequestHandlerBase(&_RequestHandlerBase{})
+	}
 
-				panicWithErr("%w %s", errDormantResource, err)
-			}
-
-			panicWithErr("%w", err)
-		}
-
-		rb.setRequestHandlerBase(rhb)
-	} else {
-		var err = rb.setHandlerFor(methods, handler)
-		if err != nil {
-			panicWithErr("%w", err)
-		}
+	var err = rb.setHandlerFor(methods, handler)
+	if err != nil {
+		panicWithErr("%w", err)
 	}
 }
 
@@ -1524,7 +1507,8 @@ func (rb *_ResponderBase) HandlerOf(method string) Handler {
 //
 // The request passer is responsible for finding the next resource that matches
 // the next path segment and passing the request to it. If there is no matching
-// resource, the handler for a not-found resource is called.
+// resource to the next path segment of the request's URL, the handler for a
+// not-found resource is called.
 func (rb *_ResponderBase) WrapRequestPasser(mws ...Middleware) {
 	if len(mws) == 0 {
 		panicWithErr("%w", errNoMiddleware)
@@ -1532,7 +1516,7 @@ func (rb *_ResponderBase) WrapRequestPasser(mws ...Middleware) {
 
 	for i, mw := range mws {
 		if mw == nil {
-			panicWithErr("%w at index %d", errNilArgument, i)
+			panicWithErr("%w at index %d", errNoMiddleware, i)
 		}
 
 		rb.requestPasser = mw(rb.requestPasser)
@@ -1540,37 +1524,33 @@ func (rb *_ResponderBase) WrapRequestPasser(mws ...Middleware) {
 }
 
 // WrapRequestHandler wraps the responder's request handler with the middlewares
-// in their passed order. For the request handler to be wrapped, the responder
-// must have at least one HTTP method handler.
+// in their passed order.
 //
 // The request handler calls the HTTP method handler of the responder depending
 // on the request's method. Unlike the request passer, the request handler is
-// called only when the responder is going to handle the request.
+// called only when the responder is the one to handle the request and has at
+// least one HTTP method handler.
 func (rb *_ResponderBase) WrapRequestHandler(mws ...Middleware) {
 	if len(mws) == 0 {
 		panicWithErr("%w", errNoMiddleware)
 	}
 
-	if !rb.canHandleRequest() {
-		if _, ok := rb.derived.(*Host); ok {
-			panicWithErr("%w", errDormantHost)
-		}
-
-		panicWithErr("%w", errDormantResource)
+	if rb._RequestHandlerBase == nil {
+		rb.setRequestHandlerBase(&_RequestHandlerBase{})
 	}
 
 	for i, mw := range mws {
 		if mw == nil {
-			panicWithErr("%w at index %d", errNilArgument, i)
+			panicWithErr("%w at index %d", errNoMiddleware, i)
 		}
 
 		rb.requestHandler = mw(rb.requestHandler)
 	}
 }
 
-// WrapHandlerOf wraps the handler of the HTTP methods with the middlewares in
-// their passed order. If the handler doesn't exist for any given HTTP method,
-// the method panics.
+// WrapHandlerOf wraps the handlers of the HTTP methods with the middlewares in
+// their passed order. All handlers of the HTTP methods stated in the methods
+// argument must exist.
 //
 // The argument methods is a list of HTTP methods separated by a comma and/or
 // space. An exclamation mark "!" denotes the handler of the not allowed HTTP
@@ -1578,10 +1558,7 @@ func (rb *_ResponderBase) WrapRequestHandler(mws ...Middleware) {
 // Both must be used alone. That is, wrapping the not allowed HTTP method
 // handler and all the handlers of HTTP methods in use must happen in separate
 // calls. Examples of methods: "GET", "PUT POST", "SHARE, LOCK", "*" or "!".
-func (rb *_ResponderBase) WrapHandlerOf(
-	methods string,
-	mws ...Middleware,
-) {
+func (rb *_ResponderBase) WrapHandlerOf(methods string, mws ...Middleware) {
 	if rb._RequestHandlerBase == nil {
 		if _, ok := rb.derived.(*Host); ok {
 			panicWithErr("%w", errDormantHost)
@@ -1615,23 +1592,29 @@ func (rb *_ResponderBase) SetPermanentRedirectCode(code int) {
 	rb.permanentRedirectCode = code
 }
 
-// PermanentRedirectCode returns the responder's status code sent to redirect
-// requests permanently. The code is used to redirect requests to an "https"
-// from an "http", to a URL with a trailing slash from one without, or vice
-// versa. It's either 301 (moved permanently) or 308 (permanent redirect).
-// The difference between the 301 and 308 status codes is that with the 301
+// PermanentRedirectCode returns the responder's status code for permanent
+// redirects. The code is used to redirect requests to an "https" from an
+// "http", to a URL with a trailing slash from one without, or vice versa.
+// It's either 301 (moved permanently) or 308 (permanent redirect). The
+// difference between the 301 and 308 status codes is that with the 301
 // status code, the request's HTTP method may change. For example, some
 // clients change the POST HTTP method to GET. The 308 status code does
 // not allow this behavior. By default, the 308 status code is sent.
 func (rb *_ResponderBase) PermanentRedirectCode() int {
-	return rb.permanentRedirectCode
+	if rb.permanentRedirectCode > 0 {
+		return rb.permanentRedirectCode
+	}
+
+	return permanentRedirectCode
 }
 
 // SetRedirectHandler can be used to set a custom implementation of the
-// redirect handler function. The handler is mostly used to redirect requests
-// to an "https" from an "http", to a URL with a trailing slash from a URL
-// without, or vice versa. It is also used when the responder has been
-// instructed to redirect requests to a new location.
+// redirect handler function.
+//
+// The handler is mostly used to redirect requests to an "https" from an
+// "http", to a URL with a trailing slash from a URL without, or vice versa.
+// It is also used when the responder has been instructed to redirect requests
+// to a new location.
 func (rb *_ResponderBase) SetRedirectHandler(handler RedirectHandler) {
 	if handler == nil {
 		panicWithErr("%w", errNilArgument)
@@ -1640,19 +1623,26 @@ func (rb *_ResponderBase) SetRedirectHandler(handler RedirectHandler) {
 	rb.redirectHandler = handler
 }
 
-// RedirectHandler returns the redirect handler function. The handler is
-// mostly used to redirect requests to an "https" from an "http", to a URL
-// with a trailing slash from one without, or vice versa. It is also used
-// when the responder has been instructed to redirect requests to a new
-// location.
+// RedirectHandler returns the redirect handler function of the responder.
+//
+// The handler is mostly used to redirect requests to an "https" from an
+// "http", to a URL with a trailing slash from a URL without, or vice versa.
+// It is also used when the responder has been instructed to redirect requests
+// to a new location.
 func (rb *_ResponderBase) RedirectHandler() RedirectHandler {
+	if rb.redirectHandler == nil {
+		return commonRedirectHandler
+	}
+
 	return rb.redirectHandler
 }
 
-// WrapRedirectHandler is used to wrap the redirect handler with middlewares
-// in their passed order. The method can be used when the handler's default
-// implementation is sufficient and only the response headers need to be
-// changed, or other additional functionality is required.
+// WrapRedirectHandler wraps the redirect handler function with middlewares
+// in their passed order.
+//
+// The method can be used when the handler's default implementation is
+// sufficient and only the response headers need to be changed, or some
+// other additional functionality is required.
 //
 // The redirect handler is mostly used to redirect requests to an "https" from
 // an "http", to a URL with a trailing slash from a URL without, or vice versa.
@@ -1665,13 +1655,13 @@ func (rb *_ResponderBase) WrapRedirectHandler(
 		panicWithErr("%w", errNoMiddleware)
 	}
 
+	if rb.redirectHandler == nil {
+		rb.redirectHandler = commonRedirectHandler
+	}
+
 	for i, mw := range mws {
 		if mw == nil {
-			panicWithErr("%w at index %d", errNilArgument, i)
-		}
-
-		if rb.redirectHandler == nil {
-			rb.redirectHandler = commonRedirectHandler
+			panicWithErr("%w at index %d", errNoMiddleware, i)
 		}
 
 		rb.redirectHandler = mw(rb.redirectHandler)
@@ -1683,8 +1673,9 @@ func (rb *_ResponderBase) WrapRedirectHandler(
 // redirected.
 //
 // The RedirectTo method must not be used for redirects from "http" to "https"
-// or from no trailing slash to trailing slash. Those redirects are handled
-// automatically by the NanoMux when the responder is configured properly.
+// or from a URL with no trailing slash to a URL with a trailing slash or vice
+// versa. Those redirects are handled automatically by the NanoMux when the
+// responder is configured properly.
 //
 // Example:
 // 	var host = NewDormantHost("http://example.com")
@@ -1695,7 +1686,7 @@ func (rb *_ResponderBase) RedirectTo(url string, redirectCode int) {
 		r *http.Request,
 		args *Args,
 	) bool {
-		// The urlStr must be copied. Because it's a captured value,
+		// The url must be copied. Because it's a captured value,
 		// changes to it will be permanent.
 		var urlStr = url
 
@@ -1732,28 +1723,22 @@ func (rb *_ResponderBase) RedirectTo(url string, redirectCode int) {
 // resource doesn't exist, it will be created.
 //
 // The scheme and trailing slash property values in the path template must be
-// compatible with the existing resource's properties, otherwise the method
-// panics. A newly created resource is configured with the values in the path
-// template.
+// compatible with the existing resource's properties. A newly created resource
+// is configured with the values in the path template.
 func (rb *_ResponderBase) SetSharedDataAt(
 	pathTmplStr string,
 	data interface{},
 ) {
-	var r = rb.RegisteredResource(pathTmplStr)
-	if r == nil {
-		panicWithErr("%w", errNonExistentResource)
-	}
-
+	var r = rb.Resource(pathTmplStr)
 	r.SetSharedData(data)
 }
 
 // SharedDataAt returns the shared data of the existing resource at the path.
+// If the shared data wasn't set, nil is returned.
 //
 // The scheme and trailing slash property values in the path template must be
-// compatible with the resource's properties, otherwise the method panics.
-func (rb *_ResponderBase) SharedDataAt(
-	pathTmplStr string,
-) interface{} {
+// compatible with the resource's properties.
+func (rb *_ResponderBase) SharedDataAt(pathTmplStr string) interface{} {
 	var r = rb.RegisteredResource(pathTmplStr)
 	if r == nil {
 		panicWithErr("%w", errNonExistentResource)
@@ -1764,20 +1749,18 @@ func (rb *_ResponderBase) SharedDataAt(
 
 // -------------------------
 
-// SetConfigurationAt sets the config for the existing resource at the path.
-// If the resource was configured before, it will be reconfigured.
+// SetConfigurationAt sets the config for the resource at the path. If the
+// resource doesn't exist, it will be created. If the existing resource was
+// configured before, it will be reconfigured.
 //
 // The scheme and trailing slash property values in the path template must be
-// compatible with the resource's properties, otherwise the method panics.
+// compatible with the existing resource's properties. A newly created resource
+// is configured with the values in the path template.
 func (rb *_ResponderBase) SetConfigurationAt(
 	pathTmplStr string,
 	config Config,
 ) {
-	var r = rb.RegisteredResource(pathTmplStr)
-	if r == nil {
-		panicWithErr("%w", errNonExistentResource)
-	}
-
+	var r = rb.Resource(pathTmplStr)
 	r.SetConfiguration(config)
 }
 
@@ -1785,10 +1768,9 @@ func (rb *_ResponderBase) SetConfigurationAt(
 // path.
 //
 // The scheme and trailing slash property values in the path template must be
-// compatible with the resource's properties, otherwise the method panics.
+// compatible with the resource's properties.
 func (rb *_ResponderBase) ConfigurationAt(pathTmplStr string) Config {
 	var r = rb.RegisteredResource(pathTmplStr)
-
 	if r == nil {
 		panicWithErr("%w", errNonExistentResource)
 	}
@@ -1799,31 +1781,28 @@ func (rb *_ResponderBase) ConfigurationAt(pathTmplStr string) Config {
 // -------------------------
 
 // SetImplementationAt sets the HTTP method handlers for a resource at the path
-// from the passed Impl. If the resource doesn't exist, the method creates it.
-// The resource keeps the impl for future retrieval. Existing handlers of the
-// resource are discarded.
+// from the passed Impl's methods. If the resource doesn't exist, the method
+// creates it. The resource keeps the impl for future retrieval. Old handlers
+// of the existing resource are discarded.
 //
 // The scheme and trailing slash property values in the path template must be
 // compatible with the existing resource's properties. A newly created resource
 // is configured with the values in the path template.
-func (rb *_ResponderBase) SetImplementationAt(
-	pathTmplStr string,
-	rh Impl,
-) {
+func (rb *_ResponderBase) SetImplementationAt(pathTmplStr string, rh Impl) {
 	var r = rb.Resource(pathTmplStr)
 	r.SetImplementation(rh)
 }
 
-// ImplementationAt returns the implementation of the resource at the path.
-// If the resource doesn't exist or it wasn't created from an Impl or it has
-// no Impl set, nil is returned.
+// ImplementationAt returns the implementation of the existing resource at the
+// path. If the resource wasn't created from an Impl or it has no Impl set, nil
+// is returned.
 //
 // The scheme and trailing slash property values in the path template must be
-// compatible with the resource's properties, otherwise the method panics.
+// compatible with the resource's properties.
 func (rb *_ResponderBase) ImplementationAt(pathTmplStr string) Impl {
 	var r = rb.RegisteredResource(pathTmplStr)
 	if r == nil {
-		return nil
+		panicWithErr("%w", errNonExistentResource)
 	}
 
 	return r.Implementation()
@@ -1834,16 +1813,15 @@ func (rb *_ResponderBase) ImplementationAt(pathTmplStr string) Impl {
 // SetPathHandlerFor sets the HTTP methods' handler function for a resource
 // at the path. If the resource doesn't exist, it will be created.
 //
-// The argument methods is a list of HTTP methods separated by a comma and/or
-// space. An exclamation mark "!" denotes the handler of the not allowed HTTP
-// method and must be used alone. That is, setting the not allowed HTTP
-// method handler must happen in a separate call. The responder must have at
-// least one HTTP method handler before the not allowed HTTP method handler
-// is set. Examples of methods: "GET", "PUT, POST", "SHARE, LOCK" or "!".
-//
 // The scheme and trailing slash property values in the path template must be
 // compatible with the existing resource's properties. A newly created resource
 // is configured with the values in the path template.
+//
+// The argument methods is a list of HTTP methods separated by a comma and/or
+// space. An exclamation mark "!" denotes the handler of the not allowed HTTP
+// method and must be used alone. That is, setting the not allowed HTTP method
+// handler must happen in a separate call. Examples of methods: "GET", "PUT,
+// POST", "SHARE, LOCK" or "!".
 func (rb *_ResponderBase) SetPathHandlerFor(
 	methods, pathTmplStr string,
 	handler Handler,
@@ -1852,18 +1830,18 @@ func (rb *_ResponderBase) SetPathHandlerFor(
 	r.SetHandlerFor(methods, handler)
 }
 
-// PathHandlerOf returns the HTTP method handler of the resource at the path.
-// If the resource or the handler doesn't exist, nil is returned.
-//
-// The argument method is an HTTP method. An exclamation mark "!" can be used
-// to get the not allowed HTTP method handler. Examples: "GET", "POST" or "!".
+// PathHandlerOf returns the HTTP method handler of the existing resource at
+// the path.If the handler doesn't exist, nil is returned.
 //
 // The scheme and trailing slash property values in the path template must be
 // compatible with the resource's properties.
+//
+// The argument method is an HTTP method. An exclamation mark "!" can be used
+// to get the not allowed HTTP method handler. Examples: "GET", "POST" or "!".
 func (rb *_ResponderBase) PathHandlerOf(method, pathTmplStr string) Handler {
 	var r = rb.RegisteredResource(pathTmplStr)
 	if r == nil {
-		return nil
+		panicWithErr("%w", errNonExistentResource)
 	}
 
 	return r.HandlerOf(method)
@@ -1871,63 +1849,60 @@ func (rb *_ResponderBase) PathHandlerOf(method, pathTmplStr string) Handler {
 
 // -------------------------
 
-// WrapRequestPasserAt wraps the request passer of the existing resource at the
-// path. The request passer is wrapped in the middlewares' passed order.
+// WrapRequestPasserAt wraps the request passer of the resource at the path.
+// The request passer is wrapped in the middlewares' passed order. If the
+// resource doesn't exist, it will be created.
+//
+// The scheme and trailing slash property values in the path template must be
+// compatible with the existing resource's properties. A newly created resource
+// is configured with the values in the path template.
 //
 // The request passer is responsible for finding the next resource that matches
 // the next path segment and passing the request to it. If there is no matching
-// resource, the handler for a not-found resource is called.
-//
-// The scheme and trailing slash property values in the path template must be
-// compatible with the resource's properties.
+// resource to the next path segment of the request's URL, the handler for a
+// not-found resource is called.
 func (rb *_ResponderBase) WrapRequestPasserAt(
 	pathTmplStr string,
 	mws ...Middleware,
 ) {
-	var r = rb.RegisteredResource(pathTmplStr)
-	if r == nil {
-		panicWithErr("%w", errNonExistentResource)
-	}
-
+	var r = rb.Resource(pathTmplStr)
 	r.WrapRequestPasser(mws...)
 }
 
-// WrapRequestHandlerAt wraps the request handler of the existing resource at
-// the path. The handler is wrapped in the middlewares' passed order.
+// WrapRequestHandlerAt wraps the request handler of the resource at the path.
+// The request handler is wrapped in the middlewares' passed order. If the
+// resource doesn't exist, it will be created.
 //
-// The request handler calls the HTTP method handler of the responder depending
+// The scheme and trailing slash property values in the path template must be
+// compatible with the existing resource's properties. A newly created resource
+// is configured with the values in the path template.
+//
+// The request handler calls the HTTP method handler of the resource depending
 // on the request's method. Unlike the request passer, the request handler is
-// called only when the responder is going to handle the request.
-//
-// The scheme and trailing slash property values in the URL template must be
-// compatible with the resource's properties.
+// called only when the resource is the one to handle the request and has at
+// least one HTTP method handler.
 func (rb *_ResponderBase) WrapRequestHandlerAt(
 	pathTmplStr string,
 	mws ...Middleware,
 ) {
-	var r = rb.RegisteredResource(pathTmplStr)
-	if r == nil {
-		panicWithErr("%w", errNonExistentResource)
-	}
-
+	var r = rb.Resource(pathTmplStr)
 	r.WrapRequestHandler(mws...)
 }
 
-// WrapPathHandlerOf wraps the handlers of the HTTP methods of the resource
-// at the path. The handlers are wrapped in the middlewares' passed order.
-// The resource and all HTTP method handlers stated in the methods argument
-// must exist.
-//
-// The argument methods is a list of HTTP methods separated by a comma and/or
-// space. An exclamation mark "!" denotes the handler of the not allowed HTTP
-// methods, and an asterisk "*" denotes all the handlers of HTTP methods in
-// use. Both must be used alone. Which means that wrapping the not allowed HTTP
-// methods' handler and all handlers of HTTP methods in use must happen in
-// separate calls. Examples of methods: "GET", "PUT POST", "SHARE, LOCK", "*"
-// or "!".
+// WrapPathHandlerOf wraps the handlers of the HTTP methods of the existing
+// resource at the path. The handlers are wrapped in the middlewares' passed
+// order. All handlers of the HTTP methods stated in the methods argument must
+// exist.
 //
 // The scheme and trailing slash property values in the path template must be
 // compatible with the resource's properties.
+//
+// The argument methods is a list of HTTP methods separated by a comma and/or
+// space. An exclamation mark "!" denotes the handler of the not allowed HTTP
+// method, and an asterisk "*" denotes all the handlers of HTTP methods in use.
+// Both must be used alone. That is, wrapping the not allowed HTTP method
+// handler and all the handlers of HTTP methods in use must happen in separate
+// calls. Examples of methods: "GET", "PUT POST", "SHARE, LOCK", "*" or "!".
 func (rb *_ResponderBase) WrapPathHandlerOf(
 	methods, pathTmplStr string,
 	mws ...Middleware,
@@ -1942,13 +1917,19 @@ func (rb *_ResponderBase) WrapPathHandlerOf(
 
 // -------------------------
 
-// SetPermanentRedirectCodeAt sets the status code of the responder at the path
-// for permanent redirects. It's used to redirect requests to an "https" from
+// SetPermanentRedirectCodeAt sets the status code of the resource at the path
+// for permanent redirects. If the resource doesn't exist, it will be created.
+//
+// The scheme and trailing slash property values in the path template must be
+// compatible with the existing resource's properties. A newly created resource
+// is configured with the values in the path template.
+//
+// The status code is sent when redirecting the request to an "https" from
 // an "http", to a URL with a trailing slash from one without, or vice versa.
-// The code is either 301 (moved permanently) or 308 (permanent redirect).
-// The difference between the 301 and 308 status codes is that with the 301
-// status code, the request's HTTP method may change. For example, some clients
-// change the POST HTTP method to GET. The 308 status code does not allow this
+// The code is either 301 (moved permanently) or 308 (permanent redirect). The
+// difference between the 301 and 308 status codes is that with the 301 status
+// code, the request's HTTP method may change. For example, some clients change
+// the POST HTTP method to GET. The 308 status code does not allow this
 // behavior. By default, the 308 status code is sent.
 func (rb *_ResponderBase) SetPermanentRedirectCodeAt(
 	pathTmplStr string,
@@ -1958,28 +1939,44 @@ func (rb *_ResponderBase) SetPermanentRedirectCodeAt(
 	r.SetPermanentRedirectCode(code)
 }
 
-// PermanentRedirectCodeAt returns the status code of the resource at the path
-// sent to redirect requests permanently. The code is used to redirect requests
-// to an "https" from an "http", to a URL with a trailing slash from one
-// without, or vice versa. It's either 301 (moved permanently) or 308
-// (permanent redirect). The difference between the 301 and 308 status codes is
-// that with the 301 status code, the request's HTTP method may change. For
-// example, some clients change the POST HTTP method to GET. The 308 status
-// code does not allow this behavior. By default, the 308 status code is sent.
+// PermanentRedirectCodeAt returns the status code of the existing resource
+// at the path for permanent redirects.
+//
+// The scheme and trailing slash property values in the path template must be
+// compatible with the resource's properties.
+//
+// The code is used to redirect requests to an "https" from an "http", to a
+// URL with a trailing slash from one without, or vice versa. It's either 301
+// (moved permanently) or 308 (permanent redirect). The difference between the
+// 301 and 308 status codes is that with the 301 status code, the request's
+// HTTP method may change. For example, some clients change the POST HTTP
+// method to GET. The 308 status code does not allow this behavior. By default,
+// the 308 status code is sent.
 func (rb *_ResponderBase) PermanentRedirectCodeAt(pathTmplStr string) int {
 	var r = rb.RegisteredResource(pathTmplStr)
 	if r == nil {
 		panicWithErr("%w", errNonExistentResource)
 	}
 
-	return r.permanentRedirectCode
+	if r.permanentRedirectCode > 0 {
+		return r.permanentRedirectCode
+	}
+
+	return permanentRedirectCode
 }
 
-// SetRedirectHandlerAt sets the custom implementation of the redirect handler
-// for a resource at the path. The handler is mostly used to redirect requests
-// to an "https" from an "http", to a URL with a trailing slash from a URL
-// without, or vice versa. It is also used when the resource has been
-// instructed to redirect requests to a new location.
+// SetRedirectHandlerAt can be used to set a custom implementation of the
+// redirect handler for a resource at the path. If the resource doesn't exist,
+// it will be created.
+//
+// The scheme and trailing slash property values in the path template must be
+// compatible with the existing resource's properties. A newly created resource
+// is configured with the values in the path template.
+//
+// The handler is mostly used to redirect requests to an "https" from an
+// "http", to a URL with a trailing slash from a URL without, or vice versa.
+// It is also used when the resource has been instructed to redirect requests
+// to a new location.
 func (rb *_ResponderBase) SetRedirectHandlerAt(
 	pathTmplStr string,
 	handler RedirectHandler,
@@ -1988,9 +1985,14 @@ func (rb *_ResponderBase) SetRedirectHandlerAt(
 	r.SetRedirectHandler(handler)
 }
 
-// RedirectHandlerAt returns the redirect handler function of the resource at
-// the path. The handler is mostly used to redirect requests to an "https" from
-// an "http", to a URL with a trailing slash from one without, or vice versa.
+// RedirectHandlerAt returns the redirect handler function of the existing
+// resource at the path.
+//
+// The scheme and trailing slash property values in the path template must be
+// compatible with the resource's properties.
+//
+// The handler is mostly used to redirect requests to an "https" from an
+// "http", to a URL with a trailing slash from a URL without, or vice versa.
 // It is also used when the resource has been instructed to redirect requests
 // to a new location.
 func (rb *_ResponderBase) RedirectHandlerAt(
@@ -2001,13 +2003,24 @@ func (rb *_ResponderBase) RedirectHandlerAt(
 		panicWithErr("%w", errNonExistentResource)
 	}
 
+	if r.redirectHandler == nil {
+		return commonRedirectHandler
+	}
+
 	return r.redirectHandler
 }
 
-// WrapRedirectHandlerAt wraps the redirect handler of the resource at the path
-// with middlewares in their passed order. The method can be used when the
-// handler's default implementation is sufficient and only the response headers
-// need to be altered, or some other additional functionality is required.
+// WrapRedirectHandlerAt wraps the redirect handler of the resource at the
+// path. The redirect handler is wrapped in the middlewares' passed order.
+// If the resource doesn't exist, it will be created.
+//
+// The scheme and trailing slash property values in the path template must be
+// compatible with the existing resource's properties. A newly created resource
+// is configured with the values in the path template.
+//
+// The method can be used when the handler's default implementation is
+// sufficient and only the response headers need to be changed, or some
+// other additional functionality is required.
 //
 // The redirect handler is mostly used to redirect requests to an "https" from
 // an "http", to a URL with a trailing slash from a URL without, or vice versa.
@@ -2023,17 +2036,22 @@ func (rb *_ResponderBase) WrapRedirectHandlerAt(
 
 // RedirectPath instructs the resource at the path to redirect requests to
 // another URL. After that, requests made to the resource or below its subtree
-// will all be redirected.
+// will all be redirected. If the resource doesn't exist, it will be created.
 //
-// The RedirectPath method must not be used for redirects from http to htts
-// or from no trailing slash to trailing slash. Those redirects are handled
-// automatically by the NanoMux when the resources are configured properly.
+// The scheme and trailing slash property values in the path template must be
+// compatible with the existing resource's properties. A newly created resource
+// is configured with the values in the path template.
+//
+// The RedirectPath method must not be used for redirects from "http" to "https"
+// or from a URL with no trailing slash to a URL with a trailing slash or vice
+// versa. Those redirects are handled automatically by the NanoMux when the
+// resource is configured properly.
 //
 // Example:
 // 	var host = NewDormantHost("http://example.com")
 // 	host.RedirectPath(
-// 		"/reality",
-// 		"http://example.com/simulation",
+// 		"/simulation",
+// 		"http://example.com/reality",
 // 		http.StatusMovedPermanently,
 // 	)
 func (rb *_ResponderBase) RedirectPath(
@@ -2048,7 +2066,7 @@ func (rb *_ResponderBase) RedirectPath(
 // --------------------------------------------------
 
 // SetSharedDataForSubtree sets the shared data for all the resources below
-// in the hierarchy.
+// in the tree.
 func (rb *_ResponderBase) SetSharedDataForSubtree(data interface{}) {
 	traverseAndCall(
 		rb._Responders(),
@@ -2060,7 +2078,7 @@ func (rb *_ResponderBase) SetSharedDataForSubtree(data interface{}) {
 }
 
 // SetConfigurationForSubtree sets the config for all the resources below in the
-// hierarchy.
+// tree.
 func (rb *_ResponderBase) SetConfigurationForSubtree(config Config) {
 	traverseAndCall(
 		rb._Responders(),
@@ -2072,12 +2090,13 @@ func (rb *_ResponderBase) SetConfigurationForSubtree(config Config) {
 }
 
 // WrapSubtreeRequestPassers wraps the request passers of the resources in
-// the hierarchy below the responder. The request passers are wrapped in the
+// the tree below the responder. The request passers are wrapped in the
 // middlewares' passed order.
 //
 // The request passer is responsible for finding the next resource that matches
 // the next path segment and passing the request to it. If there is no matching
-// resource, the handler for a not-found resource is called.
+// resource to the next path segment of the request's URL, the handler for a
+// not-found resource is called.
 func (rb *_ResponderBase) WrapSubtreeRequestPassers(
 	mws ...Middleware,
 ) {
@@ -2091,33 +2110,19 @@ func (rb *_ResponderBase) WrapSubtreeRequestPassers(
 }
 
 // WrapSubtreeRequestHandlers wraps the request handlers of the resources in
-// the hierarchy below the responder. Handlers are wrapped in the middlewares'
+// the tree below the responder. Handlers are wrapped in the middlewares'
 // passed order.
 //
 // The request handler calls the HTTP method handler of the responder depending
 // on the request's method. Unlike the request passer, the request handler is
-// called only when the responder is going to handle the request.
+// called only when the responder is the one to handle the request and has at
+// least one HTTP method handler.
 func (rb *_ResponderBase) WrapSubtreeRequestHandlers(
 	mws ...Middleware,
 ) {
 	traverseAndCall(
 		rb._Responders(),
 		func(_r _Responder) error {
-			defer func() {
-				var v = recover()
-				if v == nil {
-					return
-				}
-
-				var err, validErr = v.(error)
-
-				// Subtree below hosts cannot return the ErrDormantHost.
-				// It's enough to check the ErrDormantResource.
-				if !validErr || !errors.Is(err, errDormantResource) {
-					panic(v)
-				}
-			}()
-
 			_r.WrapRequestHandler(mws...)
 			return nil
 		},
@@ -2125,15 +2130,14 @@ func (rb *_ResponderBase) WrapSubtreeRequestHandlers(
 }
 
 // WrapSubtreeHandlersOf wraps the HTTP method handlers of the resources in
-// the hierarchy below the responder.
+// the tree below the responder.
 //
 // The argument methods is a list of HTTP methods separated by a comma and/or
 // space. An exclamation mark "!" denotes the handler of the not allowed HTTP
-// methods, and an asterisk "*" denotes all the handlers of HTTP methods in
-// use. Both must be used alone. Which means that wrapping the not allowed HTTP
-// methods' handler and all handlers of HTTP methods in use must happen in
-// separate calls. Examples of methods: "GET", "PUT POST", "SHARE, LOCK", "*"
-// or "!".
+// method, and an asterisk "*" denotes all the handlers of HTTP methods in use.
+// Both must be used alone. That is, wrapping the not allowed HTTP method
+// handler and all the handlers of HTTP methods in use must happen in separate
+// calls. Examples of methods: "GET", "PUT POST", "SHARE, LOCK", "*" or "!".
 func (rb *_ResponderBase) WrapSubtreeHandlersOf(
 	methods string,
 	mws ...Middleware,
