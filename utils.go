@@ -16,7 +16,7 @@ import (
 
 // _URLTmpl is used to keep the resource's scheme, host and prefix path
 // segments. When registering the resource, _URLTmpl will be used to find
-// the resource's place in the hierarchy.
+// the resource's place in the tree.
 type _URLTmpl struct {
 	Scheme     string
 	Host       string

@@ -373,14 +373,11 @@ func TestRouter_SetConfigurationAt(t *testing.T) {
 				}
 			}
 
-			err = ro.SetConfigurationAt(c.url, config)
-			if (err != nil) != c.wantErr {
-				t.Fatalf(
-					"Router.SetConfigurationAt() = %v, wantErr = %t",
-					err,
-					c.wantErr,
-				)
-			}
+			testPanicker(
+				t,
+				c.wantErr,
+				func() { ro.SetConfigurationAt(c.url, config) },
+			)
 
 			if _r != nil {
 				var _rConfig = _r.Configuration()
@@ -449,10 +446,7 @@ func TestRouter_ConfigurationAt(t *testing.T) {
 					t.Fatal(err)
 				}
 
-				err = ro.SetConfigurationAt(c.url, config)
-				if (err != nil) != c.wantErr {
-					t.Fatal(err)
-				}
+				ro.SetConfigurationAt(c.url, config)
 			}
 
 			defer checkPanic(t, c.wantErr)
@@ -3822,7 +3816,7 @@ func TestRouter_ServeHTTP(t *testing.T) {
 		t.Fatalf("WrapPermanentRedirectHandler() failed")
 	}
 
-	SetHandlerForNotFoundResources(Handler(
+	SetHandlerForNotFound(Handler(
 		func(http.ResponseWriter, *http.Request, *Args) bool {
 			strb.Reset()
 			strb.WriteString("not found resource handler")
@@ -3837,7 +3831,7 @@ func TestRouter_ServeHTTP(t *testing.T) {
 		t.Fatalf("SetHandlerForNotFoundResource() failed")
 	}
 
-	WrapHandlerOfNotFoundResources(
+	WrapHandlerOfNotFound(
 		func(next Handler) Handler {
 			return func(
 				w http.ResponseWriter,

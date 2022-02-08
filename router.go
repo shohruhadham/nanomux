@@ -4,7 +4,6 @@
 package nanomux
 
 import (
-	"errors"
 	"net"
 	"net/http"
 	"strings"
@@ -228,39 +227,40 @@ func (ro *Router) registered_Responder(urlTmplStr string) (
 
 // --------------------------------------------------
 
-// SetSharedDataAt sets the shared data for the existing host or resource at the
-// URL.
+// SetSharedDataAt sets the shared data for the responder at the URL. If the
+// responder doesn't exist, it will be created.
 //
-// The scheme and trailing slash properties of the host or resource are compared
-// with the values given in the URL template. If there is a difference, the
-// method panics.
+// The scheme and trailing slash property values in the URL template must
+// be compatible with the existing responder's properties. A newly created
+// responder is configured with the values in the URL template.
 func (ro *Router) SetSharedDataAt(urlTmplStr string, data interface{}) {
-	var _r, _, err = ro.registered_Responder(urlTmplStr)
+	var _r, err = ro._Responder(urlTmplStr)
 	if err != nil {
 		panicWithErr("%w", err)
-	}
-
-	if _r == nil {
-		panicWithErr("%w", errNonExistentResource)
 	}
 
 	_r.SetSharedData(data)
 }
 
-// SharedDataAt returns the shared data of the existing host or resource at the
-// URL.
+// SharedDataAt returns the shared data of the existing responder at the URL.
+// If the shared data wasn't set, nil is returned.
 //
-// The scheme and trailing slash properties of the host or resource are compared
-// with the values given in the URL template. If there is a difference, the
-// method panics.
+// The scheme and trailing slash property values in the URL template must be
+// compatible with the responder's properties.
 func (ro *Router) SharedDataAt(urlTmplStr string) interface{} {
-	var _r, _, err = ro.registered_Responder(urlTmplStr)
+	var _r, rIsHost, err = ro.registered_Responder(urlTmplStr)
 	if err != nil {
 		panicWithErr("%w", err)
 	}
 
 	if _r == nil {
-		panicWithErr("%w", errNonExistentResource)
+		if rIsHost {
+			err = errNonExistentHost
+		} else {
+			err = errNonExistentResource
+		}
+
+		panicWithErr("%w %q", err, urlTmplStr)
 	}
 
 	return _r.SharedData()
@@ -268,40 +268,41 @@ func (ro *Router) SharedDataAt(urlTmplStr string) interface{} {
 
 // -------------------------
 
-// SetConfigurationAt sets the config for the existing host or resource at the
-// URL. If the host or resource was configured before, it will be reconfigured.
+// SetConfigurationAt sets the config for the responder at the URL. If the
+// responder doesn't exist, it will be created. If the existing responder was
+// configured before, it will be reconfigured.
 //
-// The scheme and trailing slash properties of the host or resource are compared
-// with the values given in the URL template. If there is a difference, the
-// method panics.
-func (ro *Router) SetConfigurationAt(urlTmplStr string, config Config) error {
-	var _r, _, err = ro.registered_Responder(urlTmplStr)
+// The scheme and trailing slash property values in the URL template must
+// be compatible with the existing responder's properties. A newly created
+// responder is configured with the values in the URL template.
+func (ro *Router) SetConfigurationAt(urlTmplStr string, config Config) {
+	var _r, err = ro._Responder(urlTmplStr)
 	if err != nil {
-		return newErr("%w", err)
-	}
-
-	if _r == nil {
-		return newErr("%w", errNonExistentResource)
+		panicWithErr("%w", err)
 	}
 
 	_r.SetConfiguration(config)
-	return nil
 }
 
-// ConfigurationAt returns the configuration of the existing host or resource
-// at the URL.
+// ConfigurationAt returns the configuration of the existing responder at
+// the URL.
 //
-// The scheme and trailing slash properties of the host or resource are compared
-// with the values given in the URL template. If there is a difference, the
-// method panics.
+// The scheme and trailing slash property values in the URL template must
+// be compatible with the responder's properties.
 func (ro *Router) ConfigurationAt(urlTmplStr string) Config {
-	var _r, _, err = ro.registered_Responder(urlTmplStr)
+	var _r, rIsHost, err = ro.registered_Responder(urlTmplStr)
 	if err != nil {
 		panicWithErr("%w", err)
 	}
 
 	if _r == nil {
-		panicWithErr("%w", errNonExistentResource)
+		if rIsHost {
+			err = errNonExistentHost
+		} else {
+			err = errNonExistentResource
+		}
+
+		panicWithErr("%w %q", err, urlTmplStr)
 	}
 
 	return _r.Configuration()
@@ -309,15 +310,14 @@ func (ro *Router) ConfigurationAt(urlTmplStr string) Config {
 
 // -------------------------
 
-// SetImplementationAt sets the HTTP method handlers for a host or resource at
-// the URL from the passed impl. If the host or resource doesn't exist, the
-// method creates it. The host or resource keeps the impl for future retrieval.
-// Old handlers of the existing host or resource are discarded.
+// SetImplementationAt sets the HTTP method handlers for a responder at the URL
+// from the passed Impl's methods. If the responder doesn't exist, the method
+// creates it. The responder keeps the impl for future retrieval. Old handlers
+// of the existing responder are discarded.
 //
-// The scheme and trailing slash property values in the URL template must be
-// compatible with the existing host or resource's properties, otherwise the
-// method panics. A newly created host or resource is configured with the
-// values in the URL template.
+// The scheme and trailing slash property values in the URL template must
+// be compatible with the existing responder's properties. A newly created
+// responder is configured with the values in the URL template.
 func (ro *Router) SetImplementationAt(urlTmplStr string, impl Impl) {
 	var _r, err = ro._Responder(urlTmplStr)
 	if err != nil {
@@ -327,21 +327,26 @@ func (ro *Router) SetImplementationAt(urlTmplStr string, impl Impl) {
 	_r.SetImplementation(impl)
 }
 
-// ImplementationAt returns the implementation of the host or resource at the
-// URL. If the host or resource doesn't exist or they were not created from
-// an Impl or they have no Impl set, nil is returned.
+// ImplementationAt returns the implementation of the existing responder at the
+// URL. If the responder wasn't created from an Impl or it has no Impl set, nil
+// is returned.
 //
-// The scheme and trailing slash property values in the URL template must be
-// compatible with the host or resource's properties, otherwise the method
-// panics.
+// The scheme and trailing slash property values in the URL template must
+// be compatible with the responder's properties.
 func (ro *Router) ImplementationAt(urlTmplStr string) Impl {
-	var _r, _, err = ro.registered_Responder(urlTmplStr)
+	var _r, rIsHost, err = ro.registered_Responder(urlTmplStr)
 	if err != nil {
 		panicWithErr("%w", err)
 	}
 
 	if _r == nil {
-		return nil
+		if rIsHost {
+			err = errNonExistentHost
+		} else {
+			err = errNonExistentResource
+		}
+
+		panicWithErr("%w %q", err, urlTmplStr)
 	}
 
 	return _r.Implementation()
@@ -349,19 +354,18 @@ func (ro *Router) ImplementationAt(urlTmplStr string) Impl {
 
 // -------------------------
 
-// SetURLHandlerFor sets HTTP methods' handler function for a host or resource
-// at the URL. If the host or resource doesn't exist, it will be created.
+// SetURLHandlerFor sets the HTTP methods' handler function for a responder
+// at the URL. If the responder doesn't exist, it will be created.
+//
+// The scheme and trailing slash property values in the URL template must
+// be compatible with the existing responder's properties. A newly created
+// responder is configured with the values in the URL template.
 //
 // The argument methods is a list of HTTP methods separated by a comma and/or
 // space. An exclamation mark "!" denotes the handler of the not allowed HTTP
-// methods and must be used alone. Which means that setting the not allowed
-// HTTP methods' handler must happen in a separate call. Examples of methods:
-// "GET", "PUT, POST", "SHARE, LOCK" or "!".
-//
-// The scheme and trailing slash property values in the URL template must be
-// compatible with the existing host or resource's properties, otherwise the
-// method panics. A newly created host or resource is configured with the
-// values in the URL template.
+// method and must be used alone. That is, setting the not allowed HTTP method
+// handler must happen in a separate call. Examples of methods: "GET", "PUT,
+// POST", "SHARE, LOCK" or "!".
 func (ro *Router) SetURLHandlerFor(
 	methods string,
 	urlTmplStr string,
@@ -375,25 +379,28 @@ func (ro *Router) SetURLHandlerFor(
 	_r.SetHandlerFor(methods, handler)
 }
 
-// URLHandlerOf returns the HTTP method's handler of the host or resource at
-// the URL. If the host or resource, or the handler, doesn't exist, nil is
-// returned.
+// URLHandlerOf returns the HTTP method handler of the existing responder at
+// the URL.If the handler doesn't exist, nil is returned.
+//
+// The scheme and trailing slash property values in the URL template must
+// be compatible with the responder's properties.
 //
 // The argument method is an HTTP method. An exclamation mark "!" can be used
-// to get the handler of HTTP methods that are not allowed. Examples: "GET",
-// "POST" or "!".
-//
-// The scheme and trailing slash property values in the URL template must be
-// compatible with the host or resource's properties, otherwise the method
-// panics.
+// to get the not allowed HTTP method handler. Examples: "GET", "POST" or "!".
 func (ro *Router) URLHandlerOf(method string, urlTmplStr string) Handler {
-	var _r, _, err = ro.registered_Responder(urlTmplStr)
+	var _r, rIsHost, err = ro.registered_Responder(urlTmplStr)
 	if err != nil {
 		panicWithErr("%w", err)
 	}
 
 	if _r == nil {
-		return nil
+		if rIsHost {
+			err = errNonExistentHost
+		} else {
+			err = errNonExistentResource
+		}
+
+		panicWithErr("%w %q", err, urlTmplStr)
 	}
 
 	return _r.HandlerOf(method)
@@ -401,124 +408,100 @@ func (ro *Router) URLHandlerOf(method string, urlTmplStr string) Handler {
 
 // -------------------------
 
-// WrapRequestPasserAt wraps the request passer of the host or resource at the
-// URL. The request passer is wrapped in the middlewares' passed order. If the
-// host or resource doesn't exist, the method panics.
+// WrapRequestPasserAt wraps the request passer of the responder at the URL.
+// The request passer is wrapped in the middlewares' passed order. If the
+// responder doesn't exist, it will be created.
 //
-// The request passer is responsible for finding the next resource that matches
+// The scheme and trailing slash property values in the URL template must
+// be compatible with the existing responder's properties. A newly created
+// responder is configured with the values in the URL template.
+//
+// The request passer is responsible for finding the next responder that matches
 // the next path segment and passing the request to it. If there is no matching
-// resource, the handler for a not-found resource is called.
-//
-// The scheme and trailing slash property values in the URL template must be
-// compatible with the host or resource's properties, otherwise the method
-// panics.
-func (ro *Router) WrapRequestPasserAt(
-	urlTmplStr string,
-	mws ...Middleware,
-) {
-	var r, rIsHost, err = ro.registered_Responder(urlTmplStr)
+// responder to the next path segment of the request's URL, the handler for a
+// not-found resource is called.
+func (ro *Router) WrapRequestPasserAt(urlTmplStr string, mws ...Middleware) {
+	var _r, err = ro._Responder(urlTmplStr)
 	if err != nil {
 		panicWithErr("%w", err)
 	}
 
-	if r != nil {
-		r.WrapRequestPasser(mws...)
-		return
-	}
-
-	if rIsHost {
-		err = errNonExistentHost
-	} else {
-		err = errNonExistentResource
-	}
-
-	panicWithErr("%w %q", err, urlTmplStr)
+	_r.WrapRequestPasser(mws...)
 }
 
-// WrapRequestHandlerAt wraps the request handler of the host or resource
-// at the URL. The handler is wrapped in the middlewares' passed order. If
-// the host or resource doesn't exist, the method panics.
+// WrapRequestHandlerAt wraps the request handler of the responder at the URL.
+// The request handler is wrapped in the middlewares' passed order. If the
+// responder doesn't exist, it will be created.
 //
-// The request handler calls the HTTP method handler of the host or resource
-// depending on the request's method. Unlike the request passer, the request
-// handler is called only when the host or resource is going to handle the
-// request.
+// The scheme and trailing slash property values in the URL template must
+// be compatible with the existing responder's properties. A newly created
+// responder is configured with the values in the URL template.
 //
-// The scheme and trailing slash property values in the URL template must be
-// compatible with the host or resource's properties, otherwise the method
-// panics.
-func (ro *Router) WrapRequestHandlerAt(
-	urlTmplStr string,
-	mws ...Middleware,
-) {
-	var r, rIsHost, err = ro.registered_Responder(urlTmplStr)
+// The request handler calls the HTTP method handler of the responder depending
+// on the request's method. Unlike the request passer, the request handler is
+// called only when the responder is the one to handle the request and has at
+// least one HTTP method handler.
+func (ro *Router) WrapRequestHandlerAt(urlTmplStr string, mws ...Middleware) {
+	var _r, err = ro._Responder(urlTmplStr)
 	if err != nil {
 		panicWithErr("%w", err)
 	}
 
-	if r != nil {
-		r.WrapRequestHandler(mws...)
-		return
-	}
-
-	if rIsHost {
-		err = errNonExistentHost
-	} else {
-		err = errNonExistentResource
-	}
-
-	panicWithErr("%w %q", err, urlTmplStr)
+	_r.WrapRequestHandler(mws...)
 }
 
-// WrapURLHandlerOf wraps the handlers of the HTTP methods of the host or
-// resource at the URL. Handlers are wrapped in the middlewares' passed order.
-// If the host or resource, or the handler of any HTTP method, doesn't exist,
-// the method panics.
+// WrapURLHandlerOf wraps the handlers of the HTTP methods of the existing
+// responder at the URL. The handlers are wrapped in the middlewares' passed
+// order. All handlers of the HTTP methods stated in the methods argument must
+// exist.
+//
+// The scheme and trailing slash property values in the URL template must
+// be compatible with the responder's properties.
 //
 // The argument methods is a list of HTTP methods separated by a comma and/or
 // space. An exclamation mark "!" denotes the handler of the not allowed HTTP
-// methods, and an asterisk "*" denotes all the handlers of HTTP methods in
-// use. Both must be used alone. Which means that wrapping the not allowed HTTP
-// methods' handler and all handlers of HTTP methods in use must happen in
-// separate calls. Examples of methods: "GET", "PUT POST", "SHARE, LOCK", "*"
-// or "!".
-//
-// The scheme and trailing slash property values in the URL template must be
-// compatible with the host or resource's properties, otherwise the method
-// panics.
+// method, and an asterisk "*" denotes all the handlers of HTTP methods in use.
+// Both must be used alone. That is, wrapping the not allowed HTTP method
+// handler and all the handlers of HTTP methods in use must happen in separate
+// calls. Examples of methods: "GET", "PUT POST", "SHARE, LOCK", "*" or "!".
 func (ro *Router) WrapURLHandlerOf(
 	methods string,
 	urlTmplStr string,
 	mws ...Middleware,
 ) {
-	var r, rIsHost, err = ro.registered_Responder(urlTmplStr)
+	var _r, rIsHost, err = ro.registered_Responder(urlTmplStr)
 	if err != nil {
 		panicWithErr("%w", err)
 	}
 
-	if r != nil {
-		r.WrapHandlerOf(methods, mws...)
-		return
+	if _r == nil {
+		if rIsHost {
+			err = errNonExistentHost
+		} else {
+			err = errNonExistentResource
+		}
+
+		panicWithErr("%w %q", err, urlTmplStr)
 	}
 
-	if rIsHost {
-		err = errNonExistentHost
-	} else {
-		err = errNonExistentResource
-	}
-
-	panicWithErr("%w %q", err, urlTmplStr)
+	_r.WrapHandlerOf(methods, mws...)
 }
 
 // -------------------------
 
 // SetPermanentRedirectCodeAt sets the status code of the responder at the URL
-// for permanent redirects. It's used to redirect requests to an "https" from
+// for permanent redirects. If the responder doesn't exist, it will be created.
+//
+// The scheme and trailing slash property values in the URL template must
+// be compatible with the existing responder's properties. A newly created
+// responder is configured with the values in the URL template.
+//
+// The status code is sent when redirecting the request to an "https" from
 // an "http", to a URL with a trailing slash from one without, or vice versa.
-// The code is either 301 (moved permanently) or 308 (permanent redirect).
-// The difference between the 301 and 308 status codes is that with the 301
-// status code, the request's HTTP method may change. For example, some clients
-// change the POST HTTP method to GET. The 308 status code does not allow this
+// The code is either 301 (moved permanently) or 308 (permanent redirect). The
+// difference between the 301 and 308 status codes is that with the 301 status
+// code, the request's HTTP method may change. For example, some clients change
+// the POST HTTP method to GET. The 308 status code does not allow this
 // behavior. By default, the 308 status code is sent.
 func (ro *Router) SetPermanentRedirectCodeAt(
 	urlTmplStr string,
@@ -532,14 +515,19 @@ func (ro *Router) SetPermanentRedirectCodeAt(
 	_r.SetPermanentRedirectCode(code)
 }
 
-// PermanentRedirectCodeAt returns the status code of the resource at the URL
-// sent to redirect requests permanently. The code is used to redirect requests
-// to an "https" from an "http", to a URL with a trailing slash from one
-// without, or vice versa. It's either 301 (moved permanently) or 308
-// (permanent redirect). The difference between the 301 and 308 status codes is
-// that with the 301 status code, the request's HTTP method may change. For
-// example, some clients change the POST HTTP method to GET. The 308 status
-// code does not allow this behavior. By default, the 308 status code is sent.
+// PermanentRedirectCodeAt returns the status code of the existing responder
+// at the URL for permanent redirects.
+//
+// The scheme and trailing slash property values in the URL template must
+// be compatible with the responder's properties.
+//
+// The code is used to redirect requests to an "https" from an "http", to a
+// URL with a trailing slash from one without, or vice versa. It's either 301
+// (moved permanently) or 308 (permanent redirect). The difference between the
+// 301 and 308 status codes is that with the 301 status code, the request's
+// HTTP method may change. For example, some clients change the POST HTTP
+// method to GET. The 308 status code does not allow this behavior. By default,
+// the 308 status code is sent.
 func (ro *Router) PermanentRedirectCodeAt(urlTmplStr string) int {
 	var _r, rIsHost, err = ro.registered_Responder(urlTmplStr)
 	if err != nil {
@@ -552,17 +540,25 @@ func (ro *Router) PermanentRedirectCodeAt(urlTmplStr string) int {
 		} else {
 			err = errNonExistentResource
 		}
+
 		panicWithErr("%w %q", err, urlTmplStr)
 	}
 
 	return _r.PermanentRedirectCode()
 }
 
-// SetRedirectHandlerAt sets the custom implementation of the redirect handler
-// for a responder at the URL. The handler is mostly used to redirect requests
-// to an "https" from an "http", to a URL with a trailing slash from a URL
-// without, or vice versa. It is also used when the responder has been
-// instructed to redirect requests to a new location.
+// SetRedirectHandlerAt can be used to set a custom implementation of the
+// redirect handler for a responder at the URL. If the responder doesn't exist,
+// it will be created.
+//
+// The scheme and trailing slash property values in the URL template must
+// be compatible with the existing responder's properties. A newly created
+// responder is configured with the values in the URL template.
+//
+// The handler is mostly used to redirect requests to an "https" from an
+// "http", to a URL with a trailing slash from a URL without, or vice versa.
+// It is also used when the resource has been instructed to redirect requests
+// to a new location.
 func (ro *Router) SetRedirectHandlerAt(
 	urlTmplStr string,
 	handler RedirectHandler,
@@ -575,10 +571,15 @@ func (ro *Router) SetRedirectHandlerAt(
 	_r.SetRedirectHandler(handler)
 }
 
-// RedirectHandlerAt returns the redirect handler function of the responder at
-// the URL. The handler is mostly used to redirect requests to an "https" from
-// an "http", to a URL with a trailing slash from one without, or vice versa.
-// It is also used when the responder has been instructed to redirect requests
+// RedirectHandlerAt returns the redirect handler function of the existing
+// responder at the URL.
+//
+// The scheme and trailing slash property values in the URL template must
+// be compatible with the responder's properties.
+//
+// The handler is mostly used to redirect requests to an "https" from an
+// "http", to a URL with a trailing slash from a URL without, or vice versa.
+// It is also used when the resource has been instructed to redirect requests
 // to a new location.
 func (ro *Router) RedirectHandlerAt(urlTmplStr string) RedirectHandler {
 	var _r, rIsHost, err = ro.registered_Responder(urlTmplStr)
@@ -592,20 +593,28 @@ func (ro *Router) RedirectHandlerAt(urlTmplStr string) RedirectHandler {
 		} else {
 			err = errNonExistentResource
 		}
+
 		panicWithErr("%w %q", err, urlTmplStr)
 	}
 
 	return _r.RedirectHandler()
 }
 
-// WrapRedirectHandlerAt wraps the redirect handler of the responder at the URL
-// with middlewares in their passed order. The method can be used when the
-// handler's default implementation is sufficient and only the response headers
-// need to be altered, or some other additional functionality is required.
+// WrapRedirectHandlerAt wraps the redirect handler of the responder at the
+// URL. The redirect handler is wrapped in the middlewares' passed order.
+// If the responder doesn't exist, it will be created.
+//
+// The scheme and trailing slash property values in the URL template must
+// be compatible with the existing responder's properties. A newly created
+// responder is configured with the values in the URL template.
+//
+// The method can be used when the handler's default implementation is
+// sufficient and only the response headers need to be changed, or some
+// other additional functionality is required.
 //
 // The redirect handler is mostly used to redirect requests to an "https" from
 // an "http", to a URL with a trailing slash from a URL without, or vice versa.
-// It's also used when responder has been instructed to redirect requests to
+// It's also used when resource has been instructed to redirect requests to
 // a new location.
 func (ro *Router) WrapRedirectHandlerAt(
 	urlTmplStr string,
@@ -621,17 +630,22 @@ func (ro *Router) WrapRedirectHandlerAt(
 
 // RedirectURL instructs the responder at the URL to redirect requests to
 // another URL. After that, requests made to the responder or below its subtree
-// will all be redirected.
+// will all be redirected. If the responder doesn't exist, it will be created.
 //
-// The RedirectURL method must not be used for redirects from http to htts
-// or from no trailing slash to trailing slash. Those redirects are handled
-// automatically by the NanoMux when the resources are configured properly.
+// The scheme and trailing slash property values in the URL template must
+// be compatible with the existing responder's properties. A newly created
+// responder is configured with the values in the URL template.
+//
+// The RedirectURL method must not be used for redirects from "http" to "https"
+// or from a URL with no trailing slash to a URL with a trailing slash or vice
+// versa. Those redirects are handled automatically by the NanoMux when the
+// responder is configured properly.
 //
 // Example:
 // 	var router = NewRouter()
 // 	router.RedirectURL(
-// 		"http://example.com/reality",
 // 		"http://example.com/simulation",
+// 		"http://example.com/reality",
 // 		http.StatusMovedPermanently,
 // 	)
 func (ro *Router) RedirectURL(urlTmplStr, url string, redirectCode int) {
@@ -1599,7 +1613,8 @@ func (ro *Router) SetConfigurationForAll(config Config) {
 //
 // The request passer is responsible for finding the next resource that matches
 // the next path segment and passing the request to it. If there is no matching
-// resource, the handler for a not-found resource is called.
+// resource to the next path segment of the request's URL, the handler for a
+// not-found resource is called.
 func (ro *Router) WrapAllRequestPassers(mws ...Middleware) {
 	traverseAndCall(
 		ro._Responders(),
@@ -1613,28 +1628,14 @@ func (ro *Router) WrapAllRequestPassers(mws ...Middleware) {
 // WrapAllRequestHandlers wraps all the request handlers of all the hosts and
 // resources. Handlers are wrapped in the middlewares' passed order.
 //
-// The request handler calls the HTTP method handler of the host or resource
-// depending on the request's method. Unlike the request passer, the request
-// handler is called only when the host or resource is going to handle the
-// request.
+// The request handler calls the HTTP method handler of the responder depending
+// on the request's method. Unlike the request passer, the request handler is
+// called only when the responder is the one to handle the request and has at
+// least one HTTP method handler.
 func (ro *Router) WrapAllRequestHandlers(mws ...Middleware) {
 	traverseAndCall(
 		ro._Responders(),
 		func(_r _Responder) error {
-			defer func() {
-				var v = recover()
-				if v == nil {
-					return
-				}
-
-				var err, validErr = v.(error)
-				if !validErr ||
-					!(errors.Is(err, errDormantHost) ||
-						errors.Is(err, errDormantResource)) {
-					panic(v)
-				}
-			}()
-
 			_r.WrapRequestHandler(mws...)
 			return nil
 		},
@@ -1646,11 +1647,10 @@ func (ro *Router) WrapAllRequestHandlers(mws ...Middleware) {
 //
 // The argument methods is a list of HTTP methods separated by a comma and/or
 // space. An exclamation mark "!" denotes the handler of the not allowed HTTP
-// methods, and an asterisk "*" denotes all the handlers of HTTP methods in
-// use. Both must be used alone. Which means that wrapping the not allowed HTTP
-// methods' handler and all handlers of HTTP methods in use must happen in
-// separate calls. Examples of methods: "GET", "PUT POST", "SHARE, LOCK", "*"
-// or "!".
+// method, and an asterisk "*" denotes all the handlers of HTTP methods in use.
+// Both must be used alone. That is, wrapping the not allowed HTTP method
+// handler and all the handlers of HTTP methods in use must happen in separate
+// calls. Examples of methods: "GET", "PUT POST", "SHARE, LOCK", "*" or "!".
 func (ro *Router) WrapAllHandlersOf(
 	methods string,
 	mws ...Middleware,

@@ -350,22 +350,6 @@ func TestResourceBase_Parent(t *testing.T) {
 	}
 }
 
-func TestResourceBase_SetSharedData(t *testing.T) {
-	var r = NewDormantResource("resource")
-	r.SetSharedData(1)
-	if r.sharedData != 1 {
-		t.Fatalf("ResourceBase.SetSharedData() couldn't set data")
-	}
-}
-
-func TestResourceBase_SharedData(t *testing.T) {
-	var r = NewDormantResource("resource")
-	r.sharedData = 1
-	if r.SharedData() != 1 {
-		t.Fatalf("ResourceBase.SharedData() couldn't get data")
-	}
-}
-
 func TestResourceBase_setConfigFlag(t *testing.T) {
 	var r = NewDormantResource("resource")
 	var cfs = flagTrailingSlash | flagStrictOnTrailingSlash
@@ -394,23 +378,6 @@ func TestResourceBase_configFlags(t *testing.T) {
 
 	if cfs := r.configFlags(); cfs != wantCfs {
 		t.Fatalf("ResourceBAse.configFlags() = %d, want %d", cfs, wantCfs)
-	}
-}
-
-func TestResourceBase_Configuring(t *testing.T) {
-	var r = NewDormantResourceUsingConfig("/", Config{SubtreeHandler: true})
-	r.SetConfiguration(
-		Config{RedirectInsecureRequest: true, HandleThePathAsIs: true},
-	)
-
-	if r.Configuration() != (Config{
-		Secure:                  true,
-		RedirectInsecureRequest: true,
-		LeniencyOnTrailingSlash: true,
-		LeniencyOnUncleanPath:   true,
-		HandleThePathAsIs:       true,
-	}) {
-		t.Fatalf("ResourceBase_Configuring() has failed.")
 	}
 }
 
@@ -2475,6 +2442,39 @@ func TestResourceBase_HasAnyChildResources(t *testing.T) {
 	parent.Resource("{child}")
 	if !parent.HasAnyChildResources() {
 		t.Fatalf("ResourceBase.HasAnyChildResource() = false, want true")
+	}
+}
+
+func TestResourceBase_SetSharedData(t *testing.T) {
+	var r = NewDormantResource("resource")
+	r.SetSharedData(1)
+	if r.sharedData != 1 {
+		t.Fatalf("ResourceBase.SetSharedData() couldn't set data")
+	}
+}
+
+func TestResourceBase_SharedData(t *testing.T) {
+	var r = NewDormantResource("resource")
+	r.sharedData = 1
+	if r.SharedData() != 1 {
+		t.Fatalf("ResourceBase.SharedData() couldn't get data")
+	}
+}
+
+func TestResourceBase_Configuring(t *testing.T) {
+	var r = NewDormantResourceUsingConfig("/", Config{SubtreeHandler: true})
+	r.SetConfiguration(
+		Config{RedirectInsecureRequest: true, HandleThePathAsIs: true},
+	)
+
+	if r.Configuration() != (Config{
+		Secure:                  true,
+		RedirectInsecureRequest: true,
+		LeniencyOnTrailingSlash: true,
+		LeniencyOnUncleanPath:   true,
+		HandleThePathAsIs:       true,
+	}) {
+		t.Fatalf("ResourceBase_Configuring() has failed.")
 	}
 }
 
