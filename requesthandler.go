@@ -405,16 +405,26 @@ func (rhb *_RequestHandlerBase) handleRequest(
 	return rhb.handleNotAllowedHTTPMethod(w, r, args)
 }
 
+func (rhb *_RequestHandlerBase) allowedHTTPMethods() string {
+	var strb = strings.Builder{}
+	for _, mhp := range rhb.mhPairs {
+		if strb.Len() > 0 {
+			strb.WriteString(", ")
+		}
+
+		strb.WriteString(mhp.method)
+	}
+
+	return strb.String()
+}
+
 func (rhb *_RequestHandlerBase) handleOptionsHTTPMethod(
 	w http.ResponseWriter,
 	r *http.Request,
 	_ *Args,
 ) bool {
-	for _, mhp := range rhb.mhPairs {
-		w.Header().Add("Allow", mhp.method)
-	}
-
-	w.WriteHeader(http.StatusNoContent)
+	w.Header().Add("Allow", rhb.allowedHTTPMethods())
+	w.WriteHeader(http.StatusOK)
 	return true
 }
 
@@ -423,9 +433,7 @@ func (rhb *_RequestHandlerBase) handleNotAllowedHTTPMethod(
 	r *http.Request,
 	_ *Args,
 ) bool {
-	for _, mhp := range rhb.mhPairs {
-		w.Header().Add("Allow", mhp.method)
-	}
+	w.Header().Add("Allow", rhb.allowedHTTPMethods())
 
 	http.Error(
 		w,
@@ -529,7 +537,7 @@ var commonRedirectHandler = func(
 //
 // The handler is mostly used to redirect requests to an "https" from an
 // "http", to a URL with a trailing slash from a URL without, or vice versa.
-// It's also used when responders have been instructed to redirect requests
+// It's also used when responders have been configured to redirect requests
 // to a new location.
 //
 // Responders may have their own redirect handler set.
@@ -545,7 +553,7 @@ func SetCommonRedirectHandler(fn RedirectHandler) {
 //
 // The handler is mostly used to redirect requests to an "https" from an
 // "http", to a URL with a trailing slash from a URL without, or vice versa.
-// It's also used when responders have been instructed to redirect requests
+// It's also used when responders have been configured to redirect requests
 // to a new location.
 func CommonRedirectHandler() RedirectHandler {
 	return commonRedirectHandler
@@ -560,7 +568,7 @@ func CommonRedirectHandler() RedirectHandler {
 //
 // The redirect handler is mostly used to redirect requests to an "https" from
 // an "http", to a URL with a trailing slash from a URL without, or vice versa.
-// It's also used when responders have been instructed to redirect requests to
+// It's also used when responders have been configured to redirect requests to
 // a new location.
 func WrapCommonRedirectHandler(
 	mws ...func(RedirectHandler) RedirectHandler,
