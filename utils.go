@@ -372,8 +372,8 @@ loop:
 
 // --------------------------------------------------
 
-// HostPathValues is a slice of the host and path segment values.
-// It does not include query values, hence the name :)
+// HostPathValues is an alias to the TemplateValues. It contains
+// the host and path segment values and does not include query values.
 type HostPathValues = TemplateValues
 
 // --------------------------------------------------
