@@ -142,7 +142,7 @@ var (
 
 // --------------------------------------------------
 
-// Template erros.
+// Template errors.
 var (
 	// ErrInvalidTemplate is returned when a template is empty or not complete.
 	ErrInvalidTemplate = fmt.Errorf("invalid template")
