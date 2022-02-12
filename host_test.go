@@ -4,11 +4,338 @@
 package nanomux
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 )
+
+// --------------------------------------------------
+
+func TestHost_SetPermanentRedirectCodeAt(t *testing.T) {
+	var host = NewDormantHost("http://example.com")
+
+	testPanicker(
+		t,
+		true,
+		func() {
+			host.SetPermanentRedirectCodeAt(
+				"resource-1/resource-2",
+				http.StatusTemporaryRedirect,
+			)
+		},
+	)
+
+	var r = host.Resource("resource-1/resource-2")
+
+	testPanicker(
+		t,
+		false,
+		func() {
+			host.SetPermanentRedirectCodeAt(
+				"resource-1/resource-2",
+				http.StatusMovedPermanently,
+			)
+
+			if r.permanentRedirectCode != http.StatusMovedPermanently {
+				panic(
+					fmt.Errorf(
+						"permanentRedirectCode = %v",
+						r.permanentRedirectCode,
+					),
+				)
+			}
+		},
+	)
+
+	testPanicker(
+		t,
+		false,
+		func() {
+			host.SetPermanentRedirectCodeAt(
+				"resource-1/resource-2",
+				http.StatusPermanentRedirect,
+			)
+
+			if r.permanentRedirectCode != http.StatusPermanentRedirect {
+				panic(
+					fmt.Errorf(
+						"permanentRedirectCode = %v",
+						r.permanentRedirectCode,
+					),
+				)
+			}
+		},
+	)
+}
+
+func TestHost_PermanentRedirectCodeAt(t *testing.T) {
+	var host = NewDormantHost("http://example.com")
+	host.SetPermanentRedirectCodeAt(
+		"/resource-1/resource-2/",
+		http.StatusPermanentRedirect,
+	)
+
+	testPanickerValue(
+		t,
+		true,
+		nil,
+		func() interface{} {
+			return host.PermanentRedirectCodeAt("resource-1/resource-2")
+		},
+	)
+
+	testPanickerValue(
+		t,
+		false,
+		http.StatusPermanentRedirect,
+		func() interface{} {
+			return host.PermanentRedirectCodeAt("resource-1/resource-2/")
+		},
+	)
+
+	host.SetPermanentRedirectCodeAt(
+		"resource-1/resource-2/",
+		http.StatusMovedPermanently,
+	)
+
+	testPanickerValue(
+		t,
+		false,
+		http.StatusMovedPermanently,
+		func() interface{} {
+			return host.PermanentRedirectCodeAt("resource-1/resource-2/")
+		},
+	)
+}
+
+func TestHost_SetRedirectHandlerAt(t *testing.T) {
+	var host = NewDormantHost("http://example.com")
+	var strb = strings.Builder{}
+	var rHandler = func(
+		w http.ResponseWriter,
+		r *http.Request,
+		url string,
+		code int,
+		args *Args,
+	) bool {
+		strb.WriteString("redirected")
+		return true
+	}
+
+	testPanicker(
+		t,
+		false,
+		func() { host.SetRedirectHandlerAt("resource-1/resource-2", rHandler) },
+	)
+
+	var r *Resource
+	testPanicker(
+		t,
+		true,
+		func() { r = host.RegisteredResource("/resource-1/resource-2/") },
+	)
+
+	r = host.RegisteredResource("/resource-1/resource-2")
+	r.redirectHandler(nil, nil, "", 0, nil)
+	if strb.String() != "redirected" {
+		t.Fatalf("ResourceBase.SetRedirectHandlerAt has failed")
+	}
+}
+
+func TestHost_RedirectHandlerAt(t *testing.T) {
+	var host = NewDormantHost("http://example.com")
+
+	testPanicker(
+		t,
+		true,
+		func() { _ = host.RedirectHandlerAt("resource-1/resource-2/") },
+	)
+
+	_ = host.Resource("/resource-1/resource-2/")
+
+	testPanickerValue(
+		t,
+		false,
+		reflect.ValueOf(commonRedirectHandler).Pointer(),
+		func() interface{} {
+			var rh = host.RedirectHandlerAt("resource-1/resource-2/")
+			return reflect.ValueOf(rh).Pointer()
+		},
+	)
+
+	var rHandler = func(
+		w http.ResponseWriter,
+		r *http.Request,
+		url string,
+		code int,
+		args *Args,
+	) bool {
+		return true
+	}
+
+	host.SetRedirectHandlerAt("resource-1/resource-2/", rHandler)
+	testPanicker(
+		t,
+		true,
+		func() {
+			_ = host.RedirectHandlerAt("/resource-1/resource-2")
+		},
+	)
+
+	testPanickerValue(
+		t,
+		false,
+		reflect.ValueOf(rHandler).Pointer(),
+		func() interface{} {
+			var rh = host.RedirectHandlerAt("/resource-1/resource-2/")
+			return reflect.ValueOf(rh).Pointer()
+		},
+	)
+}
+
+func TestHost_WrapRedirectHandlerAt(t *testing.T) {
+	var strb strings.Builder
+
+	var host = NewDormantHost("http://example.com")
+	host.SetRedirectHandlerAt(
+		"/resource-1/resource-2",
+		func(
+			w http.ResponseWriter,
+			r *http.Request,
+			url string,
+			code int,
+			args *Args,
+		) bool {
+			strb.WriteByte('b')
+			return true
+		},
+	)
+
+	testPanicker(
+		t,
+		true,
+		func() {
+			host.WrapRedirectHandlerAt(
+				"resource-1/resource-2/",
+				func(nrh RedirectHandler) RedirectHandler {
+					return func(
+						w http.ResponseWriter,
+						r *http.Request,
+						url string,
+						code int,
+						args *Args,
+					) bool {
+						strb.WriteByte('a')
+						return nrh(w, r, url, code, args)
+					}
+				},
+			)
+		},
+	)
+
+	testPanicker(
+		t,
+		false,
+		func() {
+			host.WrapRedirectHandlerAt(
+				"resource-1/resource-2",
+				func(nrh RedirectHandler) RedirectHandler {
+					return func(
+						w http.ResponseWriter,
+						r *http.Request,
+						url string,
+						code int,
+						args *Args,
+					) bool {
+						strb.WriteByte('a')
+						return nrh(w, r, url, code, args)
+					}
+				},
+			)
+		},
+	)
+
+	var rh = host.RedirectHandlerAt("resource-1/resource-2")
+	rh(nil, nil, "", 0, nil)
+
+	if strb.String() != "ab" {
+		t.Fatalf("ResourceBase.WrapRedirectHandlerAt has failed")
+	}
+}
+
+func TestHost_RedirectAnyRequestAt(t *testing.T) {
+	var host = NewDormantHost("http://example.com")
+	testPanicker(
+		t,
+		false,
+		func() {
+			host.RedirectAnyRequestAt(
+				"temporarily_down",
+				"replacement",
+				http.StatusTemporaryRedirect,
+			)
+		},
+	)
+
+	var rr = httptest.NewRecorder()
+	var req = httptest.NewRequest("GET", "/temporarily_down", nil)
+	host.ServeHTTP(rr, req)
+
+	var response = rr.Result()
+	checkValue(t, response.StatusCode, http.StatusTemporaryRedirect)
+	checkValue(t, response.Header.Get("Location"), "/replacement")
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest("GET", "/temporarily_down/resource", nil)
+	host.ServeHTTP(rr, req)
+
+	response = rr.Result()
+	checkValue(t, response.StatusCode, http.StatusTemporaryRedirect)
+	checkValue(t, response.Header.Get("Location"), "/replacement/resource")
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(
+		"GET",
+		"/temporarily_down/resource-1/resource-2/",
+		nil,
+	)
+
+	host.ServeHTTP(rr, req)
+
+	response = rr.Result()
+	checkValue(t, response.StatusCode, http.StatusTemporaryRedirect)
+	checkValue(
+		t,
+		response.Header.Get("Location"), "/replacement/resource-1/resource-2/",
+	)
+
+	testPanicker(
+		t,
+		true,
+		func() {
+			host.RedirectAnyRequestAt(
+				"temporarily_down",
+				"",
+				http.StatusTemporaryRedirect,
+			)
+		},
+	)
+
+	testPanicker(
+		t,
+		true,
+		func() {
+			host.RedirectAnyRequestAt(
+				"temporarily_down",
+				"new-resource",
+				http.StatusOK,
+			)
+		},
+	)
+}
 
 // --------------------------------------------------
 

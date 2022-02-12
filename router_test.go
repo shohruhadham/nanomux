@@ -4,6 +4,7 @@
 package nanomux
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -304,17 +305,14 @@ func TestRouter_SetGetSharedDataAt(t *testing.T) {
 					)
 				}
 
-				defer checkPanic(t, c.wantErr)
-
-				retrievedData = 0
-				retrievedData = ro.SharedDataAt(c.url)
-				if retrievedData != data {
-					t.Fatalf(
-						"Router.SharedDataAt() data = %v, want %v",
-						retrievedData,
-						data,
-					)
-				}
+				testPanickerValue(
+					t,
+					c.wantErr,
+					data,
+					func() interface{} {
+						return ro.SharedDataAt(c.url)
+					},
+				)
 			}
 		})
 	}
@@ -449,18 +447,14 @@ func TestRouter_ConfigurationAt(t *testing.T) {
 				ro.SetConfigurationAt(c.url, config)
 			}
 
-			defer checkPanic(t, c.wantErr)
-
-			var _rConfig = ro.ConfigurationAt(c.urlToCheck)
-			if !c.wantErr {
-				if _rConfig != wantConfig {
-					t.Fatalf(
-						"Router.ConfigurationAt() = %v, want = %v",
-						_rConfig,
-						wantConfig,
-					)
-				}
-			}
+			testPanickerValue(
+				t,
+				c.wantErr,
+				wantConfig,
+				func() interface{} {
+					return ro.ConfigurationAt(c.urlToCheck)
+				},
+			)
 		})
 	}
 }
@@ -587,14 +581,14 @@ func TestRouter_ImplementationAt(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			defer checkPanic(t, c.wantErr)
-
-			var _rh = ro.ImplementationAt(c.urlTmpl)
-			if !c.wantErr && _rh != rh {
-				t.Fatalf(
-					"Router.ImplementationAt(): couldn't return impl",
-				)
-			}
+			testPanickerValue(
+				t,
+				c.wantErr,
+				rh,
+				func() interface{} {
+					return ro.ImplementationAt(c.urlTmpl)
+				},
+			)
 		})
 	}
 }
@@ -774,19 +768,20 @@ func TestRouter_URLHandlerOf(t *testing.T) {
 		{"r11 #4", "put", "{r01}/r11", false},
 		{"r11 #4", "!", "{r01}/r11", false},
 		{"r11 error #1", "get", "/{r01}/r11/", true},
-		{"empty method", "", "/r00", false},
+		{"empty method", "", "/r00", true},
 		{"empty url", "get", "", true},
 	}
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			defer checkPanic(t, c.wantErr)
-			var h = ro.URLHandlerOf(c.method, c.urlTmpl)
-			if !c.wantErr && c.method != "" {
-				if h == nil {
-					t.Fatalf("Router.URLHandlerOf(): couldn't return handler")
-				}
-			}
+			testPanickerValue(
+				t,
+				c.wantErr,
+				true,
+				func() interface{} {
+					return ro.URLHandlerOf(c.method, c.urlTmpl) != nil
+				},
+			)
 		})
 	}
 }
@@ -1229,6 +1224,666 @@ func TestRouter_WrapURLHandlerOf(t *testing.T) {
 	}
 }
 
+func TestRouter_SetPermanentRedirectCodeAt(t *testing.T) {
+	var ro = NewRouter()
+
+	testPanicker(
+		t,
+		true,
+		func() {
+			ro.SetPermanentRedirectCodeAt(
+				"resource-1/resource-2",
+				http.StatusTemporaryRedirect,
+			)
+		},
+	)
+
+	var r = ro.Resource("resource-1/resource-2")
+
+	testPanicker(
+		t,
+		false,
+		func() {
+			ro.SetPermanentRedirectCodeAt(
+				"resource-1/resource-2",
+				http.StatusMovedPermanently,
+			)
+
+			if r.permanentRedirectCode != http.StatusMovedPermanently {
+				panic(
+					fmt.Errorf(
+						"permanentRedirectCode = %v",
+						r.permanentRedirectCode,
+					),
+				)
+			}
+		},
+	)
+
+	testPanicker(
+		t,
+		false,
+		func() {
+			ro.SetPermanentRedirectCodeAt(
+				"resource-1/resource-2",
+				http.StatusPermanentRedirect,
+			)
+
+			if r.permanentRedirectCode != http.StatusPermanentRedirect {
+				panic(
+					fmt.Errorf(
+						"permanentRedirectCode = %v",
+						r.permanentRedirectCode,
+					),
+				)
+			}
+		},
+	)
+
+	testPanicker(
+		t,
+		true,
+		func() {
+			ro.SetPermanentRedirectCodeAt(
+				"http://example.com/resource-1/resource-2",
+				http.StatusTemporaryRedirect,
+			)
+		},
+	)
+
+	var hr = ro.Resource("http://example.com/resource-1/resource-2")
+
+	testPanicker(
+		t,
+		false,
+		func() {
+			ro.SetPermanentRedirectCodeAt(
+				"http://example.com/resource-1/resource-2",
+				http.StatusMovedPermanently,
+			)
+
+			if hr.permanentRedirectCode != http.StatusMovedPermanently {
+				panic(
+					fmt.Errorf(
+						"permanentRedirectCode = %v",
+						hr.permanentRedirectCode,
+					),
+				)
+			}
+		},
+	)
+
+	testPanicker(
+		t,
+		false,
+		func() {
+			ro.SetPermanentRedirectCodeAt(
+				"http://example.com/resource-1/resource-2",
+				http.StatusPermanentRedirect,
+			)
+
+			if hr.permanentRedirectCode != http.StatusPermanentRedirect {
+				panic(
+					fmt.Errorf(
+						"permanentRedirectCode = %v",
+						hr.permanentRedirectCode,
+					),
+				)
+			}
+		},
+	)
+}
+
+func TestRouter_PermanentRedirectCodeAt(t *testing.T) {
+	var ro = NewRouter()
+	ro.SetPermanentRedirectCodeAt(
+		"/resource-1/resource-2/",
+		http.StatusPermanentRedirect,
+	)
+
+	testPanickerValue(
+		t,
+		true,
+		nil,
+		func() interface{} {
+			return ro.PermanentRedirectCodeAt("resource-1/resource-2")
+		},
+	)
+
+	testPanickerValue(
+		t,
+		false,
+		http.StatusPermanentRedirect,
+		func() interface{} {
+			return ro.PermanentRedirectCodeAt("resource-1/resource-2/")
+		},
+	)
+
+	ro.SetPermanentRedirectCodeAt(
+		"resource-1/resource-2/",
+		http.StatusMovedPermanently,
+	)
+
+	testPanickerValue(
+		t,
+		false,
+		http.StatusMovedPermanently,
+		func() interface{} {
+			return ro.PermanentRedirectCodeAt("resource-1/resource-2/")
+		},
+	)
+
+	ro.SetPermanentRedirectCodeAt(
+		"http://example.com/resource-1/resource-2/",
+		http.StatusPermanentRedirect,
+	)
+
+	testPanickerValue(
+		t,
+		true,
+		nil,
+		func() interface{} {
+			return ro.PermanentRedirectCodeAt(
+				"http://example.com/resource-1/resource-2",
+			)
+		},
+	)
+
+	testPanickerValue(
+		t,
+		false,
+		http.StatusPermanentRedirect,
+		func() interface{} {
+			return ro.PermanentRedirectCodeAt(
+				"http://example.com/resource-1/resource-2/",
+			)
+		},
+	)
+
+	ro.SetPermanentRedirectCodeAt(
+		"http://example.com/resource-1/resource-2/",
+		http.StatusMovedPermanently,
+	)
+
+	testPanickerValue(
+		t,
+		false,
+		http.StatusMovedPermanently,
+		func() interface{} {
+			return ro.PermanentRedirectCodeAt(
+				"http://example.com/resource-1/resource-2/",
+			)
+		},
+	)
+}
+
+func TestRouter_SetRedirectHandlerAt(t *testing.T) {
+	var ro = NewRouter()
+	var strb = strings.Builder{}
+	var rHandler = func(
+		w http.ResponseWriter,
+		r *http.Request,
+		url string,
+		code int,
+		args *Args,
+	) bool {
+		strb.WriteString("redirected")
+		return true
+	}
+
+	testPanicker(
+		t,
+		false,
+		func() { ro.SetRedirectHandlerAt("resource-1/resource-2", rHandler) },
+	)
+
+	var r *Resource
+	testPanicker(
+		t,
+		true,
+		func() { r = ro.RegisteredResource("/resource-1/resource-2/") },
+	)
+
+	r = ro.RegisteredResource("/resource-1/resource-2")
+	r.redirectHandler(nil, nil, "", 0, nil)
+	if strb.String() != "redirected" {
+		t.Fatalf("Router.SetRedirectHandlerAt has failed")
+	}
+
+	testPanicker(
+		t,
+		false,
+		func() {
+			ro.SetRedirectHandlerAt(
+				"http://example.com/resource-1/resource-2",
+				rHandler,
+			)
+		},
+	)
+
+	testPanicker(
+		t,
+		true,
+		func() {
+			r = ro.RegisteredResource(
+				"http://example.com/resource-1/resource-2/",
+			)
+		},
+	)
+
+	r = ro.RegisteredResource("http://example.com/resource-1/resource-2")
+	strb.Reset()
+	r.redirectHandler(nil, nil, "", 0, nil)
+	if strb.String() != "redirected" {
+		t.Fatalf("Router.SetRedirectHandlerAt has failed")
+	}
+}
+
+func TestRouter_RedirectHandlerAt(t *testing.T) {
+	var ro = NewRouter()
+
+	testPanicker(
+		t,
+		true,
+		func() { _ = ro.RedirectHandlerAt("resource-1/resource-2/") },
+	)
+
+	_ = ro.Resource("/resource-1/resource-2/")
+
+	testPanickerValue(
+		t,
+		false,
+		reflect.ValueOf(commonRedirectHandler).Pointer(),
+		func() interface{} {
+			var rh = ro.RedirectHandlerAt("resource-1/resource-2/")
+			return reflect.ValueOf(rh).Pointer()
+		},
+	)
+
+	var rHandler = func(
+		w http.ResponseWriter,
+		r *http.Request,
+		url string,
+		code int,
+		args *Args,
+	) bool {
+		return true
+	}
+
+	ro.SetRedirectHandlerAt("resource-1/resource-2/", rHandler)
+	testPanicker(
+		t,
+		true,
+		func() {
+			_ = ro.RedirectHandlerAt("/resource-1/resource-2")
+		},
+	)
+
+	testPanickerValue(
+		t,
+		false,
+		reflect.ValueOf(rHandler).Pointer(),
+		func() interface{} {
+			var rh = ro.RedirectHandlerAt("/resource-1/resource-2/")
+			return reflect.ValueOf(rh).Pointer()
+		},
+	)
+
+	testPanicker(
+		t,
+		true,
+		func() {
+			_ = ro.RedirectHandlerAt(
+				"http://example.com/resource-1/resource-2/",
+			)
+		},
+	)
+
+	_ = ro.Resource("http://example.com/resource-1/resource-2/")
+
+	testPanickerValue(
+		t,
+		false,
+		reflect.ValueOf(commonRedirectHandler).Pointer(),
+		func() interface{} {
+			var rh = ro.RedirectHandlerAt(
+				"http://example.com/resource-1/resource-2/",
+			)
+			return reflect.ValueOf(rh).Pointer()
+		},
+	)
+
+	rHandler = func(
+		w http.ResponseWriter,
+		r *http.Request,
+		url string,
+		code int,
+		args *Args,
+	) bool {
+		return true
+	}
+
+	ro.SetRedirectHandlerAt(
+		"http://example.com/resource-1/resource-2/",
+		rHandler,
+	)
+
+	testPanicker(
+		t,
+		true,
+		func() {
+			_ = ro.RedirectHandlerAt("http://example.com/resource-1/resource-2")
+		},
+	)
+
+	testPanickerValue(
+		t,
+		false,
+		reflect.ValueOf(rHandler).Pointer(),
+		func() interface{} {
+			var rh = ro.RedirectHandlerAt(
+				"http://example.com/resource-1/resource-2/",
+			)
+
+			return reflect.ValueOf(rh).Pointer()
+		},
+	)
+}
+
+func TestRouter_WrapRedirectHandlerAt(t *testing.T) {
+	var strb strings.Builder
+
+	var ro = NewRouter()
+	ro.SetRedirectHandlerAt(
+		"/resource-1/resource-2",
+		func(
+			w http.ResponseWriter,
+			r *http.Request,
+			url string,
+			code int,
+			args *Args,
+		) bool {
+			strb.WriteByte('b')
+			return true
+		},
+	)
+
+	testPanicker(
+		t,
+		true,
+		func() {
+			ro.WrapRedirectHandlerAt(
+				"resource-1/resource-2/",
+				func(nrh RedirectHandler) RedirectHandler {
+					return func(
+						w http.ResponseWriter,
+						r *http.Request,
+						url string,
+						code int,
+						args *Args,
+					) bool {
+						strb.WriteByte('a')
+						return nrh(w, r, url, code, args)
+					}
+				},
+			)
+		},
+	)
+
+	testPanicker(
+		t,
+		false,
+		func() {
+			ro.WrapRedirectHandlerAt(
+				"resource-1/resource-2",
+				func(nrh RedirectHandler) RedirectHandler {
+					return func(
+						w http.ResponseWriter,
+						r *http.Request,
+						url string,
+						code int,
+						args *Args,
+					) bool {
+						strb.WriteByte('a')
+						return nrh(w, r, url, code, args)
+					}
+				},
+			)
+		},
+	)
+
+	var rh = ro.RedirectHandlerAt("resource-1/resource-2")
+	rh(nil, nil, "", 0, nil)
+
+	if strb.String() != "ab" {
+		t.Fatalf("ResourceBase.WrapRedirectHandler has failed")
+	}
+
+	ro.SetRedirectHandlerAt(
+		"http://example.com/resource-1/resource-2",
+		func(
+			w http.ResponseWriter,
+			r *http.Request,
+			url string,
+			code int,
+			args *Args,
+		) bool {
+			strb.WriteByte('b')
+			return true
+		},
+	)
+
+	testPanicker(
+		t,
+		true,
+		func() {
+			ro.WrapRedirectHandlerAt(
+				"http://example.com/resource-1/resource-2/",
+				func(nrh RedirectHandler) RedirectHandler {
+					return func(
+						w http.ResponseWriter,
+						r *http.Request,
+						url string,
+						code int,
+						args *Args,
+					) bool {
+						strb.WriteByte('a')
+						return nrh(w, r, url, code, args)
+					}
+				},
+			)
+		},
+	)
+
+	testPanicker(
+		t,
+		false,
+		func() {
+			ro.WrapRedirectHandlerAt(
+				"http://example.com/resource-1/resource-2",
+				func(nrh RedirectHandler) RedirectHandler {
+					return func(
+						w http.ResponseWriter,
+						r *http.Request,
+						url string,
+						code int,
+						args *Args,
+					) bool {
+						strb.WriteByte('a')
+						return nrh(w, r, url, code, args)
+					}
+				},
+			)
+		},
+	)
+
+	rh = ro.RedirectHandlerAt("http://example.com/resource-1/resource-2")
+	strb.Reset()
+	rh(nil, nil, "", 0, nil)
+
+	if strb.String() != "ab" {
+		t.Fatalf("Router.WrapRedirectHandlerAt has failed")
+	}
+}
+
+func TestRouter_RedirectAnyRequestAt(t *testing.T) {
+	var ro = NewRouter()
+	testPanicker(
+		t,
+		false,
+		func() {
+			ro.RedirectAnyRequestAt(
+				"temporarily_down",
+				"replacement",
+				http.StatusTemporaryRedirect,
+			)
+		},
+	)
+
+	var rr = httptest.NewRecorder()
+	var req = httptest.NewRequest("GET", "/temporarily_down", nil)
+	ro.ServeHTTP(rr, req)
+
+	var response = rr.Result()
+	checkValue(t, response.StatusCode, http.StatusTemporaryRedirect)
+	checkValue(t, response.Header.Get("Location"), "/replacement")
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest("GET", "/temporarily_down/resource", nil)
+	ro.ServeHTTP(rr, req)
+
+	response = rr.Result()
+	checkValue(t, response.StatusCode, http.StatusTemporaryRedirect)
+	checkValue(t, response.Header.Get("Location"), "/replacement/resource")
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(
+		"GET",
+		"/temporarily_down/resource-1/resource-2/",
+		nil,
+	)
+
+	ro.ServeHTTP(rr, req)
+
+	response = rr.Result()
+	checkValue(t, response.StatusCode, http.StatusTemporaryRedirect)
+	checkValue(
+		t,
+		response.Header.Get("Location"), "/replacement/resource-1/resource-2/",
+	)
+
+	testPanicker(
+		t,
+		true,
+		func() {
+			ro.RedirectAnyRequestAt(
+				"temporarily_down",
+				"",
+				http.StatusTemporaryRedirect,
+			)
+		},
+	)
+
+	testPanicker(
+		t,
+		true,
+		func() {
+			ro.RedirectAnyRequestAt(
+				"temporarily_down",
+				"new-resource",
+				http.StatusOK,
+			)
+		},
+	)
+
+	testPanicker(
+		t,
+		false,
+		func() {
+			ro.RedirectAnyRequestAt(
+				"http://www.example.com/temporarily_down",
+				"http://www.example.com/replacement",
+				http.StatusTemporaryRedirect,
+			)
+		},
+	)
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(
+		"GET",
+		"http://www.example.com/temporarily_down",
+		nil,
+	)
+
+	ro.ServeHTTP(rr, req)
+
+	response = rr.Result()
+	checkValue(t, response.StatusCode, http.StatusTemporaryRedirect)
+	checkValue(
+		t,
+		response.Header.Get("Location"),
+		"http://www.example.com/replacement",
+	)
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(
+		"GET",
+		"http://www.example.com/temporarily_down/resource",
+		nil,
+	)
+
+	ro.ServeHTTP(rr, req)
+
+	response = rr.Result()
+	checkValue(t, response.StatusCode, http.StatusTemporaryRedirect)
+	checkValue(
+		t,
+		response.Header.Get("Location"),
+		"http://www.example.com/replacement/resource",
+	)
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(
+		"GET",
+		"http://www.example.com/temporarily_down/resource-1/resource-2/",
+		nil,
+	)
+
+	ro.ServeHTTP(rr, req)
+
+	response = rr.Result()
+	checkValue(t, response.StatusCode, http.StatusTemporaryRedirect)
+	checkValue(
+		t,
+		response.Header.Get("Location"),
+		"http://www.example.com/replacement/resource-1/resource-2/",
+	)
+
+	testPanicker(
+		t,
+		true,
+		func() {
+			ro.RedirectAnyRequestAt(
+				"http://www.example.com/temporarily_down",
+				"",
+				http.StatusTemporaryRedirect,
+			)
+		},
+	)
+
+	testPanicker(
+		t,
+		true,
+		func() {
+			ro.RedirectAnyRequestAt(
+				"http://www.example.com/temporarily_down",
+				"new-resource",
+				http.StatusOK,
+			)
+		},
+	)
+}
+
 func TestRouter_hostWithTemplate(t *testing.T) {
 	var (
 		ro    = NewRouter()
@@ -1557,31 +2212,36 @@ func TestRouter_Host(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			defer checkPanic(t, c.wantErr)
-
-			var h = ro.Host(c.tmplStr)
-			if c.wantHost != nil && h != c.wantHost {
-				t.Fatalf("Router.Host() couldn't get host")
-			}
-
-			if !c.wantErr {
-				var found bool
-				for _, sh := range ro.staticHosts {
-					if h == sh {
-						found = true
+			testPanicker(
+				t,
+				c.wantErr,
+				func() {
+					var h = ro.Host(c.tmplStr)
+					if c.wantHost != nil && h != c.wantHost {
+						t.Fatalf("Router.Host() = %v, want %v", h, c.wantHost)
 					}
-				}
 
-				for _, sh := range ro.patternHosts {
-					if h == sh {
-						found = true
+					var found bool
+					for _, sh := range ro.staticHosts {
+						if h == sh {
+							found = true
+						}
 					}
-				}
 
-				if !found {
-					t.Fatalf("Router.Host() failed to register host")
-				}
-			}
+					for _, sh := range ro.patternHosts {
+						if h == sh {
+							found = true
+						}
+					}
+
+					if !found {
+						t.Fatalf(
+							"Router.Host() has failed to create %s",
+							c.tmplStr,
+						)
+					}
+				},
+			)
 		})
 	}
 }
@@ -1759,33 +2419,36 @@ func TestRouter_HostUsingConfig(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			defer checkPanic(t, c.wantErr)
-
-			var r = ro.HostUsingConfig(c.tmplStr, c.config)
-			if c.wantHost != nil && r != c.wantHost {
-				t.Fatalf("Router.HostUsingConfig() couldn't get host")
-			}
-
-			if !c.wantErr {
-				var found bool
-				for _, sr := range ro.staticHosts {
-					if r == sr {
-						found = true
+			testPanicker(
+				t,
+				c.wantErr,
+				func() {
+					var r = ro.HostUsingConfig(c.tmplStr, c.config)
+					if c.wantHost != nil && r != c.wantHost {
+						t.Fatalf("Router.HostUsingConfig() couldn't get host")
 					}
-				}
 
-				for _, sr := range ro.patternHosts {
-					if r == sr {
-						found = true
+					var found bool
+					for _, sr := range ro.staticHosts {
+						if r == sr {
+							found = true
+						}
 					}
-				}
 
-				if !found {
-					t.Fatalf(
-						"Router.HostUsingConfig() failed to register host",
-					)
-				}
-			}
+					for _, sr := range ro.patternHosts {
+						if r == sr {
+							found = true
+						}
+					}
+
+					if !found {
+						t.Fatalf(
+							"Router.HostUsingConfig() has failed to create %s",
+							c.tmplStr,
+						)
+					}
+				},
+			)
 		})
 	}
 }
@@ -1827,10 +2490,10 @@ func TestRouter_RegisteredHost(t *testing.T) {
 	var wildcardSub = ro.Host("{sub}.example.com")
 
 	var cases = []struct {
-		name    string
-		tmplStr string
-		want    *Host
-		wantErr bool
+		name     string
+		tmplStr  string
+		wantHost *Host
+		wantErr  bool
 	}{
 		{"static1", "example1.com", static1, false},
 		{"static2", "$static2:example2.com", static2, false},
@@ -1855,15 +2518,14 @@ func TestRouter_RegisteredHost(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			defer checkPanic(t, c.wantErr)
-
-			var got = ro.RegisteredHost(c.tmplStr)
-			if got != c.want {
-				t.Fatalf(
-					"Router.RegisteredHost() = %v, want %v",
-					got, c.want,
-				)
-			}
+			testPanickerValue(
+				t,
+				c.wantErr,
+				c.wantHost,
+				func() interface{} {
+					return ro.RegisteredHost(c.tmplStr)
+				},
+			)
 		})
 	}
 }
@@ -2002,12 +2664,26 @@ func TestRouter_initializeRootResource(t *testing.T) {
 }
 
 func TestRouter_Resource(t *testing.T) {
-	defer checkPanic(t, false)
-
 	var ro = NewRouter()
-	var static1 = ro.Resource("static1")
-	var pattern = ro.Resource("static2/{name:pattern}/")
-	var wildcard = ro.Resource("https:///{name:pattern2}/{wildcard}")
+
+	var static, pattern, wildcard *Resource
+
+	testPanicker(t, false, func() { static = ro.Resource("static1") })
+	testPanicker(
+		t,
+		false,
+		func() {
+			pattern = ro.Resource("static2/{name:pattern}/")
+		},
+	)
+
+	testPanicker(
+		t,
+		false,
+		func() {
+			wildcard = ro.Resource("https:///{name:pattern2}/{wildcard}")
+		},
+	)
 
 	var cases = []struct {
 		name         string
@@ -2015,7 +2691,7 @@ func TestRouter_Resource(t *testing.T) {
 		wantResource *Resource
 		wantErr      bool
 	}{
-		{"static1 #1", "static1", static1, false},
+		{"static1 #1", "static1", static, false},
 		{"static1 #2", "https:///static1", nil, true},
 		{"static1 #3", "http:///static1/", nil, true},
 		{"static1 #5", "https:///static1/", nil, true},
@@ -2076,28 +2752,61 @@ func TestRouter_Resource(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			defer checkPanic(t, c.wantErr)
+			testPanicker(
+				t,
+				c.wantErr,
+				func() {
+					var r = ro.Resource(c.tmplStr)
+					if c.wantResource != nil && r != c.wantResource {
+						t.Fatalf(
+							"Router.Resource() = %v, want %v",
+							r,
+							c.wantResource,
+						)
+					}
+				},
+			)
 
-			var r = ro.Resource(c.tmplStr)
-			if c.wantResource != nil && r != c.wantResource {
-				t.Fatalf("Router.Resource() couldn't get resource")
-			}
 		})
 	}
 }
 
 func TestRouter_ResourceUsingConfig(t *testing.T) {
-	defer checkPanic(t, false)
-
 	var ro = NewRouter()
-	var static = ro.ResourceUsingConfig("static", Config{SubtreeHandler: true})
-	var pattern = ro.ResourceUsingConfig("{name:pattern}/", Config{
-		HandleThePathAsIs: true,
-	})
+	var static, pattern, wildcard *Resource
 
-	var wildcard = ro.ResourceUsingConfig("https:///{wildcard}", Config{
-		RedirectInsecureRequest: true,
-	})
+	testPanicker(
+		t,
+		false,
+		func() {
+			static = ro.ResourceUsingConfig(
+				"static",
+				Config{SubtreeHandler: true},
+			)
+		},
+	)
+
+	testPanicker(
+		t,
+		false,
+		func() {
+			pattern = ro.ResourceUsingConfig(
+				"{name:pattern}/",
+				Config{HandleThePathAsIs: true},
+			)
+		},
+	)
+
+	testPanicker(
+		t,
+		false,
+		func() {
+			wildcard = ro.ResourceUsingConfig(
+				"https:///{wildcard}",
+				Config{RedirectInsecureRequest: true},
+			)
+		},
+	)
 
 	var cases = []struct {
 		name    string
@@ -2302,14 +3011,21 @@ func TestRouter_ResourceUsingConfig(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			defer checkPanic(t, c.wantErr)
+			testPanicker(
+				t,
+				c.wantErr,
+				func() {
+					var r = ro.ResourceUsingConfig(c.tmplStr, c.config)
+					if c.wantR != nil && r != c.wantR {
+						t.Fatalf(
+							"Router.ResourceUsingConfig() = %v, want %v",
+							r,
+							c.wantR,
+						)
+					}
+				},
+			)
 
-			var r = ro.ResourceUsingConfig(c.tmplStr, c.config)
-			if c.wantR != nil && r != c.wantR {
-				t.Fatalf(
-					"Router.ResourceUsingConfig() couldn't get resource",
-				)
-			}
 		})
 	}
 }
@@ -2684,7 +3400,7 @@ func TestRouter_RegisteredResource(t *testing.T) {
 	var cases = []struct {
 		name    string
 		tmplStr string
-		want    *Resource
+		wantR   *Resource
 		wantErr bool
 	}{
 		{"static", "static", static1, false},
@@ -2710,16 +3426,15 @@ func TestRouter_RegisteredResource(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			defer checkPanic(t, c.wantErr)
+			testPanickerValue(
+				t,
+				c.wantErr,
+				c.wantR,
+				func() interface{} {
+					return ro.RegisteredResource(c.tmplStr)
+				},
+			)
 
-			got := ro.RegisteredResource(c.tmplStr)
-			if got != c.want {
-				t.Fatalf(
-					"Router.RegisteredResource() = %v, want %v",
-					got,
-					c.want,
-				)
-			}
 		})
 	}
 }

@@ -38,7 +38,8 @@ func lineInfo(skipCount int) string {
 	return ""
 }
 
-func testPanicker(t *testing.T, wantErr bool, fn func()) {
+func testPanicker(t *testing.T, wantPanic bool, fn func()) {
+	t.Helper()
 	var li = lineInfo(2)
 	defer func() {
 		var v = recover()
@@ -51,36 +52,57 @@ func testPanicker(t *testing.T, wantErr bool, fn func()) {
 			panic(v)
 		}
 
-		if (err != nil) != wantErr {
-			t.Fatalf("%s err = %v, want err %t", li, err, wantErr)
+		if (err != nil) != wantPanic {
+			t.Fatalf("%s panic err = %v, want panic %t", li, err, wantPanic)
 		}
 	}()
 
 	fn()
 }
 
-func checkPanic(t *testing.T, wantErr bool) {
-	var v = recover()
-	if v == nil {
-		return
-	}
+func testPanickerValue(
+	t *testing.T,
+	wantPanic bool,
+	wantValue interface{},
+	fn func() interface{},
+) {
+	t.Helper()
+	var li = lineInfo(2)
+	defer func() {
+		var v = recover()
+		if v == nil {
+			return
+		}
 
-	var err, validErr = v.(error)
-	if !validErr {
-		panic(v)
-	}
+		var err, validErr = v.(error)
+		if !validErr {
+			panic(v)
+		}
 
-	if (err != nil) != wantErr {
-		t.Fatalf("%s err = %v, want err %t", lineInfo(2), err, wantErr)
+		if (err != nil) != wantPanic {
+			t.Fatalf("%s panic err = %v, want panic %t", li, err, wantPanic)
+		}
+	}()
+
+	var value = fn()
+	if value != wantValue {
+		t.Fatalf("%s value = %v, want %v", li, value, wantValue)
 	}
 }
 
 // func checkErr(t *testing.T, err error, wantErr bool) {
 // 	t.Helper()
 // 	if (err != nil) != wantErr {
-// 		t.Fatalf("%s err = %v, want err  %t", lineInfo(2), err, wantErr)
+// 		t.Fatalf("%s err = %v, want err %t", lineInfo(2), err, wantErr)
 // 	}
 // }
+
+func checkValue(t *testing.T, value, wantValue interface{}) {
+	t.Helper()
+	if value != wantValue {
+		t.Fatalf("%s value = %v, want %v", lineInfo(2), value, wantValue)
+	}
+}
 
 // --------------------------------------------------
 

@@ -298,7 +298,7 @@ func (rhb *_RequestHandlerBase) handlerOf(method string) Handler {
 	var ms = toUpperSplitByCommaSpace(method)
 	var lms = len(ms)
 	if lms == 0 {
-		return nil
+		panicWithErr("%w", errNoHTTPMethod)
 	}
 
 	if ms[0] == "!" {
