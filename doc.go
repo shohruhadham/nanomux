@@ -1,3 +1,6 @@
+// Copyright (c) 2021 Shohruh Adham
+// Use of this source code is governed by the MIT License.
+
 /*
 NanoMux is a package of HTTP request routers for the Go language.
 
