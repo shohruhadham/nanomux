@@ -806,12 +806,19 @@ func TestTemplate_Apply(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			defer checkPanic(t, c.wantErr)
-			var got = c.tmpl.Apply(c.values, c.ignoreMissing)
+			testPanickerValue(
+				t,
+				c.wantErr,
+				c.resultStr,
+				func() interface{} {
+					return c.tmpl.Apply(c.values, c.ignoreMissing)
+				},
+			)
+			// var got = c.tmpl.Apply(c.values, c.ignoreMissing)
 
-			if got != c.resultStr {
-				t.Fatalf("Template.Apply() = %v, want %v", got, c.resultStr)
-			}
+			// if got != c.resultStr {
+			// 	t.Fatalf("Template.Apply() = %v, want %v", got, c.resultStr)
+			// }
 		})
 	}
 }

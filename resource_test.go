@@ -4,6 +4,7 @@
 package nanomux
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -1730,7 +1731,7 @@ func TestResourceBase_keepResourceOrItsSubresources(t *testing.T) {
 
 func TestResourceBase_Resource(t *testing.T) {
 	var root = NewDormantResource("/")
-	var static1 = root.Resource("static1")
+	var static = root.Resource("static1")
 	var pattern = root.Resource("static2/{name:pattern}/")
 	var wildcard = root.Resource("https:///{name:pattern2}/{wildcard}")
 
@@ -1740,7 +1741,7 @@ func TestResourceBase_Resource(t *testing.T) {
 		wantResource *Resource
 		wantErr      bool
 	}{
-		{"static1 #1", "static1", static1, false},
+		{"static1 #1", "static1", static, false},
 		{"static1 #2", "https:///static1", nil, true},
 		{"static1 #3", "http:///static1/", nil, true},
 		{"static1 #5", "https:///static1/", nil, true},
@@ -1795,12 +1796,20 @@ func TestResourceBase_Resource(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			defer checkPanic(t, c.wantErr)
-
-			var r = root.Resource(c.tmplStr)
-			if c.wantResource != nil && r != c.wantResource {
-				t.Fatalf("ResourceBase.Resource() couldn't get resource")
-			}
+			testPanicker(
+				t,
+				c.wantErr,
+				func() {
+					var r = root.Resource(c.tmplStr)
+					if c.wantResource != nil && r != c.wantResource {
+						t.Fatalf(
+							"Resource.ResourceUsingConfig r = %v, want %v",
+							r,
+							c.wantResource,
+						)
+					}
+				},
+			)
 		})
 	}
 }
@@ -2031,14 +2040,20 @@ func TestResourceBase_ResourceUsingConfig(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			defer checkPanic(t, c.wantErr)
-
-			var r = root.ResourceUsingConfig(c.tmplStr, c.config)
-			if c.wantR != nil && r != c.wantR {
-				t.Fatalf(
-					"ResourceBase.ResourceUsingConfig() couldn't get resource",
-				)
-			}
+			testPanicker(
+				t,
+				c.wantErr,
+				func() {
+					var r = root.ResourceUsingConfig(c.tmplStr, c.config)
+					if c.wantR != nil && r != c.wantR {
+						t.Fatalf(
+							"Resource.ResourceUsingConfig r = %v, want %v",
+							r,
+							c.wantR,
+						)
+					}
+				},
+			)
 		})
 	}
 }
@@ -2285,7 +2300,7 @@ func TestResourceBase_RegisteredResource(t *testing.T) {
 	var cases = []struct {
 		name    string
 		tmplStr string
-		want    *Resource
+		wantR   *Resource
 		wantErr bool
 	}{
 		{"static", "static", static1, false},
@@ -2311,15 +2326,14 @@ func TestResourceBase_RegisteredResource(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			defer checkPanic(t, c.wantErr)
-
-			var got = root.RegisteredResource(c.tmplStr)
-			if got != c.want {
-				t.Fatalf(
-					"ResourceBase.RegisteredResource() = %v, want %v",
-					got, c.want,
-				)
-			}
+			testPanickerValue(
+				t,
+				c.wantErr,
+				c.wantR,
+				func() interface{} {
+					return root.RegisteredResource(c.tmplStr)
+				},
+			)
 		})
 	}
 }
@@ -2860,6 +2874,237 @@ func TestResourceBase_WrapHandlerOf(t *testing.T) {
 	}
 }
 
+func TestResourceBase_SetPermanentRedirectCode(t *testing.T) {
+	var r = NewDormantResource("r")
+
+	testPanicker(
+		t,
+		true,
+		func() { r.SetPermanentRedirectCode(http.StatusTemporaryRedirect) },
+	)
+
+	testPanicker(
+		t,
+		false,
+		func() {
+			r.SetPermanentRedirectCode(http.StatusMovedPermanently)
+			if r.permanentRedirectCode != http.StatusMovedPermanently {
+				panic(
+					fmt.Errorf(
+						"permanentRedirectCode = %v",
+						r.permanentRedirectCode,
+					),
+				)
+			}
+		},
+	)
+
+	testPanicker(
+		t,
+		false,
+		func() {
+			r.SetPermanentRedirectCode(http.StatusPermanentRedirect)
+			if r.permanentRedirectCode != http.StatusPermanentRedirect {
+				panic(
+					fmt.Errorf(
+						"permanentRedirectCode = %v",
+						r.permanentRedirectCode,
+					),
+				)
+			}
+		},
+	)
+}
+
+func TestResourceBase_PermanentRedirectCode(t *testing.T) {
+	var r = NewDormantResource("r")
+
+	r.SetPermanentRedirectCode(http.StatusPermanentRedirect)
+	testPanickerValue(
+		t,
+		false,
+		http.StatusPermanentRedirect,
+		func() interface{} {
+			return r.PermanentRedirectCode()
+		},
+	)
+
+	r.SetPermanentRedirectCode(http.StatusMovedPermanently)
+	testPanickerValue(
+		t,
+		false,
+		http.StatusMovedPermanently,
+		func() interface{} {
+			return r.PermanentRedirectCode()
+		},
+	)
+}
+
+func TestResourceBase_SetRedirectHandler(t *testing.T) {
+	var r = NewDormantResource("r")
+	var strb = strings.Builder{}
+	var rHandler = func(
+		w http.ResponseWriter,
+		r *http.Request,
+		url string,
+		code int,
+		args *Args,
+	) bool {
+		strb.WriteString("redirected")
+		return true
+	}
+
+	testPanicker(
+		t,
+		false,
+		func() { r.SetRedirectHandler(rHandler) },
+	)
+
+	r.redirectHandler(nil, nil, "", 0, nil)
+	if strb.String() != "redirected" {
+		t.Fatalf("ResourceBase.SetRedirectHandler has failed")
+	}
+}
+
+func TestResourceBase_RedirectHandler(t *testing.T) {
+	var r = NewDormantResource("r")
+
+	testPanickerValue(
+		t,
+		false,
+		reflect.ValueOf(commonRedirectHandler).Pointer(),
+		func() interface{} {
+			var rh = r.RedirectHandler()
+			return reflect.ValueOf(rh).Pointer()
+		},
+	)
+
+	var rHandler = func(
+		w http.ResponseWriter,
+		r *http.Request,
+		url string,
+		code int,
+		args *Args,
+	) bool {
+		return true
+	}
+
+	r.SetRedirectHandler(rHandler)
+	testPanickerValue(
+		t,
+		false,
+		reflect.ValueOf(rHandler).Pointer(),
+		func() interface{} {
+			var rh = r.RedirectHandler()
+			return reflect.ValueOf(rh).Pointer()
+		},
+	)
+}
+
+func TestResourceBase_WrapRedirectHandler(t *testing.T) {
+	var strb strings.Builder
+
+	var r = NewDormantResource("r")
+	r.SetRedirectHandler(
+		func(
+			w http.ResponseWriter,
+			r *http.Request,
+			url string,
+			code int,
+			args *Args,
+		) bool {
+			strb.WriteByte('b')
+			return true
+		},
+	)
+
+	testPanicker(
+		t,
+		false,
+		func() {
+			r.WrapRedirectHandler(
+				func(nrh RedirectHandler) RedirectHandler {
+					return func(
+						w http.ResponseWriter,
+						r *http.Request,
+						url string,
+						code int,
+						args *Args,
+					) bool {
+						strb.WriteByte('a')
+						return nrh(w, r, url, code, args)
+					}
+				},
+			)
+		},
+	)
+
+	var rh = r.RedirectHandler()
+	rh(nil, nil, "", 0, nil)
+
+	if strb.String() != "ab" {
+		t.Fatalf("ResourceBase.WrapRedirectHandler has failed")
+	}
+}
+
+func TestResourceBase_RedirectAnyRequestTo(t *testing.T) {
+	var r = NewDormantResource("temporarily_down")
+	testPanicker(
+		t,
+		false,
+		func() {
+			r.RedirectAnyRequestTo(
+				"replacement",
+				http.StatusTemporaryRedirect,
+			)
+		},
+	)
+
+	var rr = httptest.NewRecorder()
+	var req = httptest.NewRequest("GET", "/temporarily_down", nil)
+	r.ServeHTTP(rr, req)
+
+	var response = rr.Result()
+	checkValue(t, response.StatusCode, http.StatusTemporaryRedirect)
+	checkValue(t, response.Header.Get("Location"), "/replacement")
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest("GET", "/temporarily_down/resource", nil)
+	r.ServeHTTP(rr, req)
+
+	response = rr.Result()
+	checkValue(t, response.StatusCode, http.StatusTemporaryRedirect)
+	checkValue(t, response.Header.Get("Location"), "/replacement/resource")
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(
+		"GET",
+		"/temporarily_down/resource-1/resource-2/",
+		nil,
+	)
+
+	r.ServeHTTP(rr, req)
+
+	response = rr.Result()
+	checkValue(t, response.StatusCode, http.StatusTemporaryRedirect)
+	checkValue(
+		t,
+		response.Header.Get("Location"), "/replacement/resource-1/resource-2/",
+	)
+
+	testPanicker(
+		t,
+		true,
+		func() { r.RedirectAnyRequestTo("", http.StatusTemporaryRedirect) },
+	)
+
+	testPanicker(
+		t,
+		true,
+		func() { r.RedirectAnyRequestTo("new-resource", http.StatusOK) },
+	)
+}
+
 func TestResourceBase_SetGetSharedDataAt(t *testing.T) {
 	var root = NewDormantResource("/")
 	var r00 = root.Resource("r00")
@@ -2868,8 +3113,6 @@ func TestResourceBase_SetGetSharedDataAt(t *testing.T) {
 	var r11 = r00.Resource("r11")
 
 	var data = 1
-	var fnNameSet = "ResourceBase.SetSharedDataAt()"
-	var fnNameGet = "ResourceBase.SharedDataAt(0"
 
 	var cases = []struct {
 		name, path string
@@ -2896,20 +3139,13 @@ func TestResourceBase_SetGetSharedDataAt(t *testing.T) {
 				return
 			}
 
-			if c.r.SharedData() != data {
-				t.Fatalf(fnNameSet+" has failed at %s", c.name)
-			}
-
-			defer checkPanic(t, c.wantErr)
-
-			var retrievedData = root.SharedDataAt(c.path)
-			if !c.wantErr && retrievedData != data {
-				t.Fatalf(
-					fnNameGet+" data = %v, want %v",
-					retrievedData,
-					data,
-				)
-			}
+			checkValue(t, data, c.r.SharedData())
+			testPanickerValue(
+				t,
+				c.wantErr,
+				data,
+				func() interface{} { return root.SharedDataAt(c.path) },
+			)
 		})
 	}
 }
@@ -2992,14 +3228,14 @@ func TestResourceBase_ConfigurationAt(t *testing.T) {
 				root.SetConfigurationAt(c.path, config)
 			}
 
-			defer checkPanic(t, c.wantErr)
-
-			var gotConfig = root.ConfigurationAt(c.pathToCheck)
-			if !c.wantErr {
-				if gotConfig != config {
-					t.Fatalf("ResourceBase.ConfigurationAt() has failed")
-				}
-			}
+			testPanickerValue(
+				t,
+				c.wantErr,
+				config,
+				func() interface{} {
+					return root.ConfigurationAt(c.pathToCheck)
+				},
+			)
 		})
 	}
 }
@@ -3037,26 +3273,13 @@ func TestResourceBase_SetImplemenetationAt(t *testing.T) {
 			}
 
 			var r = root.Resource(c.path)
-			if r.Implementation() != impl {
-				t.Fatalf(
-					"ResourceBase.SetImplementationAt() has failed to set impl",
-				)
-			}
+			checkValue(t, impl, r.impl)
 
 			for _, m := range ms {
-				if r.HandlerOf(m) == nil {
-					t.Fatalf(
-						"ResourceBase.SetImplementationAt() has failed to set the handler of the HTTP method %s",
-						m,
-					)
-				}
+				checkValue(t, true, r.HandlerOf(m) != nil)
 			}
 
-			if r.HandlerOf("!") == nil {
-				t.Fatalf(
-					"ResourceBase.SetImplementationAt() has failed to set not allowed methods' handler",
-				)
-			}
+			checkValue(t, true, r.HandlerOf("!") != nil)
 		})
 	}
 }
@@ -3086,14 +3309,14 @@ func TestResourceBase_ImplementationAt(t *testing.T) {
 				root.SetImplementationAt(c.path, rh)
 			}
 
-			defer checkPanic(t, c.wantErr)
-
-			var gotRh = root.ImplementationAt(c.path)
-			if !c.wantErr && gotRh != rh {
-				t.Fatalf(
-					"ResourceBase.ImplementationAt() has failed to return impl",
-				)
-			}
+			testPanickerValue(
+				t,
+				c.wantErr,
+				rh,
+				func() interface{} {
+					return root.ImplementationAt(c.path)
+				},
+			)
 		})
 	}
 }
@@ -3187,21 +3410,25 @@ func TestResourceBase_PathHandlerOf(t *testing.T) {
 				root.SetPathHandlerFor("!", c.path, h)
 			}
 
-			defer checkPanic(t, c.wantErr)
-
 			for _, m := range ms {
-				var h = root.PathHandlerOf(m, c.path)
-				if !c.wantErr && h == nil {
-					t.Fatalf("ResourceBase.PathHandlerOf() has failed")
-				}
-			}
-
-			var h = root.PathHandlerOf("!", c.path)
-			if !c.wantErr && h == nil {
-				t.Fatalf(
-					"ResourceBase.PathHandlerOf() has failed to return the not allowed methods' handler",
+				testPanickerValue(
+					t,
+					c.wantErr,
+					true,
+					func() interface{} {
+						return root.PathHandlerOf(m, c.path) != nil
+					},
 				)
 			}
+
+			testPanickerValue(
+				t,
+				c.wantErr,
+				true,
+				func() interface{} {
+					return root.PathHandlerOf("!", c.path) != nil
+				},
+			)
 		})
 	}
 }

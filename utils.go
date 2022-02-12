@@ -49,9 +49,9 @@ func makePathSegmentIterator(path string) _PathSegmentIterator {
 	}
 }
 
-func (psi *_PathSegmentIterator) pathIsRoot() bool {
-	return psi.root
-}
+// func (psi *_PathSegmentIterator) pathIsRoot() bool {
+// 	return psi.root
+// }
 
 func (psi *_PathSegmentIterator) nextSegment() string {
 	if psi.path == "" {

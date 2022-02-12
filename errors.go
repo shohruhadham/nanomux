@@ -15,6 +15,10 @@ var (
 	// errNilArgument is returned when one of the function arguments is nil.
 	errNilArgument = fmt.Errorf("nil argument")
 
+	// errInvalidArgument is returned when one of the function arguments is
+	// not valid for use.
+	errInvalidArgument = fmt.Errorf("invalid argument")
+
 	// errConflictingHost is returned when there is a conflict between the
 	// resource's host and its parent resource's host or a host in a URL
 	// template. Conflict can be the presence or absence of the host or a

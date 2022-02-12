@@ -290,9 +290,9 @@ func newRootResource() *Resource {
 
 // -------------------------
 
-func (rb *Resource) setUrltTmpl(urlt *_URLTmpl) {
-	rb.urlt = urlt
-}
+// func (rb *Resource) setUrltTmpl(urlt *_URLTmpl) {
+// 	rb.urlt = urlt
+// }
 
 func (rb *Resource) urlTmpl() *_URLTmpl {
 	var urlt = rb.urlt

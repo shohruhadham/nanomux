@@ -1687,6 +1687,26 @@ func (rb *_ResponderBase) WrapRedirectHandler(
 // 		http.StatusPermanentRedirect,
 // 	)
 func (rb *_ResponderBase) RedirectAnyRequestTo(url string, redirectCode int) {
+	var lUrl = len(url)
+	if lUrl == 0 {
+		panicWithErr("%w: empty url", errInvalidArgument)
+	}
+
+	if redirectCode < 300 || redirectCode > 399 {
+		panicWithErr(
+			"%w: redirect code %v is out of range",
+			errInvalidArgument,
+			redirectCode,
+		)
+	}
+
+	var tUrl = strings.TrimPrefix(url, "http")
+	if len(tUrl) == lUrl {
+		if url[0] != '/' {
+			url = "/" + url
+		}
+	}
+
 	rb.requestReceiver = func(
 		w http.ResponseWriter,
 		r *http.Request,
@@ -1700,13 +1720,13 @@ func (rb *_ResponderBase) RedirectAnyRequestTo(url string, redirectCode int) {
 		var lrPath = len(rPath)
 		if lrPath > 0 {
 			if rPath[0] == '/' {
-				if urlStr[len(url)-1] != '/' {
+				if urlStr[lUrl-1] != '/' {
 					urlStr += rPath
 				} else {
 					urlStr += rPath[1:]
 				}
 			} else {
-				if urlStr[len(url)-1] == '/' {
+				if urlStr[lUrl-1] == '/' {
 					urlStr += rPath
 				} else {
 					urlStr += "/" + rPath
@@ -1714,7 +1734,6 @@ func (rb *_ResponderBase) RedirectAnyRequestTo(url string, redirectCode int) {
 			}
 		}
 
-		w.Header()["Content-Type"] = nil
 		if rb.redirectHandler == nil {
 			return commonRedirectHandler(w, r, urlStr, redirectCode, args)
 		}
