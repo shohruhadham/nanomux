@@ -8,4 +8,5 @@ retract (
 	v0.0.0
 	v0.1.0-preview.1
 	v0.1.0
+	v0.1.1
 )
