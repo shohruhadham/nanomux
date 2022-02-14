@@ -17,10 +17,12 @@ type Middleware func(next Handler) Handler
 // to the nanomux.Middleware.
 func Mw(mw func(http.Handler) http.Handler) Middleware {
 	return func(next Handler) Handler {
+		var nextHasBeenCalled = false
 		var h http.Handler = http.HandlerFunc(
 			func(w http.ResponseWriter, r *http.Request) {
 				var args = r.Context().Value(argsKey).(*Args)
 				args.handled = next(w, r, args)
+				nextHasBeenCalled = true
 			},
 		)
 
@@ -30,7 +32,12 @@ func Mw(mw func(http.Handler) http.Handler) Middleware {
 			var c = context.WithValue(r.Context(), argsKey, args)
 			r = r.WithContext(c)
 			h.ServeHTTP(w, r)
-			return args.handled
+
+			if nextHasBeenCalled {
+				return args.handled
+			}
+
+			return true
 		}
 	}
 }
