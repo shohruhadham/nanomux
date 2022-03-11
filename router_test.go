@@ -461,7 +461,7 @@ func TestRouter_ConfigurationAt(t *testing.T) {
 
 func TestRouter_SetImplementationAt(t *testing.T) {
 	var ro = NewRouter()
-	var rh = &implType{}
+	var rh = &_ImplType{}
 
 	// Number of handlers with default options handler.
 	var nHandlers = len(toUpperSplitByCommaSpace(rhTypeHTTPMethods)) + 1
@@ -552,7 +552,7 @@ func TestRouter_SetImplementationAt(t *testing.T) {
 
 func TestRouter_ImplementationAt(t *testing.T) {
 	var ro = NewRouter()
-	var rh = &implType{}
+	var rh = &_ImplType{}
 
 	ro.SetImplementationAt("http://example.com", rh)
 	ro.SetImplementationAt("https://example.com/r10/", rh)
@@ -896,7 +896,7 @@ func TestRouter_WrapRequestPasserAt(t *testing.T) {
 
 func TestRouter_WrapRequestHandlerAt(t *testing.T) {
 	var ro = NewRouter()
-	var impl = &implType{}
+	var impl = &_ImplType{}
 
 	var strb strings.Builder
 	var mws = []Middleware{
@@ -3912,7 +3912,7 @@ func TestRouter_WrapAllHandlersOf(t *testing.T) {
 		func(http.ResponseWriter, *http.Request, *Args) bool { return true },
 	)
 
-	var rh = &implType{}
+	var rh = &_ImplType{}
 	var cases = []struct{ name, urlTmpl, requestURL string }{
 		{
 			"host",
@@ -4628,7 +4628,7 @@ func TestArgs(t *testing.T) {
 func getStaticRouter() (*Router, *http.Request, error) {
 	var (
 		ro   = NewRouter()
-		impl = &implType{}
+		impl = &_ImplType{}
 		strb strings.Builder
 	)
 
@@ -4680,7 +4680,7 @@ func getStaticRouter() (*Router, *http.Request, error) {
 func getPatternRouter() (*Router, *http.Request, error) {
 	var (
 		ro   = NewRouter()
-		impl = &implType{}
+		impl = &_ImplType{}
 		strb strings.Builder
 	)
 
@@ -4747,7 +4747,7 @@ func getPatternRouter() (*Router, *http.Request, error) {
 func getWildcardRouter() (*Router, *http.Request, error) {
 	var (
 		ro   = NewRouter()
-		impl = &implType{}
+		impl = &_ImplType{}
 		url  = "https://{hostA}.exampleA.com/{resourceB}/{resourceC}/{resourceD}/{resourceE}"
 	)
 
@@ -4773,7 +4773,7 @@ func getWildcardRouter() (*Router, *http.Request, error) {
 func getRouter() (ro *Router, err error) {
 	ro = NewRouter()
 
-	var impl = &implType{}
+	var impl = &_ImplType{}
 	var strb strings.Builder
 	var urls []string
 

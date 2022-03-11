@@ -14,6 +14,86 @@ import (
 
 // --------------------------------------------------
 
+func TestHost_Constructors(t *testing.T) {
+	var _, err = createDormantHost(nil)
+	checkErr(t, err, true)
+
+	var tmpl = Parse("{host}")
+	_, err = createDormantHost(tmpl)
+	checkErr(t, err, true)
+
+	testPanicker(t, true, func() { NewDormantHost("") })
+	testPanicker(t, true, func() { NewDormantHost("http://{sub.example.com") })
+	testPanicker(t, true, func() { NewDormantHost("{host}") })
+
+	testPanicker(
+		t,
+		true,
+		func() {
+			NewDormantHostUsingConfig(
+				"http://example.com",
+				Config{RedirectInsecureRequest: true},
+			)
+		},
+	)
+
+	testPanicker(
+		t,
+		false,
+		func() { NewHost("http://example.com", &_ImplType{}) },
+	)
+
+	testPanicker(
+		t,
+		true,
+		func() { NewHost("http://example.com", nil) },
+	)
+
+	testPanicker(
+		t,
+		true,
+		func() { NewHost("http://{sub.example.com", &_ImplType{}) },
+	)
+
+	testPanicker(
+		t,
+		false,
+		func() {
+			NewHostUsingConfig(
+				"http://example.com",
+				&_ImplType{},
+				Config{SubtreeHandler: true},
+			)
+		},
+	)
+
+	testPanicker(
+		t,
+		true,
+		func() {
+			NewHostUsingConfig(
+				"http://example.com",
+				nil,
+				Config{SubtreeHandler: true},
+			)
+		},
+	)
+
+	testPanicker(
+		t,
+		true,
+		func() {
+			NewHostUsingConfig(
+				"http://{sub}.example.com",
+				&_ImplType{},
+				Config{RedirectInsecureRequest: true},
+			)
+		},
+	)
+}
+
+// -------------------------
+
 func TestHost_SetPermanentRedirectCodeAt(t *testing.T) {
 	var host = NewDormantHost("http://example.com")
 
@@ -1080,10 +1160,10 @@ func TestHostBase_ServeHTTP(t *testing.T) {
 			// fmt.Println(c.name)
 			var w = httptest.NewRecorder()
 			var r = httptest.NewRequest(c.reqMethod, c.reqURLStr, nil)
-			c._resource.ServeHTTP(w, r)
+			c._responder.ServeHTTP(w, r)
 
 			var result = w.Result()
-			checkRequestRouting(t, &c, result, c._resource)
+			checkRequestRouting(t, &c, result, c._responder)
 		})
 	}
 
@@ -1187,26 +1267,26 @@ func TestHostBase_ServeHTTP(t *testing.T) {
 			// fmt.Println(c.name)
 			var w = httptest.NewRecorder()
 			var r = httptest.NewRequest(c.reqMethod, c.reqURLStr, nil)
-			c._resource.ServeHTTP(w, r)
+			c._responder.ServeHTTP(w, r)
 
 			var result = w.Result()
-			checkRequestRouting(t, &c, result, c._resource)
+			checkRequestRouting(t, &c, result, c._responder)
 		})
 	}
 
-	var c = _RequestRoutingCase{
-		"notAllowed",
-		hs[0],
-		"CONNECT",
-		"http://example.com",
-		false, false,
-		"middleware of the not allowed CONNECT http://example.com",
-	}
+	t.Run("not allowed", func(t *testing.T) {
+		var c = _RequestRoutingCase{
+			_responder:     hs[0],
+			reqMethod:      "CONNECT",
+			reqURLStr:      "http://example.com",
+			expectRedirect: false,
+			expectNotFound: false,
+			wantResponse:   "middleware of the not allowed CONNECT http://example.com",
+		}
 
-	t.Run(c.name, func(t *testing.T) {
-		// fmt.Println(c.name)
 		var w = httptest.NewRecorder()
 
+		// TODO: Must be researched.
 		// When method is CONNECT httptest.NewRequest() is using URL's scheme
 		// as host and the remaining string as path. In our case
 		// http://example.com is being parsed as r.URL.Host == "http:"
@@ -1220,9 +1300,305 @@ func TestHostBase_ServeHTTP(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		c._resource.ServeHTTP(w, r)
+		c._responder.ServeHTTP(w, r)
 
 		var result = w.Result()
-		checkRequestRouting(t, &c, result, c._resource)
+		checkRequestRouting(t, &c, result, c._responder)
+	})
+
+	// -------------------------
+
+	var mw = func(_ Handler) Handler {
+		return func(w http.ResponseWriter, r *http.Request, args *Args) bool {
+			fmt.Fprintf(
+				w,
+				"%s %s %s",
+				r.Method, r.URL.String(), args.RemainingPath(),
+			)
+
+			return true
+		}
+	}
+
+	t.Run("request receiver middleware (returns false)", func(t *testing.T) {
+		var h = NewHost("http://example.com", &_ImplType{})
+		h.WrapHandlerOf("get", func(_ Handler) Handler {
+			return func(
+				w http.ResponseWriter,
+				r *http.Request,
+				args *Args,
+			) bool {
+				return false
+			}
+		})
+
+		var c = _RequestRoutingCase{
+			_responder:     h,
+			reqMethod:      "GET",
+			reqURLStr:      "http://example.com",
+			expectRedirect: false,
+			expectNotFound: true,
+			wantResponse:   "Not Found\n",
+		}
+
+		var w = httptest.NewRecorder()
+		var r = httptest.NewRequest(c.reqMethod, c.reqURLStr, nil)
+
+		c._responder.ServeHTTP(w, r)
+
+		var result = w.Result()
+		checkRequestRouting(t, &c, result, c._responder)
+	})
+
+	t.Run("non-existent host", func(t *testing.T) {
+		var h = NewHost("http://example.com", &_ImplType{})
+		h.WrapHandlerOf("get", mw)
+
+		var c = _RequestRoutingCase{
+			_responder:     h,
+			reqMethod:      "GET",
+			reqURLStr:      "http://example1.com",
+			expectRedirect: false,
+			expectNotFound: true,
+			wantResponse:   "Not Found\n",
+		}
+
+		var w = httptest.NewRecorder()
+		var r = httptest.NewRequest(c.reqMethod, c.reqURLStr, nil)
+		r.URL.Host = "www.example1.com:8000"
+		r.Host = ""
+
+		c._responder.ServeHTTP(w, r)
+
+		var result = w.Result()
+		checkRequestRouting(t, &c, result, c._responder)
+	})
+
+	t.Run("non-subtree host", func(t *testing.T) {
+		var h = NewHost("http://example.com", &_ImplType{})
+		h.WrapHandlerOf("get", mw)
+
+		var c = _RequestRoutingCase{
+			_responder:     h,
+			reqMethod:      "GET",
+			reqURLStr:      "http://example.com/resource",
+			expectRedirect: false,
+			expectNotFound: true,
+			wantResponse:   "Not Found\n",
+		}
+
+		var w = httptest.NewRecorder()
+		var r = httptest.NewRequest(c.reqMethod, c.reqURLStr, nil)
+
+		c._responder.ServeHTTP(w, r)
+
+		var result = w.Result()
+		checkRequestRouting(t, &c, result, c._responder)
+	})
+
+	t.Run("subtree without trailing slash", func(t *testing.T) {
+		var h = NewHostUsingConfig(
+			"http://example.com",
+			&_ImplType{},
+			Config{SubtreeHandler: true},
+		)
+
+		h.WrapHandlerOf("get", mw)
+
+		var c = _RequestRoutingCase{
+			_responder:     h,
+			reqMethod:      "GET",
+			reqURLStr:      "http://example.com/resource/",
+			expectRedirect: true,
+			expectNotFound: false,
+			wantResponse:   "GET http://example.com/resource /resource",
+		}
+
+		var w = httptest.NewRecorder()
+		var r = httptest.NewRequest(c.reqMethod, c.reqURLStr, nil)
+
+		c._responder.ServeHTTP(w, r)
+
+		var result = w.Result()
+		checkRequestRouting(t, &c, result, c._responder)
+	})
+
+	t.Run("subtree without trailing slash strict", func(t *testing.T) {
+		var h = NewHostUsingConfig(
+			"http://example.com",
+			&_ImplType{},
+			Config{SubtreeHandler: true, StrictOnTrailingSlash: true},
+		)
+
+		h.WrapHandlerOf("get", mw)
+		var c = _RequestRoutingCase{
+			_responder:     h,
+			reqMethod:      "GET",
+			reqURLStr:      "http://example.com/resource/",
+			expectRedirect: false,
+			expectNotFound: true,
+			wantResponse:   "Not Found\n",
+		}
+
+		var w = httptest.NewRecorder()
+		var r = httptest.NewRequest(c.reqMethod, c.reqURLStr, nil)
+
+		c._responder.ServeHTTP(w, r)
+
+		var result = w.Result()
+		checkRequestRouting(t, &c, result, c._responder)
+	})
+
+	t.Run("subtree with trailing slash", func(t *testing.T) {
+		var h = NewHostUsingConfig(
+			"http://example.com/",
+			&_ImplType{},
+			Config{SubtreeHandler: true},
+		)
+
+		h.WrapHandlerOf("get", mw)
+
+		var c = _RequestRoutingCase{
+			_responder:     h,
+			reqMethod:      "GET",
+			reqURLStr:      "http://example.com/resource",
+			expectRedirect: true,
+			expectNotFound: false,
+			wantResponse:   "GET http://example.com/resource/ /resource/",
+		}
+
+		var w = httptest.NewRecorder()
+		var r = httptest.NewRequest(c.reqMethod, c.reqURLStr, nil)
+
+		c._responder.ServeHTTP(w, r)
+
+		var result = w.Result()
+		checkRequestRouting(t, &c, result, c._responder)
+	})
+
+	t.Run("subtree with trailing slash strict", func(t *testing.T) {
+		var h = NewHostUsingConfig(
+			"http://example.com/",
+			&_ImplType{},
+			Config{SubtreeHandler: true, StrictOnTrailingSlash: true},
+		)
+
+		h.WrapHandlerOf("get", mw)
+		var c = _RequestRoutingCase{
+			_responder:     h,
+			reqMethod:      "GET",
+			reqURLStr:      "http://example.com/resource",
+			expectRedirect: false,
+			expectNotFound: true,
+			wantResponse:   "Not Found\n",
+		}
+
+		var w = httptest.NewRecorder()
+		var r = httptest.NewRequest(c.reqMethod, c.reqURLStr, nil)
+
+		c._responder.ServeHTTP(w, r)
+
+		var result = w.Result()
+		checkRequestRouting(t, &c, result, c._responder)
+	})
+
+	t.Run("http request URL without scheme", func(t *testing.T) {
+		var h = NewHostUsingConfig(
+			"http://example.com/",
+			&_ImplType{},
+			Config{SubtreeHandler: true},
+		)
+
+		h.WrapHandlerOf("get", mw)
+		var c = _RequestRoutingCase{
+			_responder:     h,
+			reqMethod:      "GET",
+			reqURLStr:      "http://example.com/resource",
+			expectRedirect: true,
+			expectNotFound: false,
+			wantResponse:   "GET http://example.com/resource/ /resource/",
+		}
+
+		var w = httptest.NewRecorder()
+		var r = httptest.NewRequest(c.reqMethod, c.reqURLStr, nil)
+		r.URL.Scheme = ""
+
+		c._responder.ServeHTTP(w, r)
+
+		var result = w.Result()
+		checkRequestRouting(t, &c, result, c._responder)
+	})
+
+	t.Run("https request URL without scheme", func(t *testing.T) {
+		var h = NewHostUsingConfig(
+			"http://example.com/",
+			&_ImplType{},
+			Config{SubtreeHandler: true},
+		)
+
+		h.WrapHandlerOf("get", mw)
+		var c = _RequestRoutingCase{
+			_responder:     h,
+			reqMethod:      "GET",
+			reqURLStr:      "https://example.com/resource",
+			expectRedirect: true,
+			expectNotFound: false,
+			wantResponse:   "GET https://example.com/resource/ /resource/",
+		}
+
+		var w = httptest.NewRecorder()
+		var r = httptest.NewRequest(c.reqMethod, c.reqURLStr, nil)
+		r.URL.Scheme = ""
+
+		c._responder.ServeHTTP(w, r)
+
+		var result = w.Result()
+		checkRequestRouting(t, &c, result, c._responder)
+	})
+
+	t.Run("redirect with changed status code and handler", func(t *testing.T) {
+		var h = NewHostUsingConfig(
+			"http://example.com/",
+			&_ImplType{},
+			Config{SubtreeHandler: true},
+		)
+
+		var strb strings.Builder
+		h.SetPermanentRedirectCode(http.StatusMovedPermanently)
+		h.SetRedirectHandler(
+			func(
+				w http.ResponseWriter,
+				r *http.Request,
+				url string,
+				code int,
+				args *Args,
+			) bool {
+				strb.WriteString(args.RemainingPath())
+				http.Redirect(w, r, url, code)
+				return true
+			},
+		)
+
+		h.WrapHandlerOf("get", mw)
+		var c = _RequestRoutingCase{
+			_responder:     h,
+			reqMethod:      "GET",
+			reqURLStr:      "https://example.com/resource",
+			expectRedirect: true,
+			expectNotFound: false,
+			wantResponse:   "GET https://example.com/resource/ /resource/",
+		}
+
+		var w = httptest.NewRecorder()
+		var r = httptest.NewRequest(c.reqMethod, c.reqURLStr, nil)
+
+		c._responder.ServeHTTP(w, r)
+
+		if strb.String() != "/resource" {
+			t.Fatal("Host.ServeHTTP: redirect handler hasn't been called")
+		}
+
+		var result = w.Result()
+		checkRequestRouting(t, &c, result, c._responder)
 	})
 }

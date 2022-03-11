@@ -514,17 +514,21 @@ func (args *Args) RemainingPath() string {
 		return ""
 	}
 
-	if args._r != nil && args._r.HasTrailingSlash() || args.path == "/" {
-		// If the _r is a host or resource with a trailing slash, or if the
-		// request's path contains only a slash "/" (root), the remaining path
-		// should not start with or contain only a trailing slash. When the
-		// request's path contains only a slash "/", that means the remaining
-		// path is being retrieved by a host or a root resource.
-		if args.currentPathSegmentIdx == 0 {
-			return args.path[1:]
+	if args._r != nil {
+		if r, ok := args._r.(*Resource); ok && r.HasTrailingSlash() ||
+			args.path == "/" {
+			// If the _r is a resource with a trailing slash, or if the
+			// request's path contains only a slash "/" (root), the remaining
+			// path should not start with or contain only a trailing slash.
+			// When the request's path contains only a slash "/", that means
+			// the remaining path is being retrieved by a host or a root
+			// resource.
+			if args.currentPathSegmentIdx == 0 {
+				return args.path[1:]
+			}
+		} else if args.currentPathSegmentIdx > 0 {
+			return args.path[args.currentPathSegmentIdx-1:]
 		}
-	} else if args.currentPathSegmentIdx > 0 {
-		return args.path[args.currentPathSegmentIdx-1:]
 	}
 
 	return args.path[args.currentPathSegmentIdx:]

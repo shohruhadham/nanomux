@@ -17,6 +17,91 @@ import (
 
 // --------------------------------------------------
 
+func TestResource_Constructors(t *testing.T) {
+	var _, err = createDormantResource(nil)
+	checkErr(t, err, true)
+
+	testPanicker(t, true, func() { NewDormantResource("") })
+	testPanicker(t, true, func() {
+		NewDormantResource("https:///{name:pattern")
+	})
+
+	testPanicker(t, true, func() { NewDormantResource("http://example.com/") })
+
+	testPanicker(
+		t,
+		true,
+		func() {
+			NewDormantResourceUsingConfig(
+				"http:///resource",
+				Config{RedirectInsecureRequest: true},
+			)
+		},
+	)
+
+	testPanicker(
+		t,
+		false,
+		func() { NewResource("/resource", &_ImplType{}) },
+	)
+
+	testPanicker(
+		t,
+		true,
+		func() { NewResource("/", nil) },
+	)
+
+	testPanicker(
+		t,
+		true,
+		func() { NewResource("{resource", &_ImplType{}) },
+	)
+
+	testPanicker(
+		t,
+		false,
+		func() {
+			NewResourceUsingConfig(
+				"https:///",
+				&_ImplType{},
+				Config{RedirectInsecureRequest: true},
+			)
+		},
+	)
+
+	testPanicker(
+		t,
+		true,
+		func() {
+			NewResourceUsingConfig(
+				"https:///",
+				nil,
+				Config{SubtreeHandler: true},
+			)
+		},
+	)
+
+	testPanicker(
+		t,
+		true,
+		func() {
+			NewResourceUsingConfig(
+				"http:///",
+				&_ImplType{},
+				Config{RedirectInsecureRequest: true},
+			)
+		},
+	)
+
+	testPanicker(
+		t,
+		true,
+		func() {
+			newDormantResource(nil)
+		},
+	)
+}
+
 func TestConfig_asFlags(t *testing.T) {
 	var cases = []struct {
 		name    string
@@ -2494,7 +2579,7 @@ func TestResourceBase_Configuring(t *testing.T) {
 
 func TestResourceBase_SetImplementation(t *testing.T) {
 	var r = NewDormantResource("/")
-	var impl = &implType{}
+	var impl = &_ImplType{}
 
 	// Number of handlers with default options handler.
 	var nHandlers = len(toUpperSplitByCommaSpace(rhTypeHTTPMethods)) + 1
@@ -2513,7 +2598,7 @@ func TestResourceBase_SetImplementation(t *testing.T) {
 
 func TestResourceBase_Implementation(t *testing.T) {
 	var r = NewDormantResource("/")
-	var rh = &implType{}
+	var rh = &_ImplType{}
 
 	r.SetImplementation(rh)
 
@@ -3242,7 +3327,7 @@ func TestResourceBase_ConfigurationAt(t *testing.T) {
 
 func TestResourceBase_SetImplemenetationAt(t *testing.T) {
 	var root = NewDormantResource("/")
-	var impl = &implType{}
+	var impl = &_ImplType{}
 	var ms = toUpperSplitByCommaSpace(rhTypeHTTPMethods)
 	ms = append(ms, "OPTIONS")
 
@@ -3286,7 +3371,7 @@ func TestResourceBase_SetImplemenetationAt(t *testing.T) {
 
 func TestResourceBase_ImplementationAt(t *testing.T) {
 	var root = NewDormantResource("/")
-	var rh = &implType{}
+	var rh = &_ImplType{}
 
 	var cases = []struct {
 		name, path string
@@ -4071,7 +4156,7 @@ func TestResourceBase_WrapSubtreeHandlersOf(t *testing.T) {
 		},
 	}
 
-	var impl = &implType{}
+	var impl = &_ImplType{}
 	for _, c := range cases {
 		var r = h.Resource(c.urlTmpl)
 		r.SetImplementation(impl)
@@ -4441,7 +4526,7 @@ func addRequestHandlerSubresources(t *testing.T, r _Responder, i, limit int) {
 
 type _RequestRoutingCase struct {
 	name           string // sr00, pr00, wr0
-	_resource      _Responder
+	_responder     _Responder
 	reqMethod      string
 	reqURLStr      string
 	expectRedirect bool
@@ -4458,7 +4543,8 @@ func checkRequestRouting(
 	t.Helper()
 
 	if c.expectRedirect {
-		if result.StatusCode != permanentRedirectCode {
+		if result.StatusCode != permanentRedirectCode &&
+			result.StatusCode != http.StatusMovedPermanently {
 			t.Fatalf(
 				"ResourceBase.ServeHTTP(): StatusCode = %d, want %d",
 				result.StatusCode,
@@ -7258,10 +7344,10 @@ func TestResourceBase_ServeHTTP(t *testing.T) {
 			// fmt.Println(c.name)
 			var w = httptest.NewRecorder()
 			var r = httptest.NewRequest(c.reqMethod, c.reqURLStr, nil)
-			c._resource.ServeHTTP(w, r)
+			c._responder.ServeHTTP(w, r)
 
 			var result = w.Result()
-			checkRequestRouting(t, &c, result, c._resource)
+			checkRequestRouting(t, &c, result, c._responder)
 		})
 	}
 
@@ -7291,9 +7377,9 @@ func TestResourceBase_ServeHTTP(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		c._resource.ServeHTTP(w, r)
+		c._responder.ServeHTTP(w, r)
 
 		var result = w.Result()
-		checkRequestRouting(t, &c, result, c._resource)
+		checkRequestRouting(t, &c, result, c._responder)
 	})
 }
