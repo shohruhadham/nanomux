@@ -30,7 +30,8 @@ type _Responder interface {
 	setConfigFlags(flag _ConfigFlags)
 	updateConfigFlags(cfs _ConfigFlags)
 	configFlags() _ConfigFlags
-	configCompatibility(secure, tslash bool, cfs *_ConfigFlags) error
+	configure(secure, tslash bool, cfs *_ConfigFlags)
+	checkForConfigCompatibility(secure, tslash bool, cfs *_ConfigFlags) error
 
 	// -------------------------
 
@@ -291,11 +292,26 @@ func (rb *_ResponderBase) configFlags() _ConfigFlags {
 	return rb.cfs
 }
 
-// configCompatibility checks the configured responder's properties for
-// compatibility with the arguments. If the responder wasn't configured,
-// the method configures it with the arguments. If the cfs parameter is
-// nil, it's ignored.
-func (rb *_ResponderBase) configCompatibility(
+func (rb *_ResponderBase) configure(secure, tslash bool, cfs *_ConfigFlags) {
+	rb.setConfigFlags(flagActive)
+
+	if secure {
+		rb.setConfigFlags(flagSecure)
+	}
+
+	if tslash {
+		rb.setConfigFlags(flagTrailingSlash)
+	}
+
+	if cfs != nil {
+		rb.setConfigFlags(*cfs)
+	}
+}
+
+// checkForConfigCompatibility checks the configured responder's properties
+// for compatibility with the arguments. If the cfs parameter is nil, it's
+// ignored.
+func (rb *_ResponderBase) checkForConfigCompatibility(
 	secure, tslash bool,
 	cfs *_ConfigFlags,
 ) error {
@@ -313,20 +329,6 @@ func (rb *_ResponderBase) configCompatibility(
 			if !rbcfs.has(*cfs) {
 				return newErr("%w", errConflictingConfig)
 			}
-		}
-	} else {
-		rb.setConfigFlags(flagActive)
-
-		if secure {
-			rb.setConfigFlags(flagSecure)
-		}
-
-		if tslash {
-			rb.setConfigFlags(flagTrailingSlash)
-		}
-
-		if cfs != nil {
-			rb.setConfigFlags(*cfs)
 		}
 	}
 
@@ -907,9 +909,8 @@ func (rb *_ResponderBase) keepResourceOrItsChildResources(r *Resource) error {
 		return nil
 	}
 
-	// CHECK: Maybe we mustn't compare the flagActive.
 	var rcfs = r.configFlags()
-	err = rwt.configCompatibility(
+	err = rwt.checkForConfigCompatibility(
 		rcfs.has(flagSecure),
 		rcfs.has(flagTrailingSlash),
 		&rcfs,
@@ -995,10 +996,7 @@ func (rb *_ResponderBase) Resource(pathTmplStr string) *Resource {
 	}
 
 	if newFirst != nil {
-		err = newLast.configCompatibility(secure, tslash, nil)
-		if err != nil {
-			panicWithErr("%w", err)
-		}
+		newLast.configure(secure, tslash, nil)
 
 		if oldLast.ChildResourceNamed(newFirst.Name()) != nil {
 			panicWithErr("%w", errDuplicateNameAmongSiblings)
@@ -1011,7 +1009,7 @@ func (rb *_ResponderBase) Resource(pathTmplStr string) *Resource {
 		return newLast
 	}
 
-	err = oldLast.configCompatibility(secure, tslash, nil)
+	err = oldLast.checkForConfigCompatibility(secure, tslash, nil)
 	if err != nil {
 		panicWithErr("%w", err)
 	}
@@ -1072,10 +1070,7 @@ func (rb *_ResponderBase) ResourceUsingConfig(
 
 	var cfs = config.asFlags()
 	if newFirst != nil {
-		err = newLast.configCompatibility(secure, tslash, &cfs)
-		if err != nil {
-			panicWithErr("%w", err)
-		}
+		newLast.configure(secure, tslash, &cfs)
 
 		if r := oldLast.ChildResourceNamed(newFirst.Name()); r != nil {
 			panicWithErr("%w", errDuplicateNameAmongSiblings)
@@ -1088,7 +1083,7 @@ func (rb *_ResponderBase) ResourceUsingConfig(
 		return newLast
 	}
 
-	err = oldLast.configCompatibility(secure, tslash, &cfs)
+	err = oldLast.checkForConfigCompatibility(secure, tslash, &cfs)
 	if err != nil {
 		panicWithErr("%w", err)
 	}
@@ -1295,7 +1290,7 @@ func (rb *_ResponderBase) RegisteredResource(pathTmplStr string) *Resource {
 	}
 
 	if r != nil {
-		err = r.configCompatibility(secure, tslash, nil)
+		err = r.checkForConfigCompatibility(secure, tslash, nil)
 		if err != nil {
 			panicWithErr("%w", err)
 		}

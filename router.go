@@ -81,10 +81,7 @@ func (ro *Router) _Responder(urlTmplStr string) (_Responder, error) {
 			}
 
 			if newFirst != nil {
-				err = newLast.configCompatibility(secure, tslash, nil)
-				if err != nil {
-					return nil, newErr("%w", err)
-				}
+				newLast.configure(secure, tslash, nil)
 
 				if r := _r.ChildResourceNamed(newFirst.Name()); r != nil {
 					return nil, newErr("%w", errDuplicateNameAmongSiblings)
@@ -105,17 +102,19 @@ func (ro *Router) _Responder(urlTmplStr string) (_Responder, error) {
 		}
 	}
 
-	err = _r.configCompatibility(secure, tslash, nil)
-	if err != nil {
-		return nil, newErr("%w", err)
-	}
-
 	if newHost {
+		_r.configure(secure, tslash, nil)
+
 		if h := ro.HostNamed(_r.Name()); h != nil {
 			return nil, newErr("%w", errDuplicateNameAmongSiblings)
 		}
 
 		err = ro.registerHost(_r.(*Host))
+		if err != nil {
+			return nil, newErr("%w", err)
+		}
+	} else {
+		err = _r.checkForConfigCompatibility(secure, tslash, nil)
 		if err != nil {
 			return nil, newErr("%w", err)
 		}
@@ -214,7 +213,7 @@ func (ro *Router) registered_Responder(urlTmplStr string) (
 	}
 
 	if validPtr {
-		err = _r.configCompatibility(secure, tslash, nil)
+		err = _r.checkForConfigCompatibility(secure, tslash, nil)
 		if err != nil {
 			return nil, false, newErr("%w", err)
 		}
@@ -809,17 +808,19 @@ func (ro *Router) Host(hostTmplStr string) *Host {
 		panicWithErr("%w", err)
 	}
 
-	err = h.configCompatibility(secure, tslash, nil)
-	if err != nil {
-		panicWithErr("%w", err)
-	}
-
 	if newHost {
+		h.configure(secure, tslash, nil)
+
 		if ro.HostNamed(h.Name()) != nil {
 			panicWithErr("%w", errDuplicateNameAmongSiblings)
 		}
 
 		err = ro.registerHost(h)
+		if err != nil {
+			panicWithErr("%w", err)
+		}
+	} else {
+		err = h.checkForConfigCompatibility(secure, tslash, nil)
 		if err != nil {
 			panicWithErr("%w", err)
 		}
@@ -856,17 +857,20 @@ func (ro *Router) HostUsingConfig(
 	}
 
 	var cfs = config.asFlags()
-	err = h.configCompatibility(secure, tslash, &cfs)
-	if err != nil {
-		panicWithErr("%w", err)
-	}
 
 	if newHost {
+		h.configure(secure, tslash, &cfs)
+
 		if ro.HostNamed(h.Name()) != nil {
 			panicWithErr("%w", errDuplicateNameAmongSiblings)
 		}
 
 		err = ro.registerHost(h)
+		if err != nil {
+			panicWithErr("%w", err)
+		}
+	} else {
+		err = h.checkForConfigCompatibility(secure, tslash, &cfs)
 		if err != nil {
 			panicWithErr("%w", err)
 		}
@@ -955,7 +959,7 @@ func (ro *Router) RegisteredHost(hostTmplStr string) *Host {
 	}
 
 	if h != nil {
-		err = h.configCompatibility(secure, tslash, nil)
+		err = h.checkForConfigCompatibility(secure, tslash, nil)
 		if err != nil {
 			panicWithErr("%w", err)
 		}
@@ -1089,10 +1093,7 @@ func (ro *Router) Resource(urlTmplStr string) *Resource {
 		}
 
 		if newFirst != nil {
-			err = newLast.configCompatibility(secure, tslash, nil)
-			if err != nil {
-				panicWithErr("%w", err)
-			}
+			newLast.configure(secure, tslash, nil)
 
 			if _r.ChildResourceNamed(newFirst.Name()) != nil {
 				panicWithErr("%w", errDuplicateNameAmongSiblings)
@@ -1114,7 +1115,7 @@ func (ro *Router) Resource(urlTmplStr string) *Resource {
 		}
 	}
 
-	err = _r.configCompatibility(secure, tslash, nil)
+	err = _r.checkForConfigCompatibility(secure, tslash, nil)
 	if err != nil {
 		panicWithErr("%w", err)
 	}
@@ -1186,10 +1187,7 @@ func (ro *Router) ResourceUsingConfig(
 
 		if newFirst != nil {
 			var cfs = config.asFlags()
-			err = newLast.configCompatibility(secure, tslash, &cfs)
-			if err != nil {
-				panicWithErr("%w", err)
-			}
+			newLast.configure(secure, tslash, &cfs)
 
 			if _r.ChildResourceNamed(newFirst.Name()) != nil {
 				panicWithErr("%w", errDuplicateNameAmongSiblings)
@@ -1208,7 +1206,7 @@ func (ro *Router) ResourceUsingConfig(
 	}
 
 	var cfs = config.asFlags()
-	err = _r.configCompatibility(secure, tslash, &cfs)
+	err = _r.checkForConfigCompatibility(secure, tslash, &cfs)
 	if err != nil {
 		panicWithErr("%w", err)
 	}
@@ -1548,7 +1546,7 @@ func (ro *Router) RegisteredResource(urlTmplStr string) *Resource {
 
 	// Extracting the underlying value before comparing it to nil.
 	if r, ok := _r.(*Resource); ok && r != nil {
-		err = _r.configCompatibility(secure, tslash, nil)
+		err = _r.checkForConfigCompatibility(secure, tslash, nil)
 		if err != nil {
 			panicWithErr("%w", err)
 		}

@@ -67,15 +67,13 @@ func createHost(tmplStr string, impl Impl, config *Config) (*Host, error) {
 	}
 
 	var h = &Host{}
-	err = h.configCompatibility(secure, tslash, cfs)
-	if err != nil {
-		return nil, newErr("%w", err)
-	}
+	h.configure(secure, tslash, cfs)
 
 	if impl != nil {
 		var rhb *_RequestHandlerBase
 		rhb, err = detectHTTPMethodHandlersOf(impl)
 		if err != nil {
+			// Unreachable block.
 			return nil, newErr("%w", err)
 		}
 
@@ -291,6 +289,7 @@ func (hb *Host) handleOrPassRequest(
 		args._r = hb.derived
 
 		if !hb.IsSubtreeHandler() {
+			// Unreachable block.
 			return notFoundResourceHandler(w, r, args)
 		}
 	}
@@ -323,7 +322,7 @@ func (hb *Host) handleOrPassRequest(
 		// The path must have at least three characters for it to have
 		// a trailing slash.
 		if len(args.path) > 2 && !hb.IsLenientOnTrailingSlash() {
-			if hb.HasTrailingSlash() && args.path != "/" {
+			if hb.HasTrailingSlash() && !args.pathHasTrailingSlash() {
 				if hb.IsStrictOnTrailingSlash() {
 					return notFoundResourceHandler(w, r, args)
 				}
@@ -333,7 +332,7 @@ func (hb *Host) handleOrPassRequest(
 				}
 
 				newURL.Path += "/"
-			} else if !hb.HasTrailingSlash() && args.path == "/" {
+			} else if !hb.HasTrailingSlash() && args.pathHasTrailingSlash() {
 				if hb.IsStrictOnTrailingSlash() {
 					return notFoundResourceHandler(w, r, args)
 				}

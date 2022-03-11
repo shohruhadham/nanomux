@@ -90,15 +90,16 @@ func testPanickerValue(
 	}
 }
 
-// func checkErr(t *testing.T, err error, wantErr bool) {
-// 	t.Helper()
-// 	if (err != nil) != wantErr {
-// 		t.Fatalf("%s err = %v, want err %t", lineInfo(2), err, wantErr)
-// 	}
-// }
+func checkErr(t *testing.T, err error, wantErr bool) {
+	t.Helper()
+	if (err != nil) != wantErr {
+		t.Fatalf("%s err = %v, want err %t", lineInfo(2), err, wantErr)
+	}
+}
 
 func checkValue(t *testing.T, value, wantValue interface{}) {
 	t.Helper()
+	// The following doesn't work when the value is a nil pointer.
 	if value != wantValue {
 		t.Fatalf("%s value = %v, want %v", lineInfo(2), value, wantValue)
 	}
@@ -106,10 +107,10 @@ func checkValue(t *testing.T, value, wantValue interface{}) {
 
 // --------------------------------------------------
 
-// implType is usef in other test files too.
-type implType struct{}
+// _ImplType is usef in other test files too.
+type _ImplType struct{}
 
-func (rht *implType) HandleGet(
+func (rht *_ImplType) HandleGet(
 	http.ResponseWriter,
 	*http.Request,
 	*Args,
@@ -117,7 +118,7 @@ func (rht *implType) HandleGet(
 	return true
 }
 
-func (rht *implType) HandlePost(
+func (rht *_ImplType) HandlePost(
 	http.ResponseWriter,
 	*http.Request,
 	*Args,
@@ -125,7 +126,7 @@ func (rht *implType) HandlePost(
 	return true
 }
 
-func (rht *implType) HandleCustom(
+func (rht *_ImplType) HandleCustom(
 	http.ResponseWriter,
 	*http.Request,
 	*Args,
@@ -133,7 +134,7 @@ func (rht *implType) HandleCustom(
 	return true
 }
 
-func (rht *implType) HandleNotAllowedMethod(
+func (rht *_ImplType) HandleNotAllowedMethod(
 	http.ResponseWriter,
 	*http.Request,
 	*Args,
@@ -141,7 +142,7 @@ func (rht *implType) HandleNotAllowedMethod(
 	return true
 }
 
-func (rht *implType) SomeMethod(
+func (rht *_ImplType) SomeMethod(
 	http.ResponseWriter,
 	*http.Request,
 	*Args,
@@ -149,11 +150,11 @@ func (rht *implType) SomeMethod(
 	return true
 }
 
-func (rht *implType) SomeOtherMethod(*Args) bool {
+func (rht *_ImplType) SomeOtherMethod(*Args) bool {
 	return true
 }
 
-func (rht *implType) ServeHTTP(w http.ResponseWriter, r *http.Request) {}
+func (rht *_ImplType) ServeHTTP(w http.ResponseWriter, r *http.Request) {}
 
 const rhTypeHTTPMethods = "get post custom"
 
