@@ -267,6 +267,15 @@ func TestResourceBase_URL(t *testing.T) {
 			},
 			false,
 		},
+		{
+			"resource resource resource (error)",
+			r5,
+			HostPathValues{
+				{"country", "Norway"},
+			},
+			nil,
+			true,
+		},
 	}
 
 	for _, c := range cases {
@@ -297,6 +306,11 @@ func TestResourceBase_Router(t *testing.T) {
 	r.papa = h
 
 	if got := r.Router(); !reflect.DeepEqual(got, ro) {
+		t.Fatalf("ResourceBase.Router() = %v, want %v", got, ro)
+	}
+
+	h.papa = nil
+	if got := r.Router(); got != nil {
 		t.Fatalf("ResourceBase.Router() = %v, want %v", got, ro)
 	}
 }
@@ -343,11 +357,13 @@ func TestResourceBase_parent(t *testing.T) {
 
 func TestResourceBase_respondersInThePath(t *testing.T) {
 	var (
+		ro = NewRouter()
 		h  = NewDormantHost("example.com")
 		r1 = NewDormantResource("r1")
 		r2 = NewDormantResource("{r2:pattern}")
 	)
 
+	h.setParent(ro)
 	r1.setParent(h)
 	r2.setParent(r1)
 
@@ -783,6 +799,7 @@ func TestResourceBase_validateHostTmpl(t *testing.T) {
 		{"pattern", `{id:\d{3}}.example.com`, true},
 		{"info", "{info}.example.com", true},
 		{"city", "{city}.subdomain2.example.com", true},
+		{"invalid", "{sub.example.com", true},
 	}
 
 	for _, c := range cases {
@@ -854,16 +871,37 @@ func TestResourceBase_validateURL(t *testing.T) {
 			false,
 		},
 		{
-			"h (error}",
+			"h root path",
+			h, "example.com",
+			"/",
+			"",
+			false,
+		},
+		{
+			"h (error)",
 			h, "example1.com",
 			"/r1",
 			"",
 			true,
 		},
 		{
-			"r2 (error}",
+			"error empty path",
+			r1, "example.com",
+			"",
+			"",
+			true,
+		},
+		{
+			"r2 (error #1}",
 			r2, "example.com",
-			"/r1/r3",
+			"/r1/r2",
+			"",
+			true,
+		},
+		{
+			"r2 (error #2}",
+			r2, "example.com",
+			"/r1/{r2:pattern",
 			"",
 			true,
 		},
@@ -2381,6 +2419,7 @@ func TestResourceBase_RegisteredResource(t *testing.T) {
 	var pattern1 = root.Resource("{patternR1:pattern}")
 	var pattern2 = root.Resource("$patternR2:{name:pattern}{wildcard}")
 	var wildcard = root.Resource("{wildcard}")
+	var r000 = root.Resource("r0/{r00}/$r000:r000")
 
 	var cases = []struct {
 		name    string
@@ -2396,6 +2435,7 @@ func TestResourceBase_RegisteredResource(t *testing.T) {
 			pattern2, false,
 		},
 		{"wildcard", "{wildcard}", wildcard, false},
+		{"r000", "r0/{r00}/$r000", r000, false},
 		{"staticR0", "staticR0", nil, false},
 		{"patternR0", "{patternR0:name}", nil, false},
 		{"patternR3", "{patternR3:[01-9]{3}}", nil, false},
@@ -2407,6 +2447,9 @@ func TestResourceBase_RegisteredResource(t *testing.T) {
 		{"patternR3", "$patternR3:{name:pattern}{wildcard}", nil, true},
 		{"wildcardR1", "{wildcardR1}", nil, true},
 		{"wildcardR1", "$wildcardR1:{wildcard}", nil, true},
+		{"no name, no content", "r0/{r00}/$", nil, true},
+		{"r000 invalid template", "r0/{r00}/$r000:{r000", nil, true},
+		{"empty path segment", "r0//$r000:r000", nil, true},
 	}
 
 	for _, c := range cases {
@@ -7381,5 +7424,226 @@ func TestResourceBase_ServeHTTP(t *testing.T) {
 
 		var result = w.Result()
 		checkRequestRouting(t, &c, result, c._responder)
+	})
+
+	// -------------------------
+
+	var mw = func(_ Handler) Handler {
+		return func(w http.ResponseWriter, r *http.Request, args *Args) bool {
+			var strb strings.Builder
+			strb.WriteString(r.Method)
+			strb.WriteString(" ")
+			strb.WriteString(r.URL.String())
+			var rp = args.RemainingPath()
+			if rp != "" {
+				strb.WriteString(rp)
+			}
+
+			fmt.Fprint(w, strb.String())
+			return true
+		}
+	}
+
+	t.Run("root resource middleware (returns false)", func(t *testing.T) {
+		var r = NewResource("/", &_ImplType{})
+		r.WrapHandlerOf("get", func(_ Handler) Handler {
+			return func(
+				w http.ResponseWriter,
+				r *http.Request,
+				args *Args,
+			) bool {
+				return false
+			}
+		})
+
+		var c = _RequestRoutingCase{
+			reqMethod:      "GET",
+			reqURLStr:      "/",
+			expectRedirect: false,
+			expectNotFound: true,
+			wantResponse:   "Not Found\n",
+		}
+
+		var rec = httptest.NewRecorder()
+		var req = httptest.NewRequest(c.reqMethod, c.reqURLStr, nil)
+
+		r.ServeHTTP(rec, req)
+
+		var result = rec.Result()
+		checkRequestRouting(t, &c, result, r)
+	})
+
+	t.Run("resource middleware (returns false)", func(t *testing.T) {
+		var r = NewResource("/resource", &_ImplType{})
+		r.WrapHandlerOf("get", func(_ Handler) Handler {
+			return func(
+				w http.ResponseWriter,
+				r *http.Request,
+				args *Args,
+			) bool {
+				return false
+			}
+		})
+
+		var c = _RequestRoutingCase{
+			reqMethod:      "GET",
+			reqURLStr:      "/resource",
+			expectRedirect: false,
+			expectNotFound: true,
+			wantResponse:   "Not Found\n",
+		}
+
+		var rec = httptest.NewRecorder()
+		var req = httptest.NewRequest(c.reqMethod, c.reqURLStr, nil)
+
+		r.ServeHTTP(rec, req)
+
+		var result = rec.Result()
+		checkRequestRouting(t, &c, result, r)
+	})
+
+	t.Run("request with root path", func(t *testing.T) {
+		var r = NewDormantResource("/resource")
+
+		var c = _RequestRoutingCase{
+			reqMethod:      "GET",
+			reqURLStr:      "/",
+			expectRedirect: false,
+			expectNotFound: true,
+			wantResponse:   "Not Found\n",
+		}
+
+		var rec = httptest.NewRecorder()
+		var req = httptest.NewRequest(c.reqMethod, c.reqURLStr, nil)
+
+		r.ServeHTTP(rec, req)
+
+		var result = rec.Result()
+		checkRequestRouting(t, &c, result, r)
+	})
+
+	t.Run("incorrectly escaped path segment", func(t *testing.T) {
+		var r = NewResource("/resource", &_ImplType{})
+		r.WrapHandlerOf("get", mw)
+
+		var c = _RequestRoutingCase{
+			reqMethod:      "GET",
+			reqURLStr:      "/resource",
+			expectRedirect: false,
+			expectNotFound: true,
+			wantResponse:   "Bad Request\n",
+		}
+
+		var rec = httptest.NewRecorder()
+		var req = httptest.NewRequest(c.reqMethod, c.reqURLStr, nil)
+
+		req.URL.Path = ""
+		req.URL.RawPath = "/resource%"
+
+		r.ServeHTTP(rec, req)
+
+		var result = rec.Result()
+		if result.StatusCode != http.StatusBadRequest {
+			t.Fatalf(
+				"resourceBase.ServeHTTP: status code = %d, want %d",
+				result.StatusCode,
+				http.StatusBadRequest,
+			)
+		}
+
+		var strb strings.Builder
+		io.Copy(&strb, result.Body)
+		if strb.String() != c.wantResponse {
+			t.Fatalf(
+				"ResourceBase.ServeHTTP(): response body = %q, want %q",
+				strb.String(),
+				c.wantResponse,
+			)
+		}
+	})
+
+	t.Run("http request URL without scheme", func(t *testing.T) {
+		var r = NewResource("resource", &_ImplType{})
+		r.WrapHandlerOf("get", mw)
+
+		var c = _RequestRoutingCase{
+			reqMethod:      "GET",
+			reqURLStr:      "/resource/",
+			expectRedirect: true,
+			expectNotFound: false,
+			wantResponse:   "GET http://example.com/resource",
+		}
+
+		var rec = httptest.NewRecorder()
+		var req = httptest.NewRequest(c.reqMethod, c.reqURLStr, nil)
+		req.URL.Scheme = ""
+
+		r.ServeHTTP(rec, req)
+
+		var result = rec.Result()
+		checkRequestRouting(t, &c, result, r)
+	})
+
+	t.Run("https request URL without scheme", func(t *testing.T) {
+		var r = NewResource("resource", &_ImplType{})
+		r.WrapHandlerOf("get", mw)
+
+		var c = _RequestRoutingCase{
+			reqMethod:      "GET",
+			reqURLStr:      "https://example.com/resource/",
+			expectRedirect: true,
+			expectNotFound: false,
+			wantResponse:   "GET https://example.com/resource",
+		}
+
+		var rec = httptest.NewRecorder()
+		var req = httptest.NewRequest(c.reqMethod, c.reqURLStr, nil)
+		req.URL.Scheme = ""
+
+		r.ServeHTTP(rec, req)
+
+		var result = rec.Result()
+		checkRequestRouting(t, &c, result, r)
+	})
+
+	t.Run("redirect with changed status code and handler", func(t *testing.T) {
+		var r = NewResource("resource", &_ImplType{})
+
+		var strb strings.Builder
+		r.SetPermanentRedirectCode(http.StatusMovedPermanently)
+		r.SetRedirectHandler(
+			func(
+				w http.ResponseWriter,
+				r *http.Request,
+				url string,
+				code int,
+				args *Args,
+			) bool {
+				strb.WriteString("redirect")
+				http.Redirect(w, r, url, code)
+				return true
+			},
+		)
+
+		r.WrapHandlerOf("get", mw)
+		var c = _RequestRoutingCase{
+			reqMethod:      "GET",
+			reqURLStr:      "https://example.com/resource/",
+			expectRedirect: true,
+			expectNotFound: false,
+			wantResponse:   "GET https://example.com/resource",
+		}
+
+		var rec = httptest.NewRecorder()
+		var req = httptest.NewRequest(c.reqMethod, c.reqURLStr, nil)
+
+		r.ServeHTTP(rec, req)
+
+		if strb.String() != "redirect" {
+			t.Fatal("Host.ServeHTTP: redirect handler hasn't been called")
+		}
+
+		var result = rec.Result()
+		checkRequestRouting(t, &c, result, r)
 	})
 }

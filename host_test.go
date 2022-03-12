@@ -1320,7 +1320,7 @@ func TestHostBase_ServeHTTP(t *testing.T) {
 		}
 	}
 
-	t.Run("request receiver middleware (returns false)", func(t *testing.T) {
+	t.Run("middleware (returns false)", func(t *testing.T) {
 		var h = NewHost("http://example.com", &_ImplType{})
 		h.WrapHandlerOf("get", func(_ Handler) Handler {
 			return func(
