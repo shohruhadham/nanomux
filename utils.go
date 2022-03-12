@@ -60,8 +60,6 @@ func (psi *_PathSegmentIterator) nextSegment() string {
 
 	var segment string
 	if psi.path[0] == '/' {
-		// This if statement runs only once.
-		// The iterator doesn't keep the leading slash.
 		psi.path = psi.path[1:]
 	}
 
@@ -71,7 +69,7 @@ func (psi *_PathSegmentIterator) nextSegment() string {
 		psi.path = ""
 	} else {
 		segment = psi.path[:idx]
-		psi.path = psi.path[idx+1:]
+		psi.path = psi.path[idx:]
 	}
 
 	return slashDecoderRe.ReplaceAllLiteralString(segment, "/")

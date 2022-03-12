@@ -635,7 +635,7 @@ func (rb *_ResponderBase) registeredResource(
 				return nil, false, errEmptyPathSegmentTemplate
 			}
 
-			r = rb.ChildResourceNamed(name)
+			r = _r.ChildResourceNamed(name)
 		} else {
 			tmpl, err = TryToParse(ps)
 			if err != nil {
