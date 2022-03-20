@@ -40,7 +40,7 @@ func TestHost_Constructors(t *testing.T) {
 	testPanicker(
 		t,
 		false,
-		func() { NewHost("http://example.com", &_ImplType{}) },
+		func() { NewHost("http://example.com", &_Impl{}) },
 	)
 
 	testPanicker(
@@ -52,7 +52,7 @@ func TestHost_Constructors(t *testing.T) {
 	testPanicker(
 		t,
 		true,
-		func() { NewHost("http://{sub.example.com", &_ImplType{}) },
+		func() { NewHost("http://{sub.example.com", &_Impl{}) },
 	)
 
 	testPanicker(
@@ -61,7 +61,7 @@ func TestHost_Constructors(t *testing.T) {
 		func() {
 			NewHostUsingConfig(
 				"http://example.com",
-				&_ImplType{},
+				&_Impl{},
 				Config{SubtreeHandler: true},
 			)
 		},
@@ -85,7 +85,7 @@ func TestHost_Constructors(t *testing.T) {
 		func() {
 			NewHostUsingConfig(
 				"http://{sub}.example.com",
-				&_ImplType{},
+				&_Impl{},
 				Config{RedirectInsecureRequest: true},
 			)
 		},
@@ -153,6 +153,25 @@ func TestHost_SetPermanentRedirectCodeAt(t *testing.T) {
 
 func TestHost_PermanentRedirectCodeAt(t *testing.T) {
 	var host = NewDormantHost("http://example.com")
+
+	testPanickerValue(
+		t, true, false,
+		func() interface{} {
+			return host.PermanentRedirectCodeAt("non-existent")
+		},
+	)
+
+	testPanickerValue(
+		t, true, nil,
+		func() interface{} { return host.PermanentRedirectCodeAt("") },
+	)
+
+	host.Resource("r0")
+	testPanickerValue(
+		t, false, permanentRedirectCode,
+		func() interface{} { return host.PermanentRedirectCodeAt("r0") },
+	)
+
 	host.SetPermanentRedirectCodeAt(
 		"/resource-1/resource-2/",
 		http.StatusPermanentRedirect,
@@ -1321,7 +1340,7 @@ func TestHostBase_ServeHTTP(t *testing.T) {
 	}
 
 	t.Run("middleware (returns false)", func(t *testing.T) {
-		var h = NewHost("http://example.com", &_ImplType{})
+		var h = NewHost("http://example.com", &_Impl{})
 		h.WrapHandlerOf("get", func(_ Handler) Handler {
 			return func(
 				w http.ResponseWriter,
@@ -1351,7 +1370,7 @@ func TestHostBase_ServeHTTP(t *testing.T) {
 	})
 
 	t.Run("non-existent host", func(t *testing.T) {
-		var h = NewHost("http://example.com", &_ImplType{})
+		var h = NewHost("http://example.com", &_Impl{})
 		h.WrapHandlerOf("get", mw)
 
 		var c = _RequestRoutingCase{
@@ -1375,7 +1394,7 @@ func TestHostBase_ServeHTTP(t *testing.T) {
 	})
 
 	t.Run("non-subtree host", func(t *testing.T) {
-		var h = NewHost("http://example.com", &_ImplType{})
+		var h = NewHost("http://example.com", &_Impl{})
 		h.WrapHandlerOf("get", mw)
 
 		var c = _RequestRoutingCase{
@@ -1399,7 +1418,7 @@ func TestHostBase_ServeHTTP(t *testing.T) {
 	t.Run("subtree without trailing slash", func(t *testing.T) {
 		var h = NewHostUsingConfig(
 			"http://example.com",
-			&_ImplType{},
+			&_Impl{},
 			Config{SubtreeHandler: true},
 		)
 
@@ -1426,7 +1445,7 @@ func TestHostBase_ServeHTTP(t *testing.T) {
 	t.Run("subtree without trailing slash strict", func(t *testing.T) {
 		var h = NewHostUsingConfig(
 			"http://example.com",
-			&_ImplType{},
+			&_Impl{},
 			Config{SubtreeHandler: true, StrictOnTrailingSlash: true},
 		)
 
@@ -1452,7 +1471,7 @@ func TestHostBase_ServeHTTP(t *testing.T) {
 	t.Run("subtree with trailing slash", func(t *testing.T) {
 		var h = NewHostUsingConfig(
 			"http://example.com/",
-			&_ImplType{},
+			&_Impl{},
 			Config{SubtreeHandler: true},
 		)
 
@@ -1479,7 +1498,7 @@ func TestHostBase_ServeHTTP(t *testing.T) {
 	t.Run("subtree with trailing slash strict", func(t *testing.T) {
 		var h = NewHostUsingConfig(
 			"http://example.com/",
-			&_ImplType{},
+			&_Impl{},
 			Config{SubtreeHandler: true, StrictOnTrailingSlash: true},
 		)
 
@@ -1505,7 +1524,7 @@ func TestHostBase_ServeHTTP(t *testing.T) {
 	t.Run("http request URL without scheme", func(t *testing.T) {
 		var h = NewHostUsingConfig(
 			"http://example.com/",
-			&_ImplType{},
+			&_Impl{},
 			Config{SubtreeHandler: true},
 		)
 
@@ -1532,7 +1551,7 @@ func TestHostBase_ServeHTTP(t *testing.T) {
 	t.Run("https request URL without scheme", func(t *testing.T) {
 		var h = NewHostUsingConfig(
 			"http://example.com/",
-			&_ImplType{},
+			&_Impl{},
 			Config{SubtreeHandler: true},
 		)
 
@@ -1559,7 +1578,7 @@ func TestHostBase_ServeHTTP(t *testing.T) {
 	t.Run("redirect with changed status code and handler", func(t *testing.T) {
 		var h = NewHostUsingConfig(
 			"http://example.com/",
-			&_ImplType{},
+			&_Impl{},
 			Config{SubtreeHandler: true},
 		)
 

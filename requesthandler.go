@@ -19,7 +19,7 @@ type Handler func(w http.ResponseWriter, r *http.Request, args *Args) bool
 // Hr converts an http.Handler to a nanomux.Handler. Hr must be used when the
 // http.Handler doesn't need an *Args argument.
 func Hr(h http.Handler) Handler {
-	return func(w http.ResponseWriter, r *http.Request, args *Args) bool {
+	return func(w http.ResponseWriter, r *http.Request, _ *Args) bool {
 		h.ServeHTTP(w, r)
 		return true
 	}
@@ -28,7 +28,7 @@ func Hr(h http.Handler) Handler {
 // FnHr converts an http.HandlerFunc to a nanomux.Handler. FnHr must be used
 // when the htpt.HandlerFunc doesn't need an *Args argument.
 func FnHr(hf http.HandlerFunc) Handler {
-	return func(w http.ResponseWriter, r *http.Request, args *Args) bool {
+	return func(w http.ResponseWriter, r *http.Request, _ *Args) bool {
 		hf(w, r)
 		return true
 	}
@@ -120,6 +120,7 @@ func (mhps _MethodHandlerPairs) sort() {
 // or -1 and nil otherwise.
 func (mhps _MethodHandlerPairs) get(method string) (int, Handler) {
 	var hi = len(mhps)
+
 	if hi < 15 {
 		for i := 0; i < hi; i++ {
 			if method == mhps[i].method {
@@ -141,7 +142,12 @@ func (mhps _MethodHandlerPairs) get(method string) (int, Handler) {
 		}
 
 		if mhps[m].method < method {
+			if lo == m {
+				return -1, nil
+			}
+
 			lo = m
+			continue
 		}
 
 		return m, mhps[m].handler
@@ -201,12 +207,16 @@ func detectHTTPMethodHandlersOf(impl Impl) (*_RequestHandlerBase, error) {
 	var v reflect.Value = reflect.ValueOf(impl)
 	var handlerType = reflect.TypeOf(
 		// Signature of the Handler.
-		func(http.ResponseWriter, *http.Request, *Args) bool { return true },
+		func(http.ResponseWriter, *http.Request, *Args) bool {
+			// Unreachable.
+			return true
+		},
 	)
 
 	for hm, n := range hmns {
 		var m = v.MethodByName(n)
-		if m.Kind() != reflect.Func { // Just in case :)
+		if m.Kind() != reflect.Func {
+			// Unreachable.
 			continue
 		}
 
@@ -222,7 +232,7 @@ func detectHTTPMethodHandlersOf(impl Impl) (*_RequestHandlerBase, error) {
 		) bool)
 
 		if !ok {
-			// This block should never be entered.
+			// Unreachable.
 			return nil, newErr("failed to get the handler method")
 		}
 

@@ -73,7 +73,7 @@ func createHost(tmplStr string, impl Impl, config *Config) (*Host, error) {
 		var rhb *_RequestHandlerBase
 		rhb, err = detectHTTPMethodHandlersOf(impl)
 		if err != nil {
-			// Unreachable block.
+			// Unreachable.
 			return nil, newErr("%w", err)
 		}
 
@@ -289,7 +289,7 @@ func (hb *Host) handleOrPassRequest(
 		args._r = hb.derived
 
 		if !hb.IsSubtreeHandler() {
-			// Unreachable block.
+			// Unreachable.
 			return notFoundResourceHandler(w, r, args)
 		}
 	}

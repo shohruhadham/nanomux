@@ -14,11 +14,10 @@ import (
 
 // --------------------------------------------------
 
-// _URLTmpl is used to keep the resource's scheme, host and prefix path
-// segments. When registering the resource, _URLTmpl will be used to find
-// the resource's place in the tree.
+// _URLTmpl is used to keep the resource's host and prefix path segments. When
+// registering the resource, _URLTmpl will be used to find the resource's place
+// in the tree.
 type _URLTmpl struct {
-	Scheme     string
 	Host       string
 	PrefixPath string
 }
@@ -166,6 +165,10 @@ func splitHostAndPath(urlTmplStr string) (
 		var idx = strings.IndexByte(urlTmplStr, '/')
 		if idx < 0 {
 			hostTmplStr = urlTmplStr
+			if hostTmplStr == "" {
+				err = errInvalidArgument
+			}
+
 			return
 		}
 
@@ -182,8 +185,9 @@ func splitHostAndPath(urlTmplStr string) (
 			return
 		}
 	} else if pathTmplStr == "" {
+		// Unreachable.
 		secure = false
-		err = ErrInvalidTemplate
+		err = errInvalidArgument
 		return
 	}
 
@@ -279,6 +283,10 @@ func splitPathSegments(path string) (
 	tslash bool,
 	err error,
 ) {
+	if path == "" {
+		return
+	}
+
 	if path == "/" {
 		return []string{"/"}, true, false, nil
 	}
@@ -288,7 +296,7 @@ func splitPathSegments(path string) (
 		pss = append(pss, ps)
 	}
 
-	if psi.remainingPath() != "" {
+	if len(pss) == 0 || psi.remainingPath() != "" {
 		err = errEmptyPathSegmentTemplate
 		return
 	}
@@ -351,11 +359,12 @@ loop:
 
 	switch rr := _r.(type) {
 	case *Resource:
-		if rr.IsSubtreeHandler() && !rr.isRoot() {
+		if (rr.HasTrailingSlash() && !rr.isRoot()) ||
+			(strb.Len() == 0 && rr.isRoot()) {
 			strb.WriteByte('/')
 		}
 	case *Host:
-		if rr.IsSubtreeHandler() {
+		if rr.HasTrailingSlash() {
 			strb.WriteByte('/')
 		}
 	}

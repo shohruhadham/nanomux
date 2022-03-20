@@ -4,6 +4,7 @@
 package nanomux
 
 import (
+	"errors"
 	"net/http"
 	"net/url"
 	"strings"
@@ -48,7 +49,7 @@ type _Responder interface {
 
 	canHandleRequest() bool
 
-	checkNamesOfTheChildrenAreUniqueInTheURL(r *Resource) error
+	checkChildResourceNamesAreUniqueInURL(r *Resource) error
 	validate(tmpl *Template) error
 	validateHostTmpl(tmplStr string) error
 	validateURL(hostTmplstr, pathTmplStr string) (
@@ -330,6 +331,13 @@ func (rb *_ResponderBase) checkForConfigCompatibility(
 				return newErr("%w", errConflictingConfig)
 			}
 		}
+	} else {
+		switch rb.derived.(type) {
+		case *Host:
+			return newErr("%w", errDormantHost)
+		case *Resource:
+			return newErr("%w", errDormantResource)
+		}
 	}
 
 	return nil
@@ -427,23 +435,19 @@ func (rb *_ResponderBase) checkNamesAreUniqueInTheURL(tmpl *Template) error {
 	return nil
 }
 
-// checkNamesOfTheChildrenAreUniqueInTheURL checks whether the child resources
+// checkChildResourceNamesAreUniqueInURL checks whether the child resources
 // of the argument resource have unique names above in the receiver resource's
 // tree.
-func (rb *_ResponderBase) checkNamesOfTheChildrenAreUniqueInTheURL(
+func (rb *_ResponderBase) checkChildResourceNamesAreUniqueInURL(
 	r *Resource,
 ) error {
-	if _, ok := rb.derived.(*Host); ok {
-		return nil
-	}
-
 	for _, chr := range r.ChildResources() {
 		var err = rb.checkNamesAreUniqueInTheURL(chr.Template())
 		if err != nil {
 			return err
 		}
 
-		err = rb.checkNamesOfTheChildrenAreUniqueInTheURL(chr)
+		err = rb.checkChildResourceNamesAreUniqueInURL(chr)
 		if err != nil {
 			return err
 		}
@@ -452,7 +456,7 @@ func (rb *_ResponderBase) checkNamesOfTheChildrenAreUniqueInTheURL(
 	return nil
 }
 
-// Validate checks whether the argument template pointer is nil and if its name
+// validate checks whether the argument template pointer is nil and if its name
 // is unique in the responder's URL.
 func (rb *_ResponderBase) validate(tmpl *Template) error {
 	if tmpl == nil {
@@ -692,7 +696,8 @@ func (rb *_ResponderBase) passChildResourcesTo(r _Responder) error {
 }
 
 // replaceResource replaces the old child resource with the new one. The method
-// doesn't compare the templates of the resources. It assumes they are the same.
+// doesn't compare the templates of the resources, and it doesn't check if the
+// old resource exists or not.
 func (rb *_ResponderBase) replaceResource(oldR, newR *Resource) error {
 	var tmpl = oldR.Template()
 	switch {
@@ -714,11 +719,13 @@ func (rb *_ResponderBase) replaceResource(oldR, newR *Resource) error {
 
 	var err = newR.setParent(rb.derived)
 	if err != nil {
+		// Unreachable.
 		return newErr("%w", err)
 	}
 
 	err = oldR.setParent(nil)
 	if err != nil {
+		// Unreachable.
 		return newErr("%w", err)
 	}
 
@@ -726,7 +733,8 @@ func (rb *_ResponderBase) replaceResource(oldR, newR *Resource) error {
 }
 
 // registerResource registers the argument resource and sets the responder
-// as its parent.
+// as its parent. The method doesn't check if an existing resource with the
+// same template exists or not.
 func (rb *_ResponderBase) registerResource(r *Resource) error {
 	switch tmpl := r.Template(); {
 	case tmpl.IsStatic():
@@ -798,6 +806,13 @@ func (rb *_ResponderBase) segmentResources(pathSegments []string) (
 					return
 				}
 			} else {
+				if name := tmpl.Name(); name != "" {
+					if chr := oldLast.ChildResourceNamed(name); chr != nil {
+						err = newErr("%w", errDuplicateNameAmongSiblings)
+						return
+					}
+				}
+
 				newFirst = r
 			}
 
@@ -828,7 +843,7 @@ func (rb *_ResponderBase) pathSegmentResources(pathTmplStr string) (
 
 	if root {
 		if _, ok := rb.derived.(*Host); ok {
-			oldLast = rb
+			oldLast = rb.derived
 			return
 		}
 
@@ -857,13 +872,27 @@ func (rb *_ResponderBase) registerResourceUnder(
 		return err
 	}
 
+	var tmpl = r.Template()
+
 	if newFirst != nil {
-		if err := newLast.checkNamesOfTheChildrenAreUniqueInTheURL(r); err != nil {
+		var err = newLast.validate(tmpl)
+		if err != nil {
 			return newErr("%w", err)
 		}
 
-		if r := oldLast.ChildResourceNamed(newFirst.Name()); r != nil {
-			return newErr("%w", errDuplicateNameAmongSiblings)
+		err = newLast.checkChildResourceNamesAreUniqueInURL(r)
+		if err != nil {
+			return newErr("%w", err)
+		}
+
+		err = oldLast.validate(tmpl)
+		if err != nil {
+			return newErr("%w", err)
+		}
+
+		err = oldLast.checkChildResourceNamesAreUniqueInURL(r)
+		if err != nil {
+			return newErr("%w", err)
 		}
 
 		if err = newLast.registerResource(r); err != nil {
@@ -871,13 +900,19 @@ func (rb *_ResponderBase) registerResourceUnder(
 		}
 
 		if err = oldLast.registerResource(newFirst); err != nil {
+			// Unreachable.
 			return newErr("%w", err)
 		}
 
 		return nil
 	}
 
-	if err := oldLast.checkNamesOfTheChildrenAreUniqueInTheURL(r); err != nil {
+	err = oldLast.validate(tmpl)
+	if err != nil {
+		return newErr("%w", err)
+	}
+
+	if err := oldLast.checkChildResourceNamesAreUniqueInURL(r); err != nil {
 		return newErr("%w", err)
 	}
 
@@ -902,6 +937,10 @@ func (rb *_ResponderBase) keepResourceOrItsChildResources(r *Resource) error {
 	}
 
 	if rwt == nil {
+		if nr := rb.ChildResourceNamed(r.Name()); nr != nil {
+			return newErr("%w", errDuplicateNameAmongSiblings)
+		}
+
 		if err = rb.registerResource(r); err != nil {
 			return newErr("%w", err)
 		}
@@ -916,7 +955,7 @@ func (rb *_ResponderBase) keepResourceOrItsChildResources(r *Resource) error {
 		&rcfs,
 	)
 
-	if err != nil {
+	if err != nil && !errors.Is(err, errDormantResource) {
 		return newErr("%w", err)
 	}
 
@@ -937,6 +976,7 @@ func (rb *_ResponderBase) keepResourceOrItsChildResources(r *Resource) error {
 
 		err = rb.replaceResource(rwt, r)
 		if err != nil {
+			// Unreachable.
 			return newErr("%w", err)
 		}
 
@@ -981,6 +1021,7 @@ func (rb *_ResponderBase) Resource(pathTmplStr string) *Resource {
 	}
 
 	if pathTmplStr == "" {
+		// Unreachable.
 		panicWithErr("%w", errEmptyPathTemplate)
 	}
 
@@ -997,12 +1038,8 @@ func (rb *_ResponderBase) Resource(pathTmplStr string) *Resource {
 
 	if newFirst != nil {
 		newLast.configure(secure, tslash, nil)
-
-		if oldLast.ChildResourceNamed(newFirst.Name()) != nil {
-			panicWithErr("%w", errDuplicateNameAmongSiblings)
-		}
-
 		if err = oldLast.registerResource(newFirst); err != nil {
+			// Unreachable.
 			panicWithErr("%w", err)
 		}
 
@@ -1011,7 +1048,12 @@ func (rb *_ResponderBase) Resource(pathTmplStr string) *Resource {
 
 	err = oldLast.checkForConfigCompatibility(secure, tslash, nil)
 	if err != nil {
-		panicWithErr("%w", err)
+		if errors.Is(err, errDormantHost) ||
+			errors.Is(err, errDormantResource) {
+			oldLast.configure(secure, tslash, nil)
+		} else {
+			panicWithErr("%w", err)
+		}
 	}
 
 	return oldLast.(*Resource)
@@ -1050,6 +1092,7 @@ func (rb *_ResponderBase) ResourceUsingConfig(
 	}
 
 	if pathTmplStr == "" {
+		// Unreachable.
 		panicWithErr("%w", errEmptyPathTemplate)
 	}
 
@@ -1071,12 +1114,8 @@ func (rb *_ResponderBase) ResourceUsingConfig(
 	var cfs = config.asFlags()
 	if newFirst != nil {
 		newLast.configure(secure, tslash, &cfs)
-
-		if r := oldLast.ChildResourceNamed(newFirst.Name()); r != nil {
-			panicWithErr("%w", errDuplicateNameAmongSiblings)
-		}
-
 		if err = oldLast.registerResource(newFirst); err != nil {
+			// Unreachable.
 			panicWithErr("%w", err)
 		}
 
@@ -1085,7 +1124,12 @@ func (rb *_ResponderBase) ResourceUsingConfig(
 
 	err = oldLast.checkForConfigCompatibility(secure, tslash, &cfs)
 	if err != nil {
-		panicWithErr("%w", err)
+		if errors.Is(err, errDormantHost) ||
+			errors.Is(err, errDormantResource) {
+			oldLast.configure(secure, tslash, &cfs)
+		} else {
+			panicWithErr("%w", err)
+		}
 	}
 
 	return oldLast.(*Resource)
@@ -1123,7 +1167,7 @@ func (rb *_ResponderBase) RegisterResource(r *Resource) {
 		panicWithErr("%w", err)
 	}
 
-	if err := rb.checkNamesOfTheChildrenAreUniqueInTheURL(r); err != nil {
+	if err := rb.checkChildResourceNamesAreUniqueInURL(r); err != nil {
 		panicWithErr("%w", err)
 	}
 
@@ -1185,7 +1229,7 @@ func (rb *_ResponderBase) RegisterResourceUnder(
 		panicWithErr("%w", err)
 	}
 
-	if err := rb.checkNamesOfTheChildrenAreUniqueInTheURL(r); err != nil {
+	if err := rb.checkChildResourceNamesAreUniqueInURL(r); err != nil {
 		panicWithErr("%w", err)
 	}
 
@@ -1202,36 +1246,30 @@ func (rb *_ResponderBase) RegisterResourceUnder(
 	}
 
 	if urlt := r.urlTmpl(); urlt != nil {
-		if urlt.PrefixPath != "" {
-			var lpp, lurltPp = len(prefixPath), len(urlt.PrefixPath)
-			if lpp > 0 {
-				if lastIdx := lpp - 1; prefixPath[lastIdx] == '/' {
-					prefixPath = prefixPath[:lastIdx]
-					lpp--
-				}
+		var lpp, lurltPp = len(prefixPath), len(urlt.PrefixPath)
+		if lpp > 0 {
+			if lastIdx := lpp - 1; prefixPath[lastIdx] == '/' {
+				prefixPath = prefixPath[:lastIdx]
+				lpp--
 			}
+		}
 
-			if lpp > lurltPp {
-				panicWithErr("%w", errConflictingPath)
-			}
+		if lpp > lurltPp {
+			panicWithErr("%w", errConflictingPath)
+		}
 
-			var pp = urlt.PrefixPath
-			if strings.HasSuffix(urlt.PrefixPath, prefixPath) {
-				pp = urlt.PrefixPath[:lurltPp-lpp]
-			}
+		var pp = urlt.PrefixPath
+		if strings.HasSuffix(urlt.PrefixPath, prefixPath) {
+			pp = urlt.PrefixPath[:lurltPp-lpp]
+		}
 
-			var rppss, err = rb.validateURL(urlt.Host, pp)
-			if err != nil {
-				panicWithErr("%w", err)
-			}
+		var rppss, err = rb.validateURL(urlt.Host, pp)
+		if err != nil {
+			panicWithErr("%w", err)
+		}
 
-			if len(rppss) > 0 {
-				panicWithErr("%w", errConflictingPath)
-			}
-		} else {
-			if err := rb.validateHostTmpl(urlt.Host); err != nil {
-				panicWithErr("%w", err)
-			}
+		if len(rppss) > 0 {
+			panicWithErr("%w", errConflictingPath)
 		}
 	}
 
@@ -1271,16 +1309,13 @@ func (rb *_ResponderBase) RegisteredResource(pathTmplStr string) *Resource {
 		panicWithErr("%w", err)
 	}
 
-	if hTmplStr != "" {
+	if hTmplStr != "" || pathTmplStr == "/" {
 		panicWithErr("%w", errNonRouterParent)
 	}
 
 	if pathTmplStr == "" {
+		// Unreachable.
 		panicWithErr("%w", errEmptyPathTemplate)
-	}
-
-	if pathTmplStr == "/" {
-		panicWithErr("%w", errNonRouterParent)
 	}
 
 	var r *Resource
@@ -1292,7 +1327,11 @@ func (rb *_ResponderBase) RegisteredResource(pathTmplStr string) *Resource {
 	if r != nil {
 		err = r.checkForConfigCompatibility(secure, tslash, nil)
 		if err != nil {
-			panicWithErr("%w", err)
+			if errors.Is(err, errDormantResource) {
+				r.configure(secure, tslash, nil)
+			} else {
+				panicWithErr("%w", err)
+			}
 		}
 
 		return r
@@ -1445,6 +1484,7 @@ func (rb *_ResponderBase) SetImplementation(impl Impl) {
 
 	var rhb, err = detectHTTPMethodHandlersOf(impl)
 	if err != nil {
+		// Unreachable.
 		panicWithErr("%w", err)
 	}
 
@@ -1695,10 +1735,10 @@ func (rb *_ResponderBase) RedirectAnyRequestTo(url string, redirectCode int) {
 		)
 	}
 
-	var tUrl = strings.TrimPrefix(url, "http")
-	if len(tUrl) == lUrl {
+	if tUrl := strings.TrimPrefix(url, "http"); len(tUrl) == lUrl {
 		if url[0] != '/' {
 			url = "/" + url
+			lUrl = len(url)
 		}
 	}
 

@@ -187,6 +187,7 @@ func createErr(skipCount int, description string, args ...interface{}) error {
 			var fnName = fn.Name()
 			var idx = strings.LastIndexByte(fnName, '.')
 			if idx < 0 {
+				// Unreachable.
 				strb.WriteString(fnName)
 			} else {
 				strb.WriteString(fnName[idx+1:])
@@ -199,6 +200,7 @@ func createErr(skipCount int, description string, args ...interface{}) error {
 		}
 	}
 
+	// Unreachable.
 	return fmt.Errorf(description, args...)
 }
 

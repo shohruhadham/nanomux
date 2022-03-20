@@ -45,7 +45,7 @@ func createResource(
 	var tmpl *Template
 	if rTmplStr == "/" {
 		if hTmplStr != "" {
-			// Unreachable block.
+			// Unreachable.
 			return nil, newErr("%w", errNonRouterParent)
 		}
 
@@ -77,7 +77,7 @@ func createResource(
 		var rhb *_RequestHandlerBase
 		rhb, err = detectHTTPMethodHandlersOf(impl)
 		if err != nil {
-			// Unreachable block.
+			// Unreachable.
 			return nil, newErr("%w", err)
 		}
 

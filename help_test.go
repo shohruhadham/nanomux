@@ -5,6 +5,7 @@ package nanomux
 
 import (
 	"net/http"
+	"reflect"
 	"runtime"
 	"strconv"
 	"strings"
@@ -53,17 +54,21 @@ func testPanicker(t *testing.T, wantPanic bool, fn func()) {
 		}
 
 		if (err != nil) != wantPanic {
-			t.Fatalf("%s panic err = %v, want panic %t", li, err, wantPanic)
+			t.Fatalf("%s panic err = %v, wantPanic = %t", li, err, wantPanic)
 		}
 	}()
 
 	fn()
+
+	if wantPanic {
+		t.Fatalf("%s panic err = nil, wantPanic = true", li)
+	}
 }
 
 func testPanickerValue(
 	t *testing.T,
 	wantPanic bool,
-	wantValue interface{},
+	wantValue interface{}, // Comparison fails the wantValue is nil.
 	fn func() interface{},
 ) {
 	t.Helper()
@@ -80,11 +85,16 @@ func testPanickerValue(
 		}
 
 		if (err != nil) != wantPanic {
-			t.Fatalf("%s panic err = %v, want panic %t", li, err, wantPanic)
+			t.Fatalf("%s panic err = %v, wantPanic = %t", li, err, wantPanic)
 		}
 	}()
 
 	var value = fn()
+
+	if wantPanic {
+		t.Fatalf("%s panic err = nil, wantPanic = true", li)
+	}
+
 	if value != wantValue {
 		t.Fatalf("%s value = %v, want %v", li, value, wantValue)
 	}
@@ -93,24 +103,24 @@ func testPanickerValue(
 func checkErr(t *testing.T, err error, wantErr bool) {
 	t.Helper()
 	if (err != nil) != wantErr {
-		t.Fatalf("%s err = %v, want err %t", lineInfo(2), err, wantErr)
+		t.Fatalf("%s err = %v, wantErr = %t", lineInfo(2), err, wantErr)
 	}
 }
 
 func checkValue(t *testing.T, value, wantValue interface{}) {
 	t.Helper()
-	// The following doesn't work when the value is a nil pointer.
-	if value != wantValue {
+
+	if !reflect.DeepEqual(value, wantValue) {
 		t.Fatalf("%s value = %v, want %v", lineInfo(2), value, wantValue)
 	}
 }
 
 // --------------------------------------------------
 
-// _ImplType is usef in other test files too.
-type _ImplType struct{}
+// _Impl is usef in other test files too.
+type _Impl struct{}
 
-func (rht *_ImplType) HandleGet(
+func (rht *_Impl) HandleGet(
 	http.ResponseWriter,
 	*http.Request,
 	*Args,
@@ -118,7 +128,7 @@ func (rht *_ImplType) HandleGet(
 	return true
 }
 
-func (rht *_ImplType) HandlePost(
+func (rht *_Impl) HandlePost(
 	http.ResponseWriter,
 	*http.Request,
 	*Args,
@@ -126,7 +136,7 @@ func (rht *_ImplType) HandlePost(
 	return true
 }
 
-func (rht *_ImplType) HandleCustom(
+func (rht *_Impl) HandleCustom(
 	http.ResponseWriter,
 	*http.Request,
 	*Args,
@@ -134,7 +144,7 @@ func (rht *_ImplType) HandleCustom(
 	return true
 }
 
-func (rht *_ImplType) HandleNotAllowedMethod(
+func (rht *_Impl) HandleNotAllowedMethod(
 	http.ResponseWriter,
 	*http.Request,
 	*Args,
@@ -142,7 +152,7 @@ func (rht *_ImplType) HandleNotAllowedMethod(
 	return true
 }
 
-func (rht *_ImplType) SomeMethod(
+func (rht *_Impl) SomeMethod(
 	http.ResponseWriter,
 	*http.Request,
 	*Args,
@@ -150,11 +160,13 @@ func (rht *_ImplType) SomeMethod(
 	return true
 }
 
-func (rht *_ImplType) SomeOtherMethod(*Args) bool {
+func (rht *_Impl) SomeOtherMethod(args *Args) bool {
+	var strb = args.Get("strb").(*strings.Builder)
+	strb.WriteString("SomeOtherMethod")
 	return true
 }
 
-func (rht *_ImplType) ServeHTTP(w http.ResponseWriter, r *http.Request) {}
+func (rht *_Impl) ServeHTTP(w http.ResponseWriter, r *http.Request) {}
 
 const rhTypeHTTPMethods = "get post custom"
 
