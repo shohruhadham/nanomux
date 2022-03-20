@@ -86,18 +86,6 @@ type _StringPair struct{ key, value string }
 // TemplateValues is a slice of string key-value pairs.
 type TemplateValues []_StringPair
 
-// Set sets the value for the key. If the key doesn't exist, it's added to the
-// slice.
-func (tmplVs *TemplateValues) Set(key, value string) {
-	var i, _ = tmplVs.get(key)
-	if i < 0 {
-		*tmplVs = append(*tmplVs, _StringPair{key, value})
-		return
-	}
-
-	(*tmplVs)[i] = _StringPair{key, value}
-}
-
 // get returns the index and the value, if the key exists, or -1 and an empty
 // string.
 func (tmplVs TemplateValues) get(key string) (int, string) {
@@ -108,6 +96,18 @@ func (tmplVs TemplateValues) get(key string) (int, string) {
 	}
 
 	return -1, ""
+}
+
+// Set sets the value for the key. If the key doesn't exist, it's added to the
+// slice.
+func (tmplVs *TemplateValues) Set(key, value string) {
+	var i, _ = tmplVs.get(key)
+	if i < 0 {
+		*tmplVs = append(*tmplVs, _StringPair{key, value})
+		return
+	}
+
+	(*tmplVs)[i] = _StringPair{key, value}
 }
 
 // Get returns the value of the key. If the key doesn't exist, it returns an
@@ -169,7 +169,7 @@ type _TemplateSegment struct {
 type Template struct {
 	name        string
 	slices      []_TemplateSegment
-	wildCardIdx int
+	wildcardIdx int
 }
 
 // -----
@@ -316,14 +316,15 @@ func (t *Template) IsStatic() bool {
 // IsWildcard returns true if the template doesn't have any static or regular
 // expression segments.
 func (t *Template) IsWildcard() bool {
-	return len(t.slices) == 1 && t.wildCardIdx == 0
+	return len(t.slices) == 1 && t.wildcardIdx == 0
 }
 
 // HasPattern returns true if the template has any regular expression segments.
 func (t *Template) HasPattern() bool {
 	var lslices = len(t.slices)
 	for i := 0; i < lslices; i++ {
-		if t.slices[i].valuePattern.re != nil {
+		if t.slices[i].valuePattern != nil &&
+			t.slices[i].valuePattern.re != nil {
 			return true
 		}
 	}
@@ -333,15 +334,15 @@ func (t *Template) HasPattern() bool {
 
 // SimilarityWith returns the similarity between the receiver and argument
 // templates.
-func (t *Template) SimilarityWith(anotherT *Template) Similarity {
-	if anotherT == nil {
+func (t *Template) SimilarityWith(t2 *Template) Similarity {
+	if t2 == nil {
 		panicWithErr("%w", errNilArgument)
 	}
 
 	if t.IsStatic() {
-		if anotherT.IsStatic() {
-			if t.slices[0].staticStr == anotherT.slices[0].staticStr {
-				if t.name != anotherT.name {
+		if t2.IsStatic() {
+			if t.slices[0].staticStr == t2.slices[0].staticStr {
+				if t.name != t2.name {
 					return DifferentNames
 				}
 
@@ -353,10 +354,10 @@ func (t *Template) SimilarityWith(anotherT *Template) Similarity {
 	}
 
 	if t.IsWildcard() {
-		if anotherT.IsWildcard() {
+		if t2.IsWildcard() {
 			if t.slices[0].valuePattern.name ==
-				anotherT.slices[0].valuePattern.name {
-				if t.name != anotherT.name {
+				t2.slices[0].valuePattern.name {
+				if t.name != t2.name {
 					return DifferentNames
 				}
 
@@ -369,28 +370,32 @@ func (t *Template) SimilarityWith(anotherT *Template) Similarity {
 		return Different
 	}
 
-	if anotherT.IsStatic() || anotherT.IsWildcard() {
+	if t2.IsStatic() || t2.IsWildcard() {
 		return Different
 	}
 
-	if t.wildCardIdx != anotherT.wildCardIdx {
+	if t.wildcardIdx != t2.wildcardIdx {
 		return Different
 	}
 
 	var lts = len(t.slices)
-	if lts != len(anotherT.slices) {
+	if lts != len(t2.slices) {
 		return Different
 	}
 
 	var similarity = TheSame
 	for i := 0; i < lts; i++ {
-		var slc1, slc2 = t.slices[i], anotherT.slices[i]
+		var slc1, slc2 = t.slices[i], t2.slices[i]
 		if slc1.staticStr != "" {
 			if slc1.staticStr != slc2.staticStr {
 				return Different
 			}
 
 			continue
+		}
+
+		if slc2.staticStr != "" {
+			return Different
 		}
 
 		if slc1.valuePattern.re != nil && slc2.valuePattern.re != nil {
@@ -406,11 +411,12 @@ func (t *Template) SimilarityWith(anotherT *Template) Similarity {
 				similarity = DifferentValueNames
 			}
 		} else {
+			// Unreachable.
 			return Different
 		}
 	}
 
-	if similarity == TheSame && t.name != anotherT.name {
+	if similarity == TheSame && t.name != t2.name {
 		similarity = DifferentNames
 	}
 
@@ -429,8 +435,8 @@ func (t *Template) Match(
 ) (bool, TemplateValues) {
 	var ltslices = len(t.slices)
 	var k = ltslices
-	if t.wildCardIdx >= 0 {
-		k = t.wildCardIdx
+	if t.wildcardIdx >= 0 {
+		k = t.wildcardIdx
 	}
 
 	for i := 0; i < k; i++ {
@@ -496,16 +502,17 @@ func (t *Template) Match(
 	}
 
 	if len(str) > 0 {
-		if t.wildCardIdx >= 0 {
+		if t.wildcardIdx >= 0 {
 			if values == nil {
 				values = make(TemplateValues, 0, 5)
 			}
 
 			values = append(
 				values,
-				_StringPair{t.slices[t.wildCardIdx].valuePattern.name, str},
+				_StringPair{t.slices[t.wildcardIdx].valuePattern.name, str},
 			)
 		} else {
+			// Unreachable.
 			return false, values
 		}
 	}
@@ -599,7 +606,7 @@ func (t *Template) String() string {
 func (t *Template) Clear() {
 	t.name = ""
 	t.slices = nil
-	t.wildCardIdx = -1
+	t.wildcardIdx = -1
 }
 
 // --------------------------------------------------
@@ -767,7 +774,8 @@ func dynamicSegment(tmplStrSlc string) (
 			if ch == '}' {
 				depth--
 				if depth > 0 {
-					// Current curly brace "}" is not the end of the value name.
+					// The current curly brace "}" is not the end of
+					// the dynamic slice, or the template is invalid.
 					continue
 				}
 
@@ -868,7 +876,7 @@ func appendDynamicSegmentTo(
 			}
 
 			if pattern != vp.re.String() {
-				return tss, valuePatterns, -1, newErr(
+				return tss, valuePatterns, wildcardIdx, newErr(
 					"%w for a value %q",
 					ErrDifferentPattern,
 					vName,
@@ -914,6 +922,7 @@ func appendDynamicSegmentTo(
 
 			var re, err = regexp.Compile(p)
 			if err != nil {
+				// Unreachable.
 				return tss, valuePatterns, wildcardIdx, err
 			}
 
@@ -1000,11 +1009,12 @@ func parse(tmplStr string) (
 	var lastIdx = len(tmplSlcs) - 1
 	var vp = tmplSlcs[lastIdx].valuePattern
 	if vp != nil && vp.re != nil && wildcardIdx < 0 {
-		// The last segment is a value-pattern segment. So, its regexp must be
-		// modified to match the end of the string.
+		// The last segment is a value-pattern segment. So, its regexp
+		// must be modified to match the end of the string.
 		var reStr = vp.re.String() + "$"
 		vp.re, err = regexp.Compile(reStr)
 		if err != nil {
+			// Unreachable.
 			return nil, -1, err
 		}
 	}
@@ -1027,7 +1037,7 @@ func TryToParse(tmplStr string) (*Template, error) {
 	}
 
 	var tmpl = &Template{name: name}
-	tmpl.slices, tmpl.wildCardIdx, err = parse(tmplStr)
+	tmpl.slices, tmpl.wildcardIdx, err = parse(tmplStr)
 	if err != nil {
 		return nil, err
 	}

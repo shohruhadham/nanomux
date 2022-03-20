@@ -33,7 +33,47 @@ func TestSimilarity_Err(t *testing.T) {
 			}
 		})
 	}
+
+	var similarity Similarity = 255
+	testPanicker(
+		t, true,
+		func() {
+			if err := similarity.Err(); err != nil {
+				t.Fatalf(
+					"Similarity.Err() error = %v, want nil",
+					err,
+				)
+			}
+		},
+	)
 }
+
+// -------------------------
+func TestTemplateValues_SetGet(t *testing.T) {
+	var tvs = TemplateValues{}
+	var setCases = []_StringPair{
+		{"a", "123"},
+		{"b", "231"},
+		{"c", "321"},
+		{"b", "213"},
+	}
+
+	var getCases = []_StringPair{
+		{"a", "123"},
+		{"b", "213"},
+		{"c", "321"},
+	}
+
+	for _, c := range setCases {
+		tvs.Set(c.key, c.value)
+	}
+
+	for _, c := range getCases {
+		checkValue(t, tvs.Get(c.key), c.value)
+	}
+}
+
+// -------------------------
 
 func TestTemplate_SetName(t *testing.T) {
 	var tmpl = &Template{}
@@ -63,6 +103,11 @@ func TestTemplate_Content(t *testing.T) {
 			"static",
 			&Template{slices: []_TemplateSegment{{staticStr: "static template"}}},
 			"static template",
+		},
+		{
+			"$static",
+			&Template{slices: []_TemplateSegment{{staticStr: "$static template"}}},
+			`\$static template`,
 		},
 		{
 			"pattern",
@@ -349,6 +394,33 @@ func TestTemplate_IsWildCard(t *testing.T) {
 	}
 }
 
+func TestTemplate_HasPattern(t *testing.T) {
+	var cases = []struct {
+		name string
+		tmpl *Template
+		want bool
+	}{
+		{"pattern template #1", Parse("{pattern:\\d{3}}"), true},
+		{"pattern template #2", Parse("static {pattern:\\d{3}}"), true},
+		{"pattern template #3", Parse("{wildcard} {pattern:\\d{3}}"), true},
+		{
+			"pattern template #4",
+			Parse("{wildcard} {pattern:\\d{3}} static"),
+			true,
+		},
+		{"wildcard template", Parse("{wildcard}"), false},
+		{"static template", Parse("static template"), false},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := c.tmpl.HasPattern(); got != c.want {
+				t.Fatalf("Template.HasPattern() = %v, want %v", got, c.want)
+			}
+		})
+	}
+}
+
 func TestTemplate_SimilarityWith(t *testing.T) {
 	var tmpl = &Template{
 		name: "tmpl",
@@ -359,13 +431,14 @@ func TestTemplate_SimilarityWith(t *testing.T) {
 			{staticStr: " - IDs; name: "},
 			{valuePattern: &_ValuePattern{name: "name"}},
 		},
-		wildCardIdx: 4,
+		wildcardIdx: 4,
 	}
 
 	var cases = []struct {
-		name string
-		tmpl *Template
-		want Similarity
+		name    string
+		tmpl    *Template
+		want    Similarity
+		wantErr bool
 	}{
 		{
 			"different #1",
@@ -373,6 +446,7 @@ func TestTemplate_SimilarityWith(t *testing.T) {
 				{staticStr: "green-energy"},
 			}},
 			Different,
+			false,
 		},
 		{
 			"different #2",
@@ -386,6 +460,7 @@ func TestTemplate_SimilarityWith(t *testing.T) {
 				{staticStr: " - IDs"},
 			}},
 			Different,
+			false,
 		},
 		{
 			"different #3",
@@ -404,9 +479,10 @@ func TestTemplate_SimilarityWith(t *testing.T) {
 						regexp.MustCompile(`\d{2}`),
 					}},
 				},
-				wildCardIdx: 1,
+				wildcardIdx: 1,
 			},
 			Different,
+			false,
 		},
 		{
 			"different #4",
@@ -414,6 +490,7 @@ func TestTemplate_SimilarityWith(t *testing.T) {
 				{valuePattern: &_ValuePattern{name: "forest name"}},
 			}},
 			Different,
+			false,
 		},
 		{
 			"different value names #1",
@@ -432,9 +509,10 @@ func TestTemplate_SimilarityWith(t *testing.T) {
 					{staticStr: " - IDs; name: "},
 					{valuePattern: &_ValuePattern{name: "name"}},
 				},
-				wildCardIdx: 4,
+				wildcardIdx: 4,
 			},
 			DifferentValueNames,
+			false,
 		},
 		{
 			"different value names #2",
@@ -453,9 +531,10 @@ func TestTemplate_SimilarityWith(t *testing.T) {
 					{staticStr: " - IDs; name: "},
 					{valuePattern: &_ValuePattern{name: "Name"}},
 				},
-				wildCardIdx: 4,
+				wildcardIdx: 4,
 			},
 			DifferentValueNames,
+			false,
 		},
 		{
 			"different names",
@@ -474,9 +553,10 @@ func TestTemplate_SimilarityWith(t *testing.T) {
 					{staticStr: " - IDs; name: "},
 					{valuePattern: &_ValuePattern{name: "name"}},
 				},
-				wildCardIdx: 4,
+				wildcardIdx: 4,
 			},
 			DifferentNames,
+			false,
 		},
 		{
 			"the same",
@@ -495,19 +575,55 @@ func TestTemplate_SimilarityWith(t *testing.T) {
 					{staticStr: " - IDs; name: "},
 					{valuePattern: &_ValuePattern{name: "name"}},
 				},
-				wildCardIdx: 4,
+				wildcardIdx: 4,
 			},
 			TheSame,
+			false,
 		},
+		{"nil", nil, 255, true},
 	}
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if got := tmpl.SimilarityWith(c.tmpl); got != c.want {
-				t.Fatalf("Template.SimilarityWith() = %v, want %v", got, c.want)
-			}
+			testPanickerValue(
+				t, c.wantErr,
+				c.want,
+				func() interface{} {
+					return tmpl.SimilarityWith(c.tmpl)
+				},
+			)
 		})
 	}
+
+	tmpl = Parse("$t1:static")
+	var tmpl2 = Parse("$t2:static")
+	testPanickerValue(
+		t, false,
+		DifferentNames,
+		func() interface{} {
+			return tmpl.SimilarityWith(tmpl2)
+		},
+	)
+
+	tmpl = Parse("{vn:123} static")
+	tmpl2 = Parse("static {vn:123}")
+	testPanickerValue(
+		t, false,
+		Different,
+		func() interface{} {
+			return tmpl.SimilarityWith(tmpl2)
+		},
+	)
+
+	tmpl = Parse("{vn:123} {wildcard}")
+	tmpl2 = Parse("{wildcard} {vn:123}")
+	testPanickerValue(
+		t, false,
+		Different,
+		func() interface{} {
+			return tmpl.SimilarityWith(tmpl2)
+		},
+	)
 }
 
 func TestTemplate_Match(t *testing.T) {
@@ -586,6 +702,24 @@ func TestTemplate_Match(t *testing.T) {
 			TemplateValues{{"galaxy", "Eye of Sauron"}, {"color", "red"}},
 			[]string{
 				"Medusa Merger, yellow", "Malin 1", "white",
+			},
+		},
+		{
+			"pattern static repeated pattern wildcard",
+			Parse("{vn:\\d{3}} abc {vn:\\d{3}}{wildcard}"),
+			"123 abc 123value",
+			TemplateValues{{"vn", "123"}, {"wildcard", "value"}},
+			[]string{
+				"abc 123 abcvalue", "321 abc 21value", "123 abc 321value",
+			},
+		},
+		{
+			"wildcard pattern static repeated pattern",
+			Parse("{wildcard}{vn:\\d{3}} abc {vn:\\d{3}}"),
+			"value123 abc 123",
+			TemplateValues{{"wildcard", "value"}, {"vn", "123"}},
+			[]string{
+				"valueabc 123 abc", "value321 abc 21", "value123 abc 321",
 			},
 		},
 	}
@@ -802,6 +936,24 @@ func TestTemplate_Apply(t *testing.T) {
 			"",
 			true,
 		},
+		{
+			"static pattern static wildcard",
+			&Template{slices: []_TemplateSegment{
+				{staticStr: "id: "},
+				{valuePattern: &_ValuePattern{
+					name: "id",
+					re:   regexp.MustCompile(`\d{3}`),
+				}},
+				{staticStr: ", name: "},
+				{valuePattern: &_ValuePattern{
+					name: "name",
+				}},
+			}},
+			TemplateValues{{"id", "abc"}, {"name", "John Doe"}},
+			false,
+			"",
+			true,
+		},
 	}
 
 	for _, c := range cases {
@@ -814,11 +966,6 @@ func TestTemplate_Apply(t *testing.T) {
 					return c.tmpl.Apply(c.values, c.ignoreMissing)
 				},
 			)
-			// var got = c.tmpl.Apply(c.values, c.ignoreMissing)
-
-			// if got != c.resultStr {
-			// 	t.Fatalf("Template.Apply() = %v, want %v", got, c.resultStr)
-			// }
 		})
 	}
 }
@@ -939,6 +1086,18 @@ func TestTemplate_String(t *testing.T) {
 	}
 }
 
+func TestTemplate_Clear(t *testing.T) {
+	var tmpl = Parse("$name:{valueName:abc}, static, {wildcard}, static")
+	checkValue(t, tmpl.Name(), "name")
+	checkValue(t, len(tmpl.slices), 4)
+	checkValue(t, tmpl.wildcardIdx, 2)
+
+	tmpl.Clear()
+	checkValue(t, tmpl.Name(), "")
+	checkValue(t, len(tmpl.slices), 0)
+	checkValue(t, tmpl.wildcardIdx, -1)
+}
+
 func TestTemplate_templateNameAndContent(t *testing.T) {
 	var cases = []struct {
 		name            string
@@ -1025,7 +1184,7 @@ func TestTemplate_templateNameAndContent(t *testing.T) {
 	}
 }
 
-func TestTemplate_staticSlice(t *testing.T) {
+func TestTemplate_staticSegment(t *testing.T) {
 	var cases = []struct {
 		tmplStr         string
 		wantStaticStr   string
@@ -1072,7 +1231,7 @@ func TestTemplate_staticSlice(t *testing.T) {
 	}
 }
 
-func TestTemplate_dynamicSlice(t *testing.T) {
+func TestTemplate_dynamicSegment(t *testing.T) {
 	var cases = []struct {
 		tmplStr         string
 		wantValueName   string
@@ -1121,7 +1280,22 @@ func TestTemplate_dynamicSlice(t *testing.T) {
 			true,
 		},
 		{
+			`{:} static`,
+			"", "", "",
+			true,
+		},
+		{
 			`{value{Name:patternName}:{pattern}`,
+			"", "", "",
+			true,
+		},
+		{
+			`{} {wildcard}`,
+			"", "", "",
+			true,
+		},
+		{
+			`{}`,
 			"", "", "",
 			true,
 		},
@@ -1164,10 +1338,10 @@ func TestTemplate_dynamicSlice(t *testing.T) {
 	}
 }
 
-func TestTemplate_appendDynamicSliceTo(t *testing.T) {
+func TestTemplate_appendDynamicSegmentTo(t *testing.T) {
 	var (
 		tss           []_TemplateSegment
-		wildCardIdx   = -1
+		wildcardIdx   = -1
 		valuePatterns = make(_ValuePatterns, 0, 1)
 	)
 
@@ -1176,7 +1350,7 @@ func TestTemplate_appendDynamicSliceTo(t *testing.T) {
 		vName           string
 		pattern         string
 		wantTss         []_TemplateSegment
-		wantWildCardIdx int
+		wantWildcardIdx int
 		wantErr         bool
 	}{
 		{
@@ -1423,18 +1597,116 @@ func TestTemplate_appendDynamicSliceTo(t *testing.T) {
 			},
 			4, false,
 		},
-		{"error #1", "city", "", nil, -1, true},
-		{"error #2", "", "", nil, -1, true},
+		{
+			"error #1", "id", `\d{5}`,
+			[]_TemplateSegment{
+				{
+					valuePattern: &_ValuePattern{
+						"name",
+						regexp.MustCompile("^[A-Za-z]{2,8}"),
+					},
+				},
+				{
+					valuePattern: &_ValuePattern{
+						"id",
+						regexp.MustCompile(`^\d{3}`),
+					},
+				},
+				{
+					valuePattern: &_ValuePattern{
+						"name",
+						regexp.MustCompile("^[A-Za-z]{2,8}"),
+					},
+				},
+				{
+					valuePattern: &_ValuePattern{
+						"id",
+						regexp.MustCompile(`^\d{3}`),
+					},
+				},
+				{valuePattern: &_ValuePattern{name: "address"}},
+				{
+					valuePattern: &_ValuePattern{
+						"color",
+						regexp.MustCompile(`(red|green|blue)$`),
+					},
+				},
+				{
+					valuePattern: &_ValuePattern{
+						"name",
+						regexp.MustCompile(`[A-Za-z]{2,8}$`),
+					},
+				},
+				{
+					valuePattern: &_ValuePattern{
+						"id",
+						regexp.MustCompile(`\d{3}$`),
+					},
+				},
+			},
+			4, true,
+		},
+		{
+			"error #2", "address", `([A-Za-z]{5}`,
+			[]_TemplateSegment{
+				{
+					valuePattern: &_ValuePattern{
+						"name",
+						regexp.MustCompile("^[A-Za-z]{2,8}"),
+					},
+				},
+				{
+					valuePattern: &_ValuePattern{
+						"id",
+						regexp.MustCompile(`^\d{3}`),
+					},
+				},
+				{
+					valuePattern: &_ValuePattern{
+						"name",
+						regexp.MustCompile("^[A-Za-z]{2,8}"),
+					},
+				},
+				{
+					valuePattern: &_ValuePattern{
+						"id",
+						regexp.MustCompile(`^\d{3}`),
+					},
+				},
+				{valuePattern: &_ValuePattern{name: "address"}},
+				{
+					valuePattern: &_ValuePattern{
+						"color",
+						regexp.MustCompile(`(red|green|blue)$`),
+					},
+				},
+				{
+					valuePattern: &_ValuePattern{
+						"name",
+						regexp.MustCompile(`[A-Za-z]{2,8}$`),
+					},
+				},
+				{
+					valuePattern: &_ValuePattern{
+						"id",
+						regexp.MustCompile(`\d{3}$`),
+					},
+				},
+			},
+			4, true,
+		},
+		{"error #3", "city", "", nil, 4, true},
+		{"error #4", "", "", nil, 4, true},
 	}
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			var err error
-			tss, valuePatterns, wildCardIdx, err = appendDynamicSegmentTo(
+			tss, valuePatterns, wildcardIdx, err = appendDynamicSegmentTo(
 				tss,
 				c.vName, c.pattern,
 				valuePatterns,
-				wildCardIdx,
+				wildcardIdx,
 			)
 
 			if (err != nil) != c.wantErr {
@@ -1453,12 +1725,12 @@ func TestTemplate_appendDynamicSliceTo(t *testing.T) {
 
 			var tmpl = Template{
 				slices:      tss,
-				wildCardIdx: wildCardIdx,
+				wildcardIdx: wildcardIdx,
 			}
 
 			var wantTmpl = Template{
 				slices:      c.wantTss,
-				wildCardIdx: c.wantWildCardIdx,
+				wildcardIdx: c.wantWildcardIdx,
 			}
 
 			var tmplStr, wantTmplStr = tmpl.String(), wantTmpl.String()
@@ -1470,11 +1742,11 @@ func TestTemplate_appendDynamicSliceTo(t *testing.T) {
 				)
 			}
 
-			if wildCardIdx != c.wantWildCardIdx {
+			if wildcardIdx != c.wantWildcardIdx {
 				t.Fatalf(
-					"appendDynamicSliceTo() wildCardIdx = %v, want %v",
-					wildCardIdx,
-					c.wantWildCardIdx,
+					"appendDynamicSliceTo() wildcardIdx = %v, want %v",
+					wildcardIdx,
+					c.wantWildcardIdx,
 				)
 			}
 		})
@@ -1633,6 +1905,11 @@ func TestTemplate_parse(t *testing.T) {
 			`{wildcard}{valueName:pattern}{:city}`,
 			nil, -1, true,
 		},
+		{
+			"empty template",
+			"",
+			nil, -1, true,
+		},
 	}
 
 	for _, c := range cases {
@@ -1645,12 +1922,12 @@ func TestTemplate_parse(t *testing.T) {
 
 			var gotTmpl = Template{
 				slices:      gotTmplSlcs,
-				wildCardIdx: gotWildCardIdx,
+				wildcardIdx: gotWildCardIdx,
 			}
 
 			var wantTmpl = Template{
 				slices:      c.wantTmplSlcs,
-				wildCardIdx: c.wantWildCardIdx,
+				wildcardIdx: c.wantWildCardIdx,
 			}
 
 			if !reflect.DeepEqual(gotTmplSlcs, c.wantTmplSlcs) {
@@ -1686,7 +1963,7 @@ func TestTemplate_TryToParse(t *testing.T) {
 			&Template{
 				name:        "name",
 				slices:      []_TemplateSegment{{staticStr: "static"}},
-				wildCardIdx: -1,
+				wildcardIdx: -1,
 			},
 			false,
 		},
@@ -1698,7 +1975,7 @@ func TestTemplate_TryToParse(t *testing.T) {
 				slices: []_TemplateSegment{
 					{valuePattern: &_ValuePattern{name: "wildcard"}},
 				},
-				wildCardIdx: 0,
+				wildcardIdx: 0,
 			},
 			false,
 		},
@@ -1712,7 +1989,7 @@ func TestTemplate_TryToParse(t *testing.T) {
 					{valuePattern: &_ValuePattern{name: "wildcard"}},
 					{staticStr: " static2"},
 				},
-				wildCardIdx: 1,
+				wildcardIdx: 1,
 			},
 			false,
 		},
@@ -1729,7 +2006,7 @@ func TestTemplate_TryToParse(t *testing.T) {
 					}},
 					{staticStr: " static2"},
 				},
-				wildCardIdx: -1,
+				wildcardIdx: -1,
 			},
 			false,
 		},
@@ -1741,7 +2018,7 @@ func TestTemplate_TryToParse(t *testing.T) {
 				slices: []_TemplateSegment{
 					{valuePattern: &_ValuePattern{name: "wildcard"}},
 				},
-				wildCardIdx: 0,
+				wildcardIdx: 0,
 			},
 			false,
 		},
@@ -1757,7 +2034,7 @@ func TestTemplate_TryToParse(t *testing.T) {
 						re:   regexp.MustCompile("^pattern$"),
 					}},
 				},
-				wildCardIdx: -1,
+				wildcardIdx: -1,
 			},
 			false,
 		},
@@ -1774,7 +2051,7 @@ func TestTemplate_TryToParse(t *testing.T) {
 						re:   regexp.MustCompile("pattern$"),
 					}},
 				},
-				wildCardIdx: 1,
+				wildcardIdx: 1,
 			},
 			false,
 		},
@@ -1791,7 +2068,7 @@ func TestTemplate_TryToParse(t *testing.T) {
 						re:   regexp.MustCompile("pattern$"),
 					}},
 				},
-				wildCardIdx: 0,
+				wildcardIdx: 0,
 			},
 			false,
 		},
@@ -1807,7 +2084,7 @@ func TestTemplate_TryToParse(t *testing.T) {
 					}},
 					{valuePattern: &_ValuePattern{name: "wildcard"}},
 				},
-				wildCardIdx: 2,
+				wildcardIdx: 2,
 			},
 			false,
 		},
@@ -1826,7 +2103,7 @@ func TestTemplate_TryToParse(t *testing.T) {
 					}},
 					{staticStr: " static"},
 				},
-				wildCardIdx: -1,
+				wildcardIdx: -1,
 			},
 			false,
 		},
@@ -1848,6 +2125,11 @@ func TestTemplate_TryToParse(t *testing.T) {
 		{
 			"wildcard pattern pattern(error)-2",
 			`{wildcard}{valueName:pattern}{:city}`,
+			nil, true,
+		},
+		{
+			"error - no name and content",
+			"$",
 			nil, true,
 		},
 	}
@@ -1881,7 +2163,7 @@ func TestTemplate_Parse(t *testing.T) {
 			&Template{
 				name:        "name",
 				slices:      []_TemplateSegment{{staticStr: "static"}},
-				wildCardIdx: -1,
+				wildcardIdx: -1,
 			},
 			false,
 		},
@@ -1893,7 +2175,7 @@ func TestTemplate_Parse(t *testing.T) {
 				slices: []_TemplateSegment{
 					{valuePattern: &_ValuePattern{name: "wildcard"}},
 				},
-				wildCardIdx: 0,
+				wildcardIdx: 0,
 			},
 			false,
 		},
@@ -1907,7 +2189,7 @@ func TestTemplate_Parse(t *testing.T) {
 					{valuePattern: &_ValuePattern{name: "wildcard"}},
 					{staticStr: " static2"},
 				},
-				wildCardIdx: 1,
+				wildcardIdx: 1,
 			},
 			false,
 		},
@@ -1924,7 +2206,7 @@ func TestTemplate_Parse(t *testing.T) {
 					}},
 					{staticStr: " static2"},
 				},
-				wildCardIdx: -1,
+				wildcardIdx: -1,
 			},
 			false,
 		},
@@ -1936,7 +2218,7 @@ func TestTemplate_Parse(t *testing.T) {
 				slices: []_TemplateSegment{
 					{valuePattern: &_ValuePattern{name: "wildcard"}},
 				},
-				wildCardIdx: 0,
+				wildcardIdx: 0,
 			},
 			false,
 		},
@@ -1952,7 +2234,7 @@ func TestTemplate_Parse(t *testing.T) {
 						re:   regexp.MustCompile("^pattern$"),
 					}},
 				},
-				wildCardIdx: -1,
+				wildcardIdx: -1,
 			},
 			false,
 		},
@@ -1969,7 +2251,7 @@ func TestTemplate_Parse(t *testing.T) {
 						re:   regexp.MustCompile("pattern$"),
 					}},
 				},
-				wildCardIdx: 1,
+				wildcardIdx: 1,
 			},
 			false,
 		},
@@ -1986,7 +2268,7 @@ func TestTemplate_Parse(t *testing.T) {
 						re:   regexp.MustCompile("pattern$"),
 					}},
 				},
-				wildCardIdx: 0,
+				wildcardIdx: 0,
 			},
 			false,
 		},
@@ -2002,7 +2284,7 @@ func TestTemplate_Parse(t *testing.T) {
 					}},
 					{valuePattern: &_ValuePattern{name: "wildcard"}},
 				},
-				wildCardIdx: 2,
+				wildcardIdx: 2,
 			},
 			false,
 		},
@@ -2021,7 +2303,7 @@ func TestTemplate_Parse(t *testing.T) {
 					}},
 					{staticStr: " static"},
 				},
-				wildCardIdx: -1,
+				wildcardIdx: -1,
 			},
 			false,
 		},

@@ -4,6 +4,7 @@
 package nanomux
 
 import (
+	"errors"
 	"net"
 	"net/http"
 	"strings"
@@ -83,16 +84,13 @@ func (ro *Router) _Responder(urlTmplStr string) (_Responder, error) {
 			if newFirst != nil {
 				newLast.configure(secure, tslash, nil)
 
-				if r := _r.ChildResourceNamed(newFirst.Name()); r != nil {
-					return nil, newErr("%w", errDuplicateNameAmongSiblings)
-				}
-
 				_r.registerResource(newFirst)
 				if newHost {
-					// When newHost is true _r would still be holding a
-					// reference to a newly created host.
+					// When newHost is true _r would still be holding
+					// a pointer to a newly created host.
 					err = ro.registerHost(_r.(*Host))
 					if err != nil {
+						// Unreachable.
 						return nil, newErr("%w", err)
 					}
 				}
@@ -111,6 +109,7 @@ func (ro *Router) _Responder(urlTmplStr string) (_Responder, error) {
 
 		err = ro.registerHost(_r.(*Host))
 		if err != nil {
+			// Unreachable.
 			return nil, newErr("%w", err)
 		}
 	} else {
@@ -179,6 +178,8 @@ func (ro *Router) registered_Responder(urlTmplStr string) (
 	}
 
 	if pTmplStr != "" {
+		// The following 'if' statement is true if the hTmplStr is
+		// an empty string.
 		if _r == nil {
 			if ro.r == nil {
 				return nil, false, nil
@@ -204,6 +205,7 @@ func (ro *Router) registered_Responder(urlTmplStr string) (
 	switch v := _r.(type) {
 	case *Host:
 		if v == nil {
+			// Unreachable.
 			validPtr = false
 		}
 	case *Resource:
@@ -721,11 +723,13 @@ func (ro *Router) replaceHost(oldH, newH *Host) error {
 
 	var err = newH.setParent(ro)
 	if err != nil {
+		// Unreachable.
 		return newErr("%w", err)
 	}
 
 	err = oldH.setParent(nil)
 	if err != nil {
+		// Unreachable.
 		return newErr("%w", err)
 	}
 
@@ -747,6 +751,7 @@ func (ro *Router) registerHost(h *Host) error {
 
 	var err = h.setParent(ro)
 	if err != nil {
+		// Unreachable.
 		return newErr("%w", err)
 	}
 
@@ -780,6 +785,7 @@ func (ro *Router) host(hostTmplStr string) (
 	if h == nil {
 		h, err = createDormantHost(tmpl)
 		if err != nil {
+			// Unreachable.
 			err = newErr("%w", err)
 		}
 
@@ -817,6 +823,7 @@ func (ro *Router) Host(hostTmplStr string) *Host {
 
 		err = ro.registerHost(h)
 		if err != nil {
+			// Unreachable.
 			panicWithErr("%w", err)
 		}
 	} else {
@@ -867,6 +874,7 @@ func (ro *Router) HostUsingConfig(
 
 		err = ro.registerHost(h)
 		if err != nil {
+			// Unreachable.
 			panicWithErr("%w", err)
 		}
 	} else {
@@ -907,6 +915,7 @@ func (ro *Router) RegisterHost(h *Host) {
 
 		err = ro.registerHost(h)
 		if err != nil {
+			// Unreachable.
 			panicWithErr("%w", err)
 		}
 
@@ -961,7 +970,11 @@ func (ro *Router) RegisteredHost(hostTmplStr string) *Host {
 	if h != nil {
 		err = h.checkForConfigCompatibility(secure, tslash, nil)
 		if err != nil {
-			panicWithErr("%w", err)
+			if errors.Is(err, errDormantHost) {
+				h.configure(secure, tslash, nil)
+			} else {
+				panicWithErr("%w", err)
+			}
 		}
 	}
 
@@ -1094,12 +1107,8 @@ func (ro *Router) Resource(urlTmplStr string) *Resource {
 
 		if newFirst != nil {
 			newLast.configure(secure, tslash, nil)
-
-			if _r.ChildResourceNamed(newFirst.Name()) != nil {
-				panicWithErr("%w", errDuplicateNameAmongSiblings)
-			}
-
 			_r.registerResource(newFirst)
+
 			if newHost {
 				if ro.HostNamed(_r.Name()) != nil {
 					panicWithErr("%w", errDuplicateNameAmongSiblings)
@@ -1107,6 +1116,7 @@ func (ro *Router) Resource(urlTmplStr string) *Resource {
 
 				err = ro.registerHost(_r.(*Host))
 				if err != nil {
+					// Unreachable.
 					panicWithErr("%w", err)
 				}
 			}
@@ -1117,7 +1127,12 @@ func (ro *Router) Resource(urlTmplStr string) *Resource {
 
 	err = _r.checkForConfigCompatibility(secure, tslash, nil)
 	if err != nil {
-		panicWithErr("%w", err)
+		if errors.Is(err, errDormantHost) ||
+			errors.Is(err, errDormantResource) {
+			_r.configure(secure, tslash, nil)
+		} else {
+			panicWithErr("%w", err)
+		}
 	}
 
 	return _r.(*Resource)
@@ -1189,14 +1204,11 @@ func (ro *Router) ResourceUsingConfig(
 			var cfs = config.asFlags()
 			newLast.configure(secure, tslash, &cfs)
 
-			if _r.ChildResourceNamed(newFirst.Name()) != nil {
-				panicWithErr("%w", errDuplicateNameAmongSiblings)
-			}
-
 			_r.registerResource(newFirst)
 			if newHost {
 				err = ro.registerHost(_r.(*Host))
 				if err != nil {
+					// Unreachable.
 					panicWithErr("%w", err)
 				}
 			}
@@ -1208,7 +1220,12 @@ func (ro *Router) ResourceUsingConfig(
 	var cfs = config.asFlags()
 	err = _r.checkForConfigCompatibility(secure, tslash, &cfs)
 	if err != nil {
-		panicWithErr("%w", err)
+		if errors.Is(err, errDormantHost) ||
+			errors.Is(err, errDormantResource) {
+			_r.configure(secure, tslash, &cfs)
+		} else {
+			panicWithErr("%w", err)
+		}
 	}
 
 	return _r.(*Resource)
@@ -1295,6 +1312,7 @@ func (ro *Router) RegisterResource(r *Resource) {
 
 			// The following if statement should never be true.
 			if urlt.PrefixPath == "/" {
+				// Unreachable.
 				urlt.PrefixPath = ""
 			}
 		}
@@ -1305,6 +1323,7 @@ func (ro *Router) RegisterResource(r *Resource) {
 		if r.isRoot() {
 			// The following if statement should never be true.
 			if urlt != nil && urlt.PrefixPath != "" {
+				// Unreachable.
 				panicWithErr("%w", errNonRouterParent)
 			}
 
@@ -1326,7 +1345,7 @@ func (ro *Router) RegisterResource(r *Resource) {
 		panicWithErr("%w", err)
 	}
 
-	if err := _r.checkNamesOfTheChildrenAreUniqueInTheURL(r); err != nil {
+	if err := _r.checkChildResourceNamesAreUniqueInURL(r); err != nil {
 		panicWithErr("%w", err)
 	}
 
@@ -1345,6 +1364,7 @@ func (ro *Router) RegisterResource(r *Resource) {
 	if newHost {
 		var err = ro.registerHost(_r.(*Host))
 		if err != nil {
+			// Unreachable.
 			panicWithErr("%w", err)
 		}
 	}
@@ -1464,7 +1484,7 @@ func (ro *Router) RegisterResourceUnder(urlTmplStr string, r *Resource) {
 		panicWithErr("%w", err)
 	}
 
-	if err := r.checkNamesOfTheChildrenAreUniqueInTheURL(r); err != nil {
+	if err = _r.checkChildResourceNamesAreUniqueInURL(r); err != nil {
 		panicWithErr("%w", err)
 	}
 
@@ -1487,6 +1507,7 @@ func (ro *Router) RegisterResourceUnder(urlTmplStr string, r *Resource) {
 	if newHost {
 		var err = ro.registerHost(_r.(*Host))
 		if err != nil {
+			// Unreachable.
 			panicWithErr("%w", err)
 		}
 	}
@@ -1555,15 +1576,6 @@ func (ro *Router) RegisteredResource(urlTmplStr string) *Resource {
 	}
 
 	return nil
-}
-
-// RootResource returns the root resource.
-func (ro *Router) RootResource() *Resource {
-	if ro.r == nil {
-		ro.initializeRootResource()
-	}
-
-	return ro.r
 }
 
 // -------------------------
