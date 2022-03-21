@@ -2127,13 +2127,16 @@ func (rb *_ResponderBase) RedirectAnyRequestAt(
 
 // --------------------------------------------------
 
-// SetSharedDataForSubtree sets the shared data for all the resources below
-// in the tree.
+// SetSharedDataForSubtree sets the shared data for each resource below
+// in the tree that has no shared data set yet.
 func (rb *_ResponderBase) SetSharedDataForSubtree(data interface{}) {
 	traverseAndCall(
 		rb._Responders(),
 		func(_r _Responder) error {
-			_r.SetSharedData(data)
+			if _r.SharedData() == nil {
+				_r.SetSharedData(data)
+			}
+
 			return nil
 		},
 	)

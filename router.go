@@ -1599,12 +1599,16 @@ func (ro *Router) WrapRequestPasser(mws ...Middleware) {
 
 // -------------------------
 
-// SetSharedDataForAll sets the shared data for all the hosts and resources.
+// SetSharedDataForAll sets the shared data for each host and resource that
+// has no shared data set yet.
 func (ro *Router) SetSharedDataForAll(data interface{}) {
 	traverseAndCall(
 		ro._Responders(),
 		func(_r _Responder) error {
-			_r.SetSharedData(data)
+			if _r.SharedData() == nil {
+				_r.SetSharedData(data)
+			}
+
 			return nil
 		},
 	)
