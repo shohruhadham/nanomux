@@ -29,7 +29,7 @@ type _Responder interface {
 	respondersInThePath() []_Responder
 
 	setConfigFlags(flag _ConfigFlags)
-	updateConfigFlags(cfs _ConfigFlags)
+	resetConfigFlags(cfs _ConfigFlags)
 	configFlags() _ConfigFlags
 	configure(secure, tslash bool, cfs *_ConfigFlags)
 	checkForConfigCompatibility(secure, tslash bool, cfs *_ConfigFlags) error
@@ -282,9 +282,8 @@ func (rb *_ResponderBase) setConfigFlags(flag _ConfigFlags) {
 	rb.cfs.set(flag)
 }
 
-// updateConfigFlags is used to replace existing config flags with the passed
-// config flags.
-func (rb *_ResponderBase) updateConfigFlags(cfs _ConfigFlags) {
+// resetConfigFlags is used to reset config flags to the passed config flags.
+func (rb *_ResponderBase) resetConfigFlags(cfs _ConfigFlags) {
 	rb.cfs = cfs
 }
 
@@ -322,7 +321,8 @@ func (rb *_ResponderBase) checkForConfigCompatibility(
 			return newErr("%w", errConflictingSecurity)
 		}
 
-		if !rbcfs.has(flagLeniencyOnTrailingSlash) && rbcfs.has(flagTrailingSlash) != tslash {
+		if !rbcfs.has(flagLenientOnTrailingSlash) &&
+			rbcfs.has(flagTrailingSlash) != tslash {
 			return newErr("%w", errConflictingTrailingSlash)
 		}
 
@@ -364,7 +364,7 @@ func (rb *_ResponderBase) IsSecure() bool {
 // The responder can be configured to redirect insecure requests if it's
 // intended to be used in both "http" and "https" servers.
 func (rb *_ResponderBase) RedirectsInsecureRequest() bool {
-	return rb.cfs.has(flagRedirectInsecure)
+	return rb.cfs.has(flagRedirectsInsecure)
 }
 
 // HasTrailingSlash returns true if the responder's URL ends with a trailing
@@ -386,19 +386,19 @@ func (rb *_ResponderBase) IsStrictOnTrailingSlash() bool {
 // IsLenientOnTrailingSlash returns true if the responder was configured to
 // ignore an unmatched trailing slash in the request's URL.
 func (rb *_ResponderBase) IsLenientOnTrailingSlash() bool {
-	return rb.cfs.has(flagLeniencyOnTrailingSlash)
+	return rb.cfs.has(flagLenientOnTrailingSlash)
 }
 
 // IsLenientOnUncleanPath returns true if the responder was configured to ignore
 // unclean paths like "example.com///.//resource1//resource2".
 func (rb *_ResponderBase) IsLenientOnUncleanPath() bool {
-	return rb.cfs.has(flagLeniencyOnUncleanPath)
+	return rb.cfs.has(flagLenientOnUncleanPath)
 }
 
 // HandlesThePathAsIs returns true if the responder was configured to be lenient
 // on both, trailing slash and unclean paths.
 func (rb *_ResponderBase) HandlesThePathAsIs() bool {
-	return rb.cfs.has(flagHandleThePathAsIs)
+	return rb.cfs.has(flagHandlesThePathAsIs)
 }
 
 // canHandleRequest returns true if the responder has at least one HTTP method
@@ -1096,7 +1096,7 @@ func (rb *_ResponderBase) ResourceUsingConfig(
 		panicWithErr("%w", errEmptyPathTemplate)
 	}
 
-	if config.RedirectInsecureRequest && !secure {
+	if config.RedirectsInsecureRequest && !secure {
 		panicWithErr("%w", errConflictingSecurity)
 	}
 
@@ -1461,10 +1461,33 @@ func (rb *_ResponderBase) SharedData() interface{} {
 
 // -------------------------
 
-// SetConfiguration sets the config for the responder. If the responder
-// has been configured before, it's reconfigured.
+// SetConfiguration sets the config for the responder. If the responder has
+// been configured before, it's reconfigured, but the responder's security
+// and trailing slash properties are not affected if they were set to true.
+// In other words, if the responder has been configured to be secure or to have
+// a trailing slash, these properties can't be changed. If the passed config
+// has Secure and/or RedirectsInsecureRequest and/or TrailingSlash fields set to
+// true, the responder's security and trailing slash properties will be set to
+// true, respectively. Please note that, unlike during construction, if the
+// config's RedirectsInsecureRequest field is set to true, the responder will
+// also be configured to be secure, even if it wasn't before. The secure
+// responders only respond when used over HTTPS.
 func (rb *_ResponderBase) SetConfiguration(config Config) {
-	rb.updateConfigFlags(flagActive | config.asFlags())
+	if rb.Template().Content() == "/" {
+		config.HasTrailingSlash = false
+		config.LenientOnTrailingSlash = false
+		config.StrictOnTrailingSlash = false
+
+		if config.HandlesThePathAsIs {
+			config.LenientOnUncleanPath = true
+			config.HandlesThePathAsIs = false
+		}
+	}
+
+	var secure = rb.cfs & flagSecure
+	var tslash = rb.cfs & flagTrailingSlash
+
+	rb.resetConfigFlags(flagActive | secure | tslash | config.asFlags())
 }
 
 // Configuration returns the configuration of responder.
@@ -1810,18 +1833,34 @@ func (rb *_ResponderBase) SharedDataAt(pathTmplStr string) interface{} {
 // -------------------------
 
 // SetConfigurationAt sets the config for the resource at the path. If the
-// resource doesn't exist, it will be created. If the existing resource was
-// configured before, it will be reconfigured.
+// resource doesn't exist, it will be created. If the existing resource has
+// been configured before, it's reconfigured, but the resource's security
+// and trailing slash properties are not affected if they were set to true.
+// In other words, if the resource has been configured to be secure or to have
+// a trailing slash, these properties can't be changed. If the passed config
+// has Secure and/or RedirectsInsecureRequest and/or TrailingSlash fields set
+// to true, the resource's security and trailing slash properties will be set
+// to true, respectively. Please note that, unlike during construction, if the
+// config's RedirectsInsecureRequest field is set to true, the resource will
+// also be configured to be secure, even if it wasn't before. The secure
+// resources only respond when used over HTTPS.
 //
 // The scheme and trailing slash property values in the path template must be
 // compatible with the existing resource's properties. A newly created resource
-// is configured with the values in the path template.
+// is configured with the values in the path template as well as in the config.
+// The config's Secure and TrailingSlash values are ignored when creating a new
+// resource.
 func (rb *_ResponderBase) SetConfigurationAt(
 	pathTmplStr string,
 	config Config,
 ) {
-	var r = rb.Resource(pathTmplStr)
-	r.SetConfiguration(config)
+	var r = rb.RegisteredResource(pathTmplStr)
+	if r != nil {
+		r.SetConfiguration(config)
+		return
+	}
+
+	rb.ResourceUsingConfig(pathTmplStr, config)
 }
 
 // ConfigurationAt returns the configuration of the existing resource at the
@@ -2127,8 +2166,8 @@ func (rb *_ResponderBase) RedirectAnyRequestAt(
 
 // --------------------------------------------------
 
-// SetSharedDataForSubtree sets the shared data for each resource below
-// in the tree that has no shared data set yet.
+// SetSharedDataForSubtree sets the shared data for each resource in
+// the subtree that has no shared data set yet.
 func (rb *_ResponderBase) SetSharedDataForSubtree(data interface{}) {
 	traverseAndCall(
 		rb._Responders(),
@@ -2142,12 +2181,20 @@ func (rb *_ResponderBase) SetSharedDataForSubtree(data interface{}) {
 	)
 }
 
-// SetConfigurationForSubtree sets the config for all the resources below in the
-// tree.
+// SetConfigurationForSubtree sets the config for all the resources in the
+// subtree, but the resources' security and trailing slash properties are not
+// affected if they were set to true. If the resources are configured with
+// properties other than security and trailing slash, those resources will be
+// skipped.
 func (rb *_ResponderBase) SetConfigurationForSubtree(config Config) {
 	traverseAndCall(
 		rb._Responders(),
 		func(_r _Responder) error {
+			var cfs = _r.configFlags()
+			if (cfs &^ (flagActive | flagSecure | flagTrailingSlash)) > 0 {
+				return nil
+			}
+
 			_r.SetConfiguration(config)
 			return nil
 		},

@@ -33,7 +33,7 @@ func TestResource_Constructors(t *testing.T) {
 		func() {
 			NewDormantResourceUsingConfig(
 				"http:///resource",
-				Config{RedirectInsecureRequest: true},
+				Config{RedirectsInsecureRequest: true},
 			)
 		},
 	)
@@ -59,7 +59,7 @@ func TestResource_Constructors(t *testing.T) {
 			NewResourceUsingConfig(
 				"https:///",
 				&_Impl{},
-				Config{RedirectInsecureRequest: true},
+				Config{RedirectsInsecureRequest: true},
 			)
 		},
 	)
@@ -81,10 +81,35 @@ func TestResource_Constructors(t *testing.T) {
 			NewResourceUsingConfig(
 				"http:///",
 				&_Impl{},
-				Config{RedirectInsecureRequest: true},
+				Config{RedirectsInsecureRequest: true},
 			)
 		},
 	)
+
+	testPanicker(t, true, func() { NewResource("///", &_Impl{}) })
+
+	var r *Resource
+	testPanicker(
+		t, false,
+		func() {
+			r = NewDormantResourceUsingConfig(
+				"//",
+				Config{
+					SubtreeHandler:         true,
+					HasTrailingSlash:       true,
+					LenientOnTrailingSlash: true,
+					StrictOnTrailingSlash:  true,
+					HandlesThePathAsIs:     true,
+				},
+			)
+		},
+	)
+
+	if !r.IsSubtreeHandler() || r.HasTrailingSlash() ||
+		r.IsLenientOnTrailingSlash() || r.IsStrictOnTrailingSlash() ||
+		!r.IsLenientOnUncleanPath() {
+		t.Fatal("The resource wasn't configured correctly.")
+	}
 
 	testPanicker(
 		t, true,
@@ -103,17 +128,17 @@ func TestConfig_asFlags(t *testing.T) {
 		{
 			"config 1",
 			Config{
-				SubtreeHandler:          true,
-				RedirectInsecureRequest: true,
-				StrictOnTrailingSlash:   true,
+				SubtreeHandler:           true,
+				RedirectsInsecureRequest: true,
+				StrictOnTrailingSlash:    true,
 			},
-			flagSubtreeHandler | flagSecure | flagRedirectInsecure |
+			flagSubtreeHandler | flagSecure | flagRedirectsInsecure |
 				flagStrictOnTrailingSlash,
 		},
 		{
 			"config 2",
-			Config{SubtreeHandler: true, HandleThePathAsIs: true},
-			flagSubtreeHandler | flagLeniencyOnTrailingSlash | flagLeniencyOnUncleanPath,
+			Config{SubtreeHandler: true, HandlesThePathAsIs: true},
+			flagSubtreeHandler | flagLenientOnTrailingSlash | flagLenientOnUncleanPath,
 		},
 	}
 
@@ -156,7 +181,7 @@ func TestResourceBase_URL(t *testing.T) {
 		// https://{info}.example.com
 		h = NewDormantHostUsingConfig(
 			"https://{info}.example.com",
-			Config{RedirectInsecureRequest: true},
+			Config{RedirectsInsecureRequest: true},
 		)
 
 		// http://{info}.example.com/{country}/
@@ -180,7 +205,7 @@ func TestResourceBase_URL(t *testing.T) {
 		// https:///{info}/population/{country}/
 		r5 = NewDormantResourceUsingConfig(
 			"https:///{country}/",
-			Config{RedirectInsecureRequest: true},
+			Config{RedirectsInsecureRequest: true},
 		)
 
 		// http://example.com/
@@ -509,12 +534,12 @@ func TestResourceBase_configFlags(t *testing.T) {
 	var r = NewDormantResourceUsingConfig(
 		"https:///resource/",
 		Config{
-			RedirectInsecureRequest: true,
-			StrictOnTrailingSlash:   true,
+			RedirectsInsecureRequest: true,
+			StrictOnTrailingSlash:    true,
 		},
 	)
 
-	var wantCfs = flagActive | flagSecure | flagRedirectInsecure | flagTrailingSlash |
+	var wantCfs = flagActive | flagSecure | flagRedirectsInsecure | flagTrailingSlash |
 		flagStrictOnTrailingSlash
 
 	if cfs := r.configFlags(); cfs != wantCfs {
@@ -563,7 +588,7 @@ func TestResourceBase_RedirectsInsecureRequest(t *testing.T) {
 	var (
 		r1 = NewDormantResourceUsingConfig(
 			"https:///r1",
-			Config{RedirectInsecureRequest: true},
+			Config{RedirectsInsecureRequest: true},
 		)
 
 		r2 = NewDormantResource("r2")
@@ -619,7 +644,7 @@ func TestResourceBase_DropsRequestOnUnmatchedTrailingSlash(t *testing.T) {
 func TestResourceBase_IsLenientOnTrailingSlash(t *testing.T) {
 	var (
 		r1 = NewDormantResourceUsingConfig("r1", Config{
-			LeniencyOnTrailingSlash: true,
+			LenientOnTrailingSlash: true,
 		})
 
 		r2 = NewDormantResource("r2")
@@ -637,7 +662,7 @@ func TestResourceBase_IsLenientOnTrailingSlash(t *testing.T) {
 func TestResourceBase_IsLenientOnUncleanPath(t *testing.T) {
 	var (
 		r1 = NewDormantResourceUsingConfig("r1", Config{
-			LeniencyOnUncleanPath: true,
+			LenientOnUncleanPath: true,
 		})
 
 		r2 = NewDormantResource("r2")
@@ -659,7 +684,7 @@ func TestResourceBase_IsLenientOnUncleanPath(t *testing.T) {
 func TestResourceBase_HandlesThePathAsIs(t *testing.T) {
 	var (
 		r1 = NewDormantResourceUsingConfig("r1", Config{
-			HandleThePathAsIs: true,
+			HandlesThePathAsIs: true,
 		})
 
 		r2 = NewDormantResource("r2")
@@ -2182,17 +2207,17 @@ func TestResourceBase_ResourceUsingConfig(t *testing.T) {
 
 	var pattern = root.ResourceUsingConfig(
 		"{name:pattern}/",
-		Config{HandleThePathAsIs: true},
+		Config{HandlesThePathAsIs: true},
 	)
 
 	var wildcard = root.ResourceUsingConfig(
 		"https:///{wildcard}",
-		Config{RedirectInsecureRequest: true},
+		Config{RedirectsInsecureRequest: true},
 	)
 
 	var _ = root.ResourceUsingConfig(
 		"$r0:abc",
-		Config{HandleThePathAsIs: true},
+		Config{HandlesThePathAsIs: true},
 	)
 
 	var cases = []struct {
@@ -2205,26 +2230,26 @@ func TestResourceBase_ResourceUsingConfig(t *testing.T) {
 		{"static #1", "static", Config{SubtreeHandler: true}, static, false},
 		{"static #2", "https://static", Config{SubtreeHandler: true}, nil, true},
 		{"static #3", "static/", Config{SubtreeHandler: true}, nil, true},
-		{"static #4", "static", Config{LeniencyOnUncleanPath: true}, nil, true},
+		{"static #4", "static", Config{LenientOnUncleanPath: true}, nil, true},
 
 		{
 			"pattern #1",
 			"{name:pattern}/",
-			Config{HandleThePathAsIs: true},
+			Config{HandlesThePathAsIs: true},
 			pattern,
 			false,
 		},
 		{
 			"pattern #2",
 			"https://{name:pattern}/",
-			Config{HandleThePathAsIs: true},
+			Config{HandlesThePathAsIs: true},
 			nil,
 			true,
 		},
 		{
 			"pattern #3",
 			"{name:pattern}",
-			Config{HandleThePathAsIs: true},
+			Config{HandlesThePathAsIs: true},
 			nil,
 			false,
 		},
@@ -2239,21 +2264,21 @@ func TestResourceBase_ResourceUsingConfig(t *testing.T) {
 		{
 			"wildcard #1",
 			"https:///{wildcard}",
-			Config{RedirectInsecureRequest: true},
+			Config{RedirectsInsecureRequest: true},
 			wildcard,
 			false,
 		},
 		{
 			"wildcard #2",
 			"{wildcard}",
-			Config{RedirectInsecureRequest: true},
+			Config{RedirectsInsecureRequest: true},
 			nil,
 			true,
 		},
 		{
 			"wildcard #3",
 			"https:///{wildcard}/",
-			Config{RedirectInsecureRequest: true},
+			Config{RedirectsInsecureRequest: true},
 			nil,
 			true,
 		},
@@ -2268,28 +2293,28 @@ func TestResourceBase_ResourceUsingConfig(t *testing.T) {
 		{
 			"new static #1",
 			"https:///{r00:abc}/{r10}/r20",
-			Config{LeniencyOnUncleanPath: true},
+			Config{LenientOnUncleanPath: true},
 			nil,
 			false,
 		},
 		{
 			"new static #2",
 			"https:///{r00:abc}/{r10}/r20",
-			Config{LeniencyOnUncleanPath: true},
+			Config{LenientOnUncleanPath: true},
 			nil,
 			false,
 		},
 		{
 			"new static #3",
 			"http:///{r00:abc}/{r10}/r20",
-			Config{LeniencyOnUncleanPath: true},
+			Config{LenientOnUncleanPath: true},
 			nil,
 			true,
 		},
 		{
 			"new static #4",
 			"https:///{r00:abc}/{r10}/r20/",
-			Config{LeniencyOnUncleanPath: true},
+			Config{LenientOnUncleanPath: true},
 			nil,
 			true,
 		},
@@ -2348,28 +2373,28 @@ func TestResourceBase_ResourceUsingConfig(t *testing.T) {
 		{
 			"new pattern #1",
 			"https:///r01/{name:abc}",
-			Config{SubtreeHandler: true, RedirectInsecureRequest: true},
+			Config{SubtreeHandler: true, RedirectsInsecureRequest: true},
 			nil,
 			false,
 		},
 		{
 			"new pattern #2",
 			"https:///r01/{name:abc}",
-			Config{SubtreeHandler: true, RedirectInsecureRequest: true},
+			Config{SubtreeHandler: true, RedirectsInsecureRequest: true},
 			nil,
 			false,
 		},
 		{
 			"new pattern #3",
 			"http:///r01/{name:abc}",
-			Config{SubtreeHandler: true, RedirectInsecureRequest: true},
+			Config{SubtreeHandler: true, RedirectsInsecureRequest: true},
 			nil,
 			true,
 		},
 		{
 			"new pattern #4",
 			"https:///r01/{name:abc}/",
-			Config{SubtreeHandler: true, RedirectInsecureRequest: true},
+			Config{SubtreeHandler: true, RedirectsInsecureRequest: true},
 			nil,
 			true,
 		},
@@ -2377,8 +2402,8 @@ func TestResourceBase_ResourceUsingConfig(t *testing.T) {
 			"new pattern #5",
 			"https:///r01/{name:abc}",
 			Config{
-				StrictOnTrailingSlash:   true,
-				RedirectInsecureRequest: true,
+				StrictOnTrailingSlash:    true,
+				RedirectsInsecureRequest: true,
 			},
 			nil,
 			true,
@@ -2387,14 +2412,14 @@ func TestResourceBase_ResourceUsingConfig(t *testing.T) {
 		{
 			"pattern with different value name",
 			"$name:{namex:pattern}/",
-			Config{HandleThePathAsIs: true},
+			Config{HandlesThePathAsIs: true},
 			nil,
 			true,
 		},
 		{
 			"pattern with different template name",
 			"$namex:{name:pattern}/",
-			Config{HandleThePathAsIs: true},
+			Config{HandlesThePathAsIs: true},
 			nil,
 			true,
 		},
@@ -2410,7 +2435,7 @@ func TestResourceBase_ResourceUsingConfig(t *testing.T) {
 		{
 			"root with trailing slash",
 			"//",
-			Config{LeniencyOnTrailingSlash: true},
+			Config{LenientOnTrailingSlash: true},
 			nil,
 			true,
 		},
@@ -2431,14 +2456,14 @@ func TestResourceBase_ResourceUsingConfig(t *testing.T) {
 		{
 			"empty path segments #2",
 			"////",
-			Config{HandleThePathAsIs: true},
+			Config{HandlesThePathAsIs: true},
 			nil,
 			true,
 		},
 		{
 			"empty path segment",
 			"/r1//r100/",
-			Config{HandleThePathAsIs: true},
+			Config{HandlesThePathAsIs: true},
 			nil,
 			true,
 		},
@@ -2477,7 +2502,7 @@ func TestResourceBase_ResourceUsingConfig(t *testing.T) {
 		func() {
 			var r = h.ResourceUsingConfig(
 				"/",
-				Config{SubtreeHandler: true, HandleThePathAsIs: true},
+				Config{SubtreeHandler: true, HandlesThePathAsIs: true},
 			)
 
 			if r != nil {
@@ -2984,21 +3009,178 @@ func TestResourceBase_SharedData(t *testing.T) {
 	}
 }
 
-func TestResourceBase_Configuring(t *testing.T) {
-	var r = NewDormantResourceUsingConfig("/", Config{SubtreeHandler: true})
-	r.SetConfiguration(
-		Config{RedirectInsecureRequest: true, HandleThePathAsIs: true},
+func TestResourceBase_SetConfiguration(t *testing.T) {
+	var check = func(cfs _ConfigFlags, fs ..._ConfigFlags) {
+		t.Helper()
+
+		for _, f := range fs {
+			if (cfs & f) == 0 {
+				t.Fatalf(
+					"ResourceBase.SetConfiguration() %08b, has no flag %08b",
+					cfs, f,
+				)
+			}
+
+			cfs &^= f
+		}
+
+		if cfs > 0 {
+			t.Fatalf(
+				"ResourceBase.SetConfiguration() responder has unwanted %08b flags",
+				cfs,
+			)
+		}
+	}
+
+	var r = NewDormantResourceUsingConfig(
+		"/",
+		Config{
+			SubtreeHandler:         true,
+			HasTrailingSlash:       true,
+			LenientOnTrailingSlash: true,
+			StrictOnTrailingSlash:  true,
+			HandlesThePathAsIs:     true,
+		},
 	)
 
-	if r.Configuration() != (Config{
-		Secure:                  true,
-		RedirectInsecureRequest: true,
-		LeniencyOnTrailingSlash: true,
-		LeniencyOnUncleanPath:   true,
-		HandleThePathAsIs:       true,
-	}) {
-		t.Fatalf("ResourceBase_Configuring() has failed.")
-	}
+	check(
+		r.configFlags(),
+		flagActive,
+		flagSubtreeHandler,
+		flagLenientOnUncleanPath,
+	)
+
+	r.SetConfiguration(
+		Config{RedirectsInsecureRequest: true, HandlesThePathAsIs: true},
+	)
+
+	check(
+		r.configFlags(),
+		flagActive,
+		flagSecure,
+		flagRedirectsInsecure,
+		flagLenientOnUncleanPath,
+	)
+
+	r = NewDormantResource("resource/")
+	r.SetConfiguration(
+		Config{Secure: true, StrictOnTrailingSlash: true},
+	)
+
+	check(
+		r.configFlags(),
+		flagActive,
+		flagTrailingSlash,
+		flagSecure,
+		flagStrictOnTrailingSlash,
+	)
+
+	r = NewDormantResource("https:///resource")
+	r.SetConfiguration(
+		Config{HasTrailingSlash: true, StrictOnTrailingSlash: true},
+	)
+
+	check(
+		r.configFlags(),
+		flagActive,
+		flagSecure,
+		flagTrailingSlash,
+		flagStrictOnTrailingSlash,
+	)
+
+	r = NewDormantResource("/")
+	r.SetConfiguration(
+		Config{Secure: true, HasTrailingSlash: true, StrictOnTrailingSlash: true},
+	)
+
+	check(r.configFlags(), flagActive, flagSecure)
+
+	r = NewDormantResource("https:///resource/")
+	r.SetConfiguration(
+		Config{SubtreeHandler: true, HandlesThePathAsIs: true},
+	)
+
+	check(
+		r.configFlags(),
+		flagActive,
+		flagSecure,
+		flagTrailingSlash,
+		flagSubtreeHandler,
+		flagLenientOnTrailingSlash,
+		flagLenientOnUncleanPath,
+	)
+}
+
+func TestResourceBase_Configuration(t *testing.T) {
+	var r = NewDormantResourceUsingConfig("/", Config{SubtreeHandler: true})
+	r.SetConfiguration(
+		Config{RedirectsInsecureRequest: true, HandlesThePathAsIs: true},
+	)
+
+	checkValue(
+		t,
+		r.Configuration(),
+		Config{
+			Secure:                   true,
+			RedirectsInsecureRequest: true,
+			LenientOnUncleanPath:     true,
+		},
+	)
+
+	r = NewDormantResource("resource/")
+	r.SetConfiguration(
+		Config{Secure: true, StrictOnTrailingSlash: true},
+	)
+
+	checkValue(
+		t,
+		r.Configuration(),
+		Config{
+			HasTrailingSlash:      true,
+			Secure:                true,
+			StrictOnTrailingSlash: true,
+		},
+	)
+
+	r = NewDormantResource("https:///resource")
+	r.SetConfiguration(
+		Config{HasTrailingSlash: true, StrictOnTrailingSlash: true},
+	)
+
+	checkValue(
+		t,
+		r.Configuration(),
+		Config{
+			Secure:                true,
+			HasTrailingSlash:      true,
+			StrictOnTrailingSlash: true,
+		},
+	)
+
+	r = NewDormantResource("/")
+	r.SetConfiguration(
+		Config{Secure: true, HasTrailingSlash: true, StrictOnTrailingSlash: true},
+	)
+
+	checkValue(t, r.Configuration(), Config{Secure: true})
+
+	r = NewDormantResource("https:///resource/")
+	r.SetConfiguration(
+		Config{SubtreeHandler: true, HandlesThePathAsIs: true},
+	)
+
+	checkValue(
+		t,
+		r.Configuration(),
+		Config{
+			Secure:                 true,
+			HasTrailingSlash:       true,
+			SubtreeHandler:         true,
+			LenientOnTrailingSlash: true,
+			LenientOnUncleanPath:   true,
+			HandlesThePathAsIs:     true,
+		},
+	)
 }
 
 func TestResourceBase_SetImplementation(t *testing.T) {
@@ -3964,28 +4146,174 @@ func TestResourceBase_SetGetSharedDataAt(t *testing.T) {
 }
 
 func TestResourceBase_SetConfigurationAt(t *testing.T) {
-	var root = NewDormantResource("/")
-	var r00 = root.Resource("r00")
-	var r10 = r00.Resource("https:///{r10:abc}")
-	var r20 = r10.Resource("{r20}/")
-	var r11 = r00.Resource("r11")
+	var check = func(cfs _ConfigFlags, fs ..._ConfigFlags) {
+		t.Helper()
 
-	var config = Config{
-		Secure:                  true,
-		RedirectInsecureRequest: true,
-		StrictOnTrailingSlash:   true,
+		for _, f := range fs {
+			if (cfs & f) == 0 {
+				t.Fatalf(
+					"ResourceBase.SetConfigurationAt() %08b, has no flag %08b",
+					cfs, f,
+				)
+			}
+
+			cfs &^= f
+		}
+
+		if cfs > 0 {
+			t.Fatalf(
+				"ResourceBase.SetConfigurationAt() responder has unwanted %08b flags",
+				cfs,
+			)
+		}
 	}
 
+	var root = NewDormantResource("/")
+	root.Resource("https:///r0/")
+	root.Resource("https:///r0/{r00:abc}")
+	root.Resource("r0/{r00:abc}/{r000}/")
+	root.Resource("/r0/r01")
+
 	var cases = []struct {
-		name, path string
-		r          *Resource
-		wantErr    bool
+		name, pathToSet, pathToGet string
+		config                     Config
+		wantCfs                    []_ConfigFlags
+		wantErr                    bool
 	}{
-		{"r00", "r00", r00, false},
-		{"r10", "https:///r00/{r10:abc}", r10, false},
-		{"r20", "/r00/{r10:abc}/{r20}/", r20, false},
-		{"r11", "/r00/r11", r11, false},
-		{"r10 error", "/r00/{r10:abc}", r10, true},
+		{
+			"/", "/", "",
+			Config{
+				Secure:                true,
+				HasTrailingSlash:      true,
+				StrictOnTrailingSlash: true,
+				HandlesThePathAsIs:    true,
+			},
+			nil,
+			true,
+		},
+		{
+			"r0", "r0", "https:///r0/",
+			Config{
+				StrictOnTrailingSlash: true,
+				HandlesThePathAsIs:    true,
+			},
+			[]_ConfigFlags{
+				flagActive,
+				flagSecure,
+				flagTrailingSlash,
+			},
+			true,
+		},
+		{
+			"r0", "https:///r0", "https:///r0/",
+			Config{
+				StrictOnTrailingSlash: true,
+				HandlesThePathAsIs:    true,
+			},
+			[]_ConfigFlags{
+				flagActive,
+				flagSecure,
+				flagTrailingSlash,
+			},
+			true,
+		},
+		{
+			"r0", "https:///r0/", "https:///r0/",
+			Config{
+				StrictOnTrailingSlash: true,
+				HandlesThePathAsIs:    true,
+			},
+			[]_ConfigFlags{
+				flagActive,
+				flagSecure,
+				flagTrailingSlash,
+				flagStrictOnTrailingSlash,
+				flagLenientOnTrailingSlash,
+				flagLenientOnUncleanPath,
+			},
+			false,
+		},
+		{
+			"r00", "https:///r00/{r00:abc}", "https:///r00/{r00:abc}",
+			Config{
+				StrictOnTrailingSlash: true,
+				SubtreeHandler:        true,
+				HandlesThePathAsIs:    true,
+			},
+			[]_ConfigFlags{
+				flagActive,
+				flagSecure,
+				flagStrictOnTrailingSlash,
+				flagSubtreeHandler,
+				flagLenientOnTrailingSlash,
+				flagLenientOnUncleanPath,
+			},
+			false,
+		},
+		{
+			"r000", "/r0/{r00:abc}/{r000}/", "https:///r0/{r00:abc}/{r000}/",
+			Config{
+				RedirectsInsecureRequest: true,
+			},
+			[]_ConfigFlags{
+				flagActive,
+				flagSecure,
+				flagRedirectsInsecure,
+				flagTrailingSlash,
+			},
+			false,
+		},
+		{
+			"r01", "/r0/r01", "https:///r0/r01/",
+			Config{Secure: true, HasTrailingSlash: true},
+			[]_ConfigFlags{
+				flagActive,
+				flagSecure,
+				flagTrailingSlash,
+			},
+			false,
+		},
+		{
+			"r00 error", "/r0/{r00:abc}", "https:///r00/{r00:abc}",
+			Config{LenientOnTrailingSlash: true},
+			[]_ConfigFlags{
+				flagActive,
+				flagSecure,
+				flagStrictOnTrailingSlash,
+				flagSubtreeHandler,
+				flagLenientOnTrailingSlash,
+				flagLenientOnUncleanPath,
+			},
+			true,
+		},
+		{
+			"r1 error", "r1/", "https:///r1/",
+			Config{RedirectsInsecureRequest: true},
+			nil,
+			true,
+		},
+		{
+			"r1", "https:///r1", "https:///r1/",
+			Config{RedirectsInsecureRequest: true, HasTrailingSlash: true},
+			[]_ConfigFlags{
+				flagActive,
+				flagSecure,
+				flagRedirectsInsecure,
+				flagTrailingSlash,
+			},
+			false,
+		},
+		{
+			"r1/r10", "r1/r10", "https:///r1/r10/",
+			Config{Secure: true, HasTrailingSlash: true, SubtreeHandler: true},
+			[]_ConfigFlags{
+				flagActive,
+				flagSecure,
+				flagTrailingSlash,
+				flagSubtreeHandler,
+			},
+			false,
+		},
 	}
 
 	for _, c := range cases {
@@ -3993,15 +4321,16 @@ func TestResourceBase_SetConfigurationAt(t *testing.T) {
 			testPanicker(
 				t,
 				c.wantErr,
-				func() { root.SetConfigurationAt(c.path, config) },
+				func() { root.SetConfigurationAt(c.pathToSet, c.config) },
 			)
 
-			if c.r == nil {
-				return
-			}
+			if c.pathToGet != "" {
+				var r = root.RegisteredResource(c.pathToGet)
+				if r == nil {
+					return
+				}
 
-			if c.r.Configuration() != config {
-				t.Fatalf("ResourceBase.SetConfigurationAt() has failed")
+				check(r.configFlags(), c.wantCfs...)
 			}
 		})
 	}
@@ -4009,44 +4338,92 @@ func TestResourceBase_SetConfigurationAt(t *testing.T) {
 
 func TestResourceBase_ConfigurationAt(t *testing.T) {
 	var root = NewDormantResource("/")
+	root.ResourceUsingConfig(
+		"https:///r0/",
+		Config{
+			StrictOnTrailingSlash: true,
+			HandlesThePathAsIs:    true,
+		},
+	)
 
-	var config = Config{
-		Secure:                  true,
-		RedirectInsecureRequest: true,
-		StrictOnTrailingSlash:   true,
-	}
+	root.ResourceUsingConfig(
+		"https:///r0/{r00:abc}",
+		Config{
+			StrictOnTrailingSlash: true,
+			SubtreeHandler:        true,
+			HandlesThePathAsIs:    true,
+		},
+	)
+
+	root.ResourceUsingConfig(
+		"https:///r0/{r00:abc}/{r000}/",
+		Config{RedirectsInsecureRequest: true},
+	)
 
 	var cases = []struct {
-		name, path, pathToCheck string
-		wantErr                 bool
+		name, path string
+		wantConfig Config
+		wantErr    bool
 	}{
-		{"r00", "r00", "https:///r00", false},
-		{"r10", "https:///r00/{r10:abc}", "https:///r00/{r10:abc}", false},
+		{"/", "/", Config{}, true},
+		{"r0 error #1", "/r0", Config{}, true},
+		{"r0 error #2", "/r0/", Config{}, true},
 		{
-			"r20",
-			"/r00/{r10:abc}/{r20}/",
-			"https:///r00/{r10:abc}/{r20}",
+			"r0 #1",
+			// HandlesThePathAsIs has more priority than StrictOnTrailingSlash.
+			"https:///r0",
+			Config{
+				Secure:                 true,
+				HasTrailingSlash:       true,
+				StrictOnTrailingSlash:  true,
+				LenientOnTrailingSlash: true,
+				LenientOnUncleanPath:   true,
+				HandlesThePathAsIs:     true,
+			},
 			false,
 		},
-		{"r11", "/r00/r11", "https:///r00/r11", false},
-		{"r00 error", "", "https:///r00/", true},
-		{"non-existent", "", "https:///r00/{r12}", true},
+		{
+			"r0 #2", "https:///r0/",
+			Config{
+				Secure:                 true,
+				HasTrailingSlash:       true,
+				StrictOnTrailingSlash:  true,
+				LenientOnTrailingSlash: true,
+				LenientOnUncleanPath:   true,
+				HandlesThePathAsIs:     true,
+			},
+			false,
+		},
+		{
+			"r00", "https:///r0/{r00:abc}",
+			Config{
+				Secure:                 true,
+				StrictOnTrailingSlash:  true,
+				SubtreeHandler:         true,
+				LenientOnTrailingSlash: true,
+				LenientOnUncleanPath:   true,
+				HandlesThePathAsIs:     true,
+			},
+			false,
+		},
+		{
+			"r000", "https:///r0/{r00:abc}/{r000}/",
+			Config{
+				Secure:                   true,
+				RedirectsInsecureRequest: true,
+				HasTrailingSlash:         true,
+			},
+			false,
+		},
+		{"non-existent", "/r0/r01", Config{}, true},
 	}
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if !c.wantErr {
-				root.Resource(c.path)
-				root.SetConfigurationAt(c.path, config)
-			}
-
 			testPanickerValue(
-				t,
-				c.wantErr,
-				config,
-				func() interface{} {
-					return root.ConfigurationAt(c.pathToCheck)
-				},
+				t, c.wantErr,
+				c.wantConfig,
+				func() interface{} { return root.ConfigurationAt(c.path) },
 			)
 		})
 	}
@@ -4605,22 +4982,24 @@ func TestResourceBase_SetSharedDataForSubtree(t *testing.T) {
 
 func TestResourceBase_SetConfigurationForSubtree(t *testing.T) {
 	var root = NewDormantResource("/")
-	var config = Config{RedirectInsecureRequest: true, HandleThePathAsIs: true}
+	var config = Config{RedirectsInsecureRequest: true, HandlesThePathAsIs: true}
 
 	var cases = []struct {
 		name, path, pathToCheck string
 	}{
-		{"r00", "https:///r00", "https:///r00/"},
-		{"r10 #1", "/r00/{r10}/", "https:///r00/{r10}"},
-		{"r01", "{r01}", "https:///{r01}/"},
-		{"r10", "/{r01}/{r10:abc}/", "https:///{r01}/{r10:abc}"},
-		{"r11", "{r01}/{r11}", "https:///{r01}/{r11}/"},
+		{"r0", "https:///r0", "https:///r0/"},
+		{"r00", "/r0/{r00}/", "https:///r0/{r00}"},
+		{"r1", "{r1}", "https:///{r1}/"},
+		{"r10", "/{r1}/{r10:abc}/", "https:///{r1}/{r10:abc}"},
+		{"r11", "{r1}/{r11}", "https:///{r1}/{r11}/"},
 		{
-			"r20",
-			"https:///{r01}/r12/{r20:123}",
-			"https:///{r01}/r12/{r20:123}/",
+			"r120",
+			"https:///{r1}/r12/{r120:123}",
+			"https:///{r1}/r12/{r120:123}/",
 		},
 	}
+
+	root.SetConfigurationAt(cases[0].path, config)
 
 	for _, c := range cases {
 		root.Resource(c.path)
@@ -4632,35 +5011,38 @@ func TestResourceBase_SetConfigurationForSubtree(t *testing.T) {
 	// returned config's Secure, LeniencyOnTslash and LeniencyOnUncleanPath
 	// fields will be true too.
 	config.Secure = true
-	config.LeniencyOnTrailingSlash = true
-	config.LeniencyOnUncleanPath = true
+	config.LenientOnTrailingSlash = true
+	config.LenientOnUncleanPath = true
 
-	{
-		var r = root.RegisteredResource("https:///{r01}/r12")
-		if r == nil {
-			t.Fatal(errNonExistentResource)
-		}
+	var cfWithTrailingSlash = config
+	cfWithTrailingSlash.HasTrailingSlash = true
 
-		var gotConfig = r.Configuration()
-		if gotConfig != config {
-			t.Fatalf(
-				"ResourceBase.SetConfigurationForSubtree has failed. Got config = %v, want = %v",
-				gotConfig,
-				config,
-			)
-		}
-	}
+	testPanickerValue(
+		t, false, config,
+		func() interface{} {
+			return root.ConfigurationAt("https:///{r1}/r12")
+		},
+	)
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			var r = root.RegisteredResource(c.pathToCheck)
-			if r == nil {
-				t.Fatal(errNonExistentResource)
+			if c.name == "r00" || c.name == "r10" {
+				testPanickerValue(
+					t, false, cfWithTrailingSlash,
+					func() interface{} {
+						return root.ConfigurationAt(c.pathToCheck)
+					},
+				)
+
+				return
 			}
 
-			if r.Configuration() != config {
-				t.Fatalf("ResourceBase.SetConfigurationForSubtree() has failed")
-			}
+			testPanickerValue(
+				t, false, config,
+				func() interface{} {
+					return root.ConfigurationAt(c.pathToCheck)
+				},
+			)
 		})
 	}
 }
@@ -5217,7 +5599,7 @@ func addRequestHandlerSubresources(t *testing.T, r _Responder, i, limit int) {
 
 		rr = NewDormantResourceUsingConfig(
 			"https:///$pr"+istr+"1:{name"+istr+":pr"+istr+"1}:{id"+istr+":\\d?}",
-			Config{RedirectInsecureRequest: true},
+			Config{RedirectsInsecureRequest: true},
 		)
 
 		rr.SetSharedData(true)
@@ -5228,10 +5610,10 @@ func addRequestHandlerSubresources(t *testing.T, r _Responder, i, limit int) {
 		rr = NewDormantResourceUsingConfig(
 			"https:///$pr"+istr+"2:{name"+istr+":pr"+istr+"2}:{id"+istr+":\\d?}",
 			Config{
-				SubtreeHandler:          true,
-				RedirectInsecureRequest: true,
-				LeniencyOnTrailingSlash: true,
-				StrictOnTrailingSlash:   true, // has no effect
+				SubtreeHandler:           true,
+				RedirectsInsecureRequest: true,
+				LenientOnTrailingSlash:   true,
+				StrictOnTrailingSlash:    true, // has no effect
 			},
 		)
 
@@ -5242,7 +5624,7 @@ func addRequestHandlerSubresources(t *testing.T, r _Responder, i, limit int) {
 
 		rr = NewDormantResourceUsingConfig(
 			"$pr"+istr+"3:{name"+istr+":pr"+istr+"3}:{id"+istr+":\\d?}",
-			Config{HandleThePathAsIs: true},
+			Config{HandlesThePathAsIs: true},
 		)
 
 		rr.SetSharedData(true)
@@ -5276,10 +5658,10 @@ func addRequestHandlerSubresources(t *testing.T, r _Responder, i, limit int) {
 		rr = NewDormantResourceUsingConfig(
 			"https:///$pr"+istr+"6:{name"+istr+":pr"+istr+"6}:{id"+istr+":\\d?}/",
 			Config{
-				SubtreeHandler:          true,
-				RedirectInsecureRequest: true,
-				HandleThePathAsIs:       true,
-				StrictOnTrailingSlash:   true, // has no effect
+				SubtreeHandler:           true,
+				RedirectsInsecureRequest: true,
+				HandlesThePathAsIs:       true,
+				StrictOnTrailingSlash:    true, // has no effect
 			},
 		)
 
@@ -5291,9 +5673,9 @@ func addRequestHandlerSubresources(t *testing.T, r _Responder, i, limit int) {
 		rr = NewDormantResourceUsingConfig(
 			"https:///{wr"+istr+"}",
 			Config{
-				RedirectInsecureRequest: true,
-				StrictOnTrailingSlash:   true,
-				LeniencyOnUncleanPath:   true,
+				RedirectsInsecureRequest: true,
+				StrictOnTrailingSlash:    true,
+				LenientOnUncleanPath:     true,
 			},
 		)
 

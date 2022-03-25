@@ -270,19 +270,39 @@ func (ro *Router) SharedDataAt(urlTmplStr string) interface{} {
 // -------------------------
 
 // SetConfigurationAt sets the config for the responder at the URL. If the
-// responder doesn't exist, it will be created. If the existing responder was
-// configured before, it will be reconfigured.
+// responder doesn't exist, it will be created. If the existing responder has
+// been configured before, it's reconfigured, but the responder's security
+// and trailing slash properties are not affected if they were set to true. In
+// other words, if the responder has been configured to be secure or to have a
+// trailing slash, these properties can't be changed. If the passed config has
+// Secure and/or RedirectsInsecureRequest and/or TrailingSlash fields set to
+// true, the responder's security and trailing slash properties will be set to
+// true, respectively. Please note that, unlike during construction, if the
+// config's RedirectsInsecureRequest field is set to true, the responder will
+// also be configured to be secure, even if it wasn't before. The secure
+// responders only respond when used over HTTPS.
 //
 // The scheme and trailing slash property values in the URL template must
 // be compatible with the existing responder's properties. A newly created
-// responder is configured with the values in the URL template.
+// responder is configured with the values in the path template as well as in
+// the config. The config's Secure and TrailingSlash values are ignored when
+// creating a new responder.
 func (ro *Router) SetConfigurationAt(urlTmplStr string, config Config) {
-	var _r, err = ro._Responder(urlTmplStr)
+	var _r, host, err = ro.registered_Responder(urlTmplStr)
 	if err != nil {
 		panicWithErr("%w", err)
 	}
 
-	_r.SetConfiguration(config)
+	if _r != nil {
+		_r.SetConfiguration(config)
+		return
+	}
+
+	if host {
+		ro.HostUsingConfig(urlTmplStr, config)
+	} else {
+		ro.ResourceUsingConfig(urlTmplStr, config)
+	}
 }
 
 // ConfigurationAt returns the configuration of the existing responder at
@@ -859,7 +879,7 @@ func (ro *Router) HostUsingConfig(
 		panicWithErr("%w", err)
 	}
 
-	if config.RedirectInsecureRequest && !secure {
+	if config.RedirectsInsecureRequest && !secure {
 		panicWithErr("%w", errConflictingSecurity)
 	}
 
@@ -1063,7 +1083,8 @@ func (ro *Router) initializeRootResource() {
 // If the resource exists, the URL template's scheme and trailing slash
 // property values must be compatible with the resource's properties,
 // otherwise the method panics. The new resource's scheme and trailing slash
-// properties are configured with the values given in the URL template.
+// properties are configured with the values given in the URL template. The
+// root resource's trailing slash property is ignored.
 //
 // If the URL template contains path segment names, they must be unique in the
 // path and among their respective siblings. The host's name must be unique
@@ -1147,8 +1168,9 @@ func (ro *Router) Resource(urlTmplStr string) *Resource {
 //
 // If the resource exists, the URL template's scheme and trailing slash property
 // values, as well as config, must be compatible with the resource's, otherwise
-// the method panics. The new resource is configured with the values
-// given in the URL template and config.
+// the method panics. The new resource is configured with the values given in
+// the URL template and config. The root resource's trailing slash related
+// properties are ignored.
 //
 // If the URL template contains path segment names, they must be unique in the
 // path and among their respective siblings. The host's name must be unique
@@ -1169,7 +1191,7 @@ func (ro *Router) ResourceUsingConfig(
 		panicWithErr("%w", errEmptyPathTemplate)
 	}
 
-	if config.RedirectInsecureRequest && !secure {
+	if config.RedirectsInsecureRequest && !secure {
 		panicWithErr("%w", errConflictingSecurity)
 	}
 
@@ -1614,11 +1636,20 @@ func (ro *Router) SetSharedDataForAll(data interface{}) {
 	)
 }
 
-// SetConfigurationForAll sets the config for all the hosts and resources.
+// SetConfigurationForAll sets the config for all the hosts and resources,
+// but the hosts' and resources' secure and trailing slash properties are
+// not affected if they were set to true. If the responders are configured
+// with properties other than security and trailing slash, those responders
+// will be skipped.
 func (ro *Router) SetConfigurationForAll(config Config) {
 	traverseAndCall(
 		ro._Responders(),
 		func(_r _Responder) error {
+			var cfs = _r.configFlags()
+			if (cfs &^ (flagActive | flagSecure | flagTrailingSlash)) > 0 {
+				return nil
+			}
+
 			_r.SetConfiguration(config)
 			return nil
 		},

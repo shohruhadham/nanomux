@@ -57,8 +57,8 @@ func createHost(tmplStr string, impl Impl, config *Config) (*Host, error) {
 
 	var cfs *_ConfigFlags
 	if config != nil {
-		config.Secure, config.TrailingSlash = secure, tslash
-		if config.RedirectInsecureRequest && !secure {
+		config.Secure, config.HasTrailingSlash = secure, tslash
+		if config.RedirectsInsecureRequest && !secure {
 			return nil, newErr("%w", errConflictingSecurity)
 		}
 

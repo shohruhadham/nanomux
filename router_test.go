@@ -341,72 +341,284 @@ func TestRouter_SetGetSharedDataAt(t *testing.T) {
 }
 
 func TestRouter_SetConfigurationAt(t *testing.T) {
-	var ro = NewRouter()
-	var config = Config{
-		RedirectInsecureRequest: true,
-		TrailingSlash:           true,
-		StrictOnTrailingSlash:   true,
+	var check = func(cfs _ConfigFlags, fs ..._ConfigFlags) {
+		t.Helper()
+
+		for _, f := range fs {
+			if (cfs & f) == 0 {
+				t.Fatalf(
+					"ResourceBase.SetConfigurationAt() %08b, has no flag %08b",
+					cfs, f,
+				)
+			}
+
+			cfs &^= f
+		}
+
+		if cfs > 0 {
+			t.Fatalf(
+				"ResourceBase.SetConfigurationAt() responder has unwanted %08b flags",
+				cfs,
+			)
+		}
 	}
 
-	var wantConfig = config
-	wantConfig.Secure = true
+	var ro = NewRouter()
+	ro.Host("a.example.com")
+	ro.Host("https://b.example.com")
+	ro.Host("c.example.com/")
+	ro.Resource("http://a.example.com/r0/{r00}")
+	ro.Resource("https:///r0/")
+	ro.Resource("https:///r0/{r00:abc}")
+	ro.Resource("r0/{r00:abc}/{r000}/")
+	ro.Resource("/r0/r01")
 
 	var cases = []struct {
-		name, url string
-		wantErr   bool
+		name, urlToSet, urlToGet string
+		config                   Config
+		wantCfs                  []_ConfigFlags
+		wantErr                  bool
 	}{
-		{"host #1", "https://example.com", false},
 		{
-			"host #1 r00",
-			"http://example.com/{r00:abc}",
+			"a.example.com error",
+			"https://a.example.com",
+			"http://a.example.com",
+			Config{
+				Secure:           true,
+				HasTrailingSlash: true,
+				SubtreeHandler:   true,
+			},
+			[]_ConfigFlags{flagActive},
+			true,
+		},
+		{
+			"a.ecample.com", "http://a.example.com", "https://a.example.com/",
+			Config{
+				Secure:           true,
+				HasTrailingSlash: true,
+				SubtreeHandler:   true,
+			},
+			[]_ConfigFlags{
+				flagActive,
+				flagSecure,
+				flagTrailingSlash,
+				flagSubtreeHandler,
+			},
 			false,
 		},
 		{
-			"host #2 r10",
-			"http://example2.com/r00/{r10}/",
+			"b.ecample.com", "https://b.example.com", "https://b.example.com/",
+			Config{HasTrailingSlash: true},
+			[]_ConfigFlags{
+				flagActive,
+				flagSecure,
+				flagTrailingSlash,
+			},
 			false,
 		},
-		{"r00", "r00", false},
-		{"r10", "https:///r00/{r10:abc}", false},
 		{
-			"r20",
-			"/r00/{r10:abc}/{r20}/",
+			"c.ecample.com", "http://c.example.com/", "https://c.example.com/",
+			Config{RedirectsInsecureRequest: true},
+			[]_ConfigFlags{
+				flagActive,
+				flagSecure,
+				flagRedirectsInsecure,
+				flagTrailingSlash,
+			},
 			false,
 		},
-		{"r11", "/r00/r11", false},
-		{"host #1 error", "http://example.com", true},
-		{"host #2 r10 error", "http://example2.com/r00/{r10}", true},
-		{"r10 error", "/r00/{r10:abc}", true},
-		{"r20 error", "/r00/{r10:abc}/{r20}", true},
+		{
+			"a.ecample.com {r00}",
+			"http://a.example.com/r0/{r00}",
+			"https://a.example.com/r0/{r00}/",
+			Config{
+				Secure:                   true,
+				RedirectsInsecureRequest: true,
+				HasTrailingSlash:         true,
+				HandlesThePathAsIs:       true,
+			},
+			[]_ConfigFlags{
+				flagActive,
+				flagSecure,
+				flagRedirectsInsecure,
+				flagTrailingSlash,
+				flagLenientOnTrailingSlash,
+				flagLenientOnUncleanPath,
+			},
+			false,
+		},
+		{
+			"d.example.com",
+			"https://d.example.com/",
+			"https://d.example.com/",
+			Config{
+				RedirectsInsecureRequest: true,
+				LenientOnTrailingSlash:   true,
+			},
+			[]_ConfigFlags{
+				flagActive,
+				flagSecure,
+				flagRedirectsInsecure,
+				flagTrailingSlash,
+				flagLenientOnTrailingSlash,
+			},
+			false,
+		},
+		{
+			"/", "/", "",
+			Config{
+				Secure:                true,
+				HasTrailingSlash:      true,
+				StrictOnTrailingSlash: true,
+				HandlesThePathAsIs:    true,
+			},
+			nil,
+			true,
+		},
+		{
+			"r0", "r0", "https:///r0/",
+			Config{
+				StrictOnTrailingSlash: true,
+				HandlesThePathAsIs:    true,
+			},
+			[]_ConfigFlags{
+				flagActive,
+				flagSecure,
+				flagTrailingSlash,
+			},
+			true,
+		},
+		{
+			"r0", "https:///r0", "https:///r0/",
+			Config{
+				StrictOnTrailingSlash: true,
+				HandlesThePathAsIs:    true,
+			},
+			[]_ConfigFlags{
+				flagActive,
+				flagSecure,
+				flagTrailingSlash,
+			},
+			true,
+		},
+		{
+			"r0", "https:///r0/", "https:///r0/",
+			Config{
+				StrictOnTrailingSlash: true,
+				HandlesThePathAsIs:    true,
+			},
+			[]_ConfigFlags{
+				flagActive,
+				flagSecure,
+				flagTrailingSlash,
+				flagStrictOnTrailingSlash,
+				flagLenientOnTrailingSlash,
+				flagLenientOnUncleanPath,
+			},
+			false,
+		},
+		{
+			"r00", "https:///r00/{r00:abc}", "https:///r00/{r00:abc}",
+			Config{
+				StrictOnTrailingSlash: true,
+				SubtreeHandler:        true,
+				HandlesThePathAsIs:    true,
+			},
+			[]_ConfigFlags{
+				flagActive,
+				flagSecure,
+				flagStrictOnTrailingSlash,
+				flagSubtreeHandler,
+				flagLenientOnTrailingSlash,
+				flagLenientOnUncleanPath,
+			},
+			false,
+		},
+		{
+			"r000", "/r0/{r00:abc}/{r000}/", "https:///r0/{r00:abc}/{r000}/",
+			Config{
+				RedirectsInsecureRequest: true,
+			},
+			[]_ConfigFlags{
+				flagActive,
+				flagSecure,
+				flagRedirectsInsecure,
+				flagTrailingSlash,
+			},
+			false,
+		},
+		{
+			"r01", "/r0/r01", "https:///r0/r01/",
+			Config{Secure: true, HasTrailingSlash: true},
+			[]_ConfigFlags{
+				flagActive,
+				flagSecure,
+				flagTrailingSlash,
+			},
+			false,
+		},
+		{
+			"r00 error", "/r0/{r00:abc}", "https:///r00/{r00:abc}",
+			Config{LenientOnTrailingSlash: true},
+			[]_ConfigFlags{
+				flagActive,
+				flagSecure,
+				flagStrictOnTrailingSlash,
+				flagSubtreeHandler,
+				flagLenientOnTrailingSlash,
+				flagLenientOnUncleanPath,
+			},
+			true,
+		},
+		{
+			"r1 error", "r1/", "https:///r1/",
+			Config{RedirectsInsecureRequest: true},
+			nil,
+			true,
+		},
+		{
+			"r1", "https:///r1", "https:///r1/",
+			Config{RedirectsInsecureRequest: true, HasTrailingSlash: true},
+			[]_ConfigFlags{
+				flagActive,
+				flagSecure,
+				flagRedirectsInsecure,
+				flagTrailingSlash,
+			},
+			false,
+		},
+		{
+			"r1/r10", "r1/r10", "https:///r1/r10/",
+			Config{Secure: true, HasTrailingSlash: true, SubtreeHandler: true},
+			[]_ConfigFlags{
+				flagActive,
+				flagSecure,
+				flagTrailingSlash,
+				flagSubtreeHandler,
+			},
+			false,
+		},
 	}
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			var _r _Responder
-			var err error
-
-			if !c.wantErr {
-				_r, err = ro._Responder(c.url)
-				if err != nil {
-					t.Fatal(err)
-				}
-			}
-
 			testPanicker(
 				t,
 				c.wantErr,
-				func() { ro.SetConfigurationAt(c.url, config) },
+				func() {
+					ro.SetConfigurationAt(c.urlToSet, c.config)
+				},
 			)
 
-			if _r != nil {
-				var _rConfig = _r.Configuration()
-				if _rConfig != wantConfig {
-					t.Fatalf(
-						"Router.SetConfigurationAt() has set config %v, want %v",
-						_rConfig,
-						wantConfig,
-					)
+			if c.urlToGet != "" {
+				var _r, _, err = ro.registered_Responder(c.urlToGet)
+				checkErr(t, err, false)
+
+				if _r == nil {
+					return
 				}
+
+				check(_r.configFlags(), c.wantCfs...)
 			}
 		})
 	}
@@ -415,9 +627,9 @@ func TestRouter_SetConfigurationAt(t *testing.T) {
 func TestRouter_ConfigurationAt(t *testing.T) {
 	var ro = NewRouter()
 	var config = Config{
-		RedirectInsecureRequest: true,
-		TrailingSlash:           true,
-		StrictOnTrailingSlash:   true,
+		RedirectsInsecureRequest: true,
+		HasTrailingSlash:         true,
+		StrictOnTrailingSlash:    true,
 	}
 
 	var wantConfig = config
@@ -2233,7 +2445,7 @@ func TestRouter_Host(t *testing.T) {
 		static  = NewDormantHostUsingConfig("example.com", Config{SubtreeHandler: true})
 		pattern = NewDormantHostUsingConfig(
 			"https://{sub:name}.example.com",
-			Config{HandleThePathAsIs: true},
+			Config{HandlesThePathAsIs: true},
 		)
 
 		wildcardSub = NewDormantHost("{sub}.example.com/")
@@ -2336,7 +2548,7 @@ func TestRouter_HostUsingConfig(t *testing.T) {
 		static  = NewDormantHostUsingConfig("example.com", Config{SubtreeHandler: true})
 		pattern = NewDormantHostUsingConfig(
 			"{sub:name}.example.com/",
-			Config{HandleThePathAsIs: true},
+			Config{HandlesThePathAsIs: true},
 		)
 
 		wildcardSub = NewDormantHostUsingConfig(
@@ -2390,21 +2602,21 @@ func TestRouter_HostUsingConfig(t *testing.T) {
 		{
 			"pattern #1",
 			"{sub:name}.example.com/",
-			Config{HandleThePathAsIs: true},
+			Config{HandlesThePathAsIs: true},
 			pattern,
 			false,
 		},
 		{
 			"pattern #2",
 			"https://{sub:name}.example.com/",
-			Config{HandleThePathAsIs: true},
+			Config{HandlesThePathAsIs: true},
 			nil,
 			true,
 		},
 		{
 			"pattern #3",
 			"{sub:name}.example.com",
-			Config{HandleThePathAsIs: true},
+			Config{HandlesThePathAsIs: true},
 			pattern,
 			false,
 		},
@@ -2418,14 +2630,14 @@ func TestRouter_HostUsingConfig(t *testing.T) {
 		{
 			"pattern #5",
 			"$sub:{subx:name}.example.com/",
-			Config{HandleThePathAsIs: true},
+			Config{HandlesThePathAsIs: true},
 			nil,
 			true,
 		},
 		{
 			"pattern #6",
 			"$subx:{sub:name}.example.com/",
-			Config{HandleThePathAsIs: true},
+			Config{HandlesThePathAsIs: true},
 			nil,
 			true,
 		},
@@ -2454,7 +2666,7 @@ func TestRouter_HostUsingConfig(t *testing.T) {
 		{
 			"wildcardSub #4",
 			"https://{wildCardSub}.example.com",
-			Config{RedirectInsecureRequest: true},
+			Config{RedirectsInsecureRequest: true},
 			nil,
 			true,
 		},
@@ -2476,21 +2688,21 @@ func TestRouter_HostUsingConfig(t *testing.T) {
 		{
 			"new static #1",
 			"example1.com",
-			Config{RedirectInsecureRequest: true},
+			Config{RedirectsInsecureRequest: true},
 			nil,
 			true,
 		},
 		{
 			"new static #2",
 			"https://example1.com",
-			Config{RedirectInsecureRequest: true},
+			Config{RedirectsInsecureRequest: true},
 			nil,
 			false,
 		},
 		{
 			"new pattern",
 			"https://{subx:newName}.example.com",
-			Config{SubtreeHandler: true, RedirectInsecureRequest: true},
+			Config{SubtreeHandler: true, RedirectsInsecureRequest: true},
 			nil,
 			false,
 		},
@@ -2511,7 +2723,7 @@ func TestRouter_HostUsingConfig(t *testing.T) {
 		{
 			"duplicate name",
 			"https://{sub}.new.example.com",
-			Config{RedirectInsecureRequest: true},
+			Config{RedirectsInsecureRequest: true},
 			nil,
 			true,
 		},
@@ -2997,7 +3209,7 @@ func TestRouter_ResourceUsingConfig(t *testing.T) {
 		func() {
 			pattern = ro.ResourceUsingConfig(
 				"{name:pattern}/",
-				Config{HandleThePathAsIs: true},
+				Config{HandlesThePathAsIs: true},
 			)
 		},
 	)
@@ -3008,7 +3220,7 @@ func TestRouter_ResourceUsingConfig(t *testing.T) {
 		func() {
 			wildcard = ro.ResourceUsingConfig(
 				"https:///{wildcard}",
-				Config{RedirectInsecureRequest: true},
+				Config{RedirectsInsecureRequest: true},
 			)
 		},
 	)
@@ -3023,26 +3235,26 @@ func TestRouter_ResourceUsingConfig(t *testing.T) {
 		{"static #1", "static", Config{SubtreeHandler: true}, static, false},
 		{"static #2", "https://static", Config{SubtreeHandler: true}, nil, true},
 		{"static #3", "static/", Config{SubtreeHandler: true}, nil, true},
-		{"static #4", "static", Config{LeniencyOnUncleanPath: true}, nil, true},
+		{"static #4", "static", Config{LenientOnUncleanPath: true}, nil, true},
 
 		{
 			"pattern #1",
 			"{name:pattern}/",
-			Config{HandleThePathAsIs: true},
+			Config{HandlesThePathAsIs: true},
 			pattern,
 			false,
 		},
 		{
 			"pattern #2",
 			"https://{name:pattern}/",
-			Config{HandleThePathAsIs: true},
+			Config{HandlesThePathAsIs: true},
 			nil,
 			true,
 		},
 		{
 			"pattern #3",
 			"{name:pattern}",
-			Config{HandleThePathAsIs: true},
+			Config{HandlesThePathAsIs: true},
 			pattern,
 			false,
 		},
@@ -3051,21 +3263,21 @@ func TestRouter_ResourceUsingConfig(t *testing.T) {
 		{
 			"wildcard #1",
 			"https:///{wildcard}",
-			Config{RedirectInsecureRequest: true},
+			Config{RedirectsInsecureRequest: true},
 			wildcard,
 			false,
 		},
 		{
 			"wildcard #2",
 			"{wildcard}",
-			Config{RedirectInsecureRequest: true},
+			Config{RedirectsInsecureRequest: true},
 			nil,
 			true,
 		},
 		{
 			"wildcard #3",
 			"https:///{wildcard}/",
-			Config{RedirectInsecureRequest: true},
+			Config{RedirectsInsecureRequest: true},
 			nil,
 			true,
 		},
@@ -3080,28 +3292,28 @@ func TestRouter_ResourceUsingConfig(t *testing.T) {
 		{
 			"new static #1",
 			"https://example.com/{r10}/r20",
-			Config{LeniencyOnUncleanPath: true},
+			Config{LenientOnUncleanPath: true},
 			nil,
 			false,
 		},
 		{
 			"new static #2",
 			"https://example.com/{r10}/r20",
-			Config{LeniencyOnUncleanPath: true},
+			Config{LenientOnUncleanPath: true},
 			nil,
 			false,
 		},
 		{
 			"new static #3",
 			"http://example.com/{r10}/r20",
-			Config{LeniencyOnUncleanPath: true},
+			Config{LenientOnUncleanPath: true},
 			nil,
 			true,
 		},
 		{
 			"new static #4",
 			"https://example.com/{r10}/r20/",
-			Config{LeniencyOnUncleanPath: true},
+			Config{LenientOnUncleanPath: true},
 			nil,
 			true,
 		},
@@ -3160,28 +3372,28 @@ func TestRouter_ResourceUsingConfig(t *testing.T) {
 		{
 			"new pattern #1",
 			"https:///r00/{name:abc}",
-			Config{SubtreeHandler: true, RedirectInsecureRequest: true},
+			Config{SubtreeHandler: true, RedirectsInsecureRequest: true},
 			nil,
 			false,
 		},
 		{
 			"new pattern #2",
 			"https:///r00/{name:abc}",
-			Config{SubtreeHandler: true, RedirectInsecureRequest: true},
+			Config{SubtreeHandler: true, RedirectsInsecureRequest: true},
 			nil,
 			false,
 		},
 		{
 			"new pattern #3",
 			"http:///r00/{name:abc}",
-			Config{SubtreeHandler: true, RedirectInsecureRequest: true},
+			Config{SubtreeHandler: true, RedirectsInsecureRequest: true},
 			nil,
 			true,
 		},
 		{
 			"new pattern #4",
 			"https:///r00/{name:abc}/",
-			Config{SubtreeHandler: true, RedirectInsecureRequest: true},
+			Config{SubtreeHandler: true, RedirectsInsecureRequest: true},
 			nil,
 			true,
 		},
@@ -3189,8 +3401,8 @@ func TestRouter_ResourceUsingConfig(t *testing.T) {
 			"new pattern #5",
 			"https:///r00/{name:abc}",
 			Config{
-				StrictOnTrailingSlash:   true,
-				RedirectInsecureRequest: true,
+				StrictOnTrailingSlash:    true,
+				RedirectsInsecureRequest: true,
 			},
 			nil,
 			true,
@@ -3199,14 +3411,14 @@ func TestRouter_ResourceUsingConfig(t *testing.T) {
 		{
 			"pattern with different value name",
 			"$name:{differentName:pattern}/",
-			Config{HandleThePathAsIs: true},
+			Config{HandlesThePathAsIs: true},
 			nil,
 			true,
 		},
 		{
 			"pattern with different template name",
 			"$differentName:{name:pattern}/",
-			Config{HandleThePathAsIs: true},
+			Config{HandlesThePathAsIs: true},
 			nil,
 			true,
 		},
@@ -3222,28 +3434,28 @@ func TestRouter_ResourceUsingConfig(t *testing.T) {
 		{
 			"only a scheme",
 			"http://",
-			Config{HandleThePathAsIs: true},
+			Config{HandlesThePathAsIs: true},
 			nil,
 			true,
 		},
 		{
 			"empty path segment",
 			"http://example.com//",
-			Config{HandleThePathAsIs: true},
+			Config{HandlesThePathAsIs: true},
 			nil,
 			true,
 		},
 		{
 			"empty path segments",
 			"http://example.com///",
-			Config{HandleThePathAsIs: true},
+			Config{HandlesThePathAsIs: true},
 			nil,
 			true,
 		},
 		{
 			"invalid host template",
 			"https://{example.com/{r10}",
-			Config{HandleThePathAsIs: true},
+			Config{HandlesThePathAsIs: true},
 			nil,
 			true,
 		},
@@ -3251,21 +3463,21 @@ func TestRouter_ResourceUsingConfig(t *testing.T) {
 		{
 			"r0 under a named host",
 			"http://$host:named.example.com/r0",
-			Config{HandleThePathAsIs: true},
+			Config{HandlesThePathAsIs: true},
 			nil,
 			false,
 		},
 		{
 			"empty host name",
 			"http://named.example.com/r0",
-			Config{HandleThePathAsIs: true},
+			Config{HandlesThePathAsIs: true},
 			nil,
 			true,
 		},
 		{
 			"new host with the same name",
 			"http://{host}.example.com/r0",
-			Config{HandleThePathAsIs: true},
+			Config{HandlesThePathAsIs: true},
 			nil,
 			false,
 		},
@@ -3979,6 +4191,11 @@ func TestRouter_SetSharedDataForAll(t *testing.T) {
 
 func TestRouter_SetConfigurationForAll(t *testing.T) {
 	var ro = NewRouter()
+	var config = Config{
+		SubtreeHandler:           true,
+		RedirectsInsecureRequest: true,
+		HasTrailingSlash:         true,
+	}
 
 	var cases = []struct {
 		name, url, urlToCheck string
@@ -4023,11 +4240,7 @@ func TestRouter_SetConfigurationForAll(t *testing.T) {
 		}
 	}
 
-	var config = Config{
-		SubtreeHandler:          true,
-		RedirectInsecureRequest: true,
-		TrailingSlash:           true,
-	}
+	ro.SetConfigurationAt(cases[0].url, config)
 
 	ro.SetConfigurationForAll(config)
 	config.Secure = true
@@ -4531,7 +4744,7 @@ func TestRouter_ServeHTTP(t *testing.T) {
 
 	var wildcardSub2 = ro.HostUsingConfig(
 		"{wildCardSub2}.example2.com",
-		Config{HandleThePathAsIs: true},
+		Config{HandlesThePathAsIs: true},
 	)
 
 	wildcardSub2.SetSharedData(true)
