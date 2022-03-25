@@ -432,7 +432,7 @@ func (rb *Resource) handleOrPassRequest(
 		args._r = rb.derived
 	}
 
-	if !rb.canHandleRequest() {
+	if !rb.canHandleRequest() && rb.requestRedirector == nil {
 		// If rb is a subtree handler that cannot handle a request, this
 		// prevents other subtree handlers above the tree from handling
 		// the request.
@@ -500,6 +500,10 @@ func (rb *Resource) handleOrPassRequest(
 		}
 
 		return commonRedirectHandler(w, r, newURL.String(), prc, args)
+	}
+
+	if rb.requestRedirector != nil {
+		return rb.requestRedirector(w, r, args)
 	}
 
 	return rb.requestHandler(w, r, args)

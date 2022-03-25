@@ -365,6 +365,80 @@ func TestHost_WrapRedirectHandlerAt(t *testing.T) {
 	}
 }
 
+func TestHost_RedirectRequestAt(t *testing.T) {
+	var host = NewDormantHost("http://example.com")
+
+	testPanicker(
+		t,
+		false,
+		func() {
+			host.RedirectRequestAt(
+				"temporarily_down",
+				"replacement",
+				http.StatusTemporaryRedirect,
+			)
+		},
+	)
+
+	host.SetConfigurationAt("temporarily_down", Config{SubtreeHandler: true})
+
+	var rr = httptest.NewRecorder()
+	var req = httptest.NewRequest("GET", "/temporarily_down", nil)
+	host.ServeHTTP(rr, req)
+
+	var response = rr.Result()
+	checkValue(t, response.StatusCode, http.StatusTemporaryRedirect)
+	checkValue(t, response.Header.Get("Location"), "/replacement")
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest("GET", "/temporarily_down/resource", nil)
+	host.ServeHTTP(rr, req)
+
+	response = rr.Result()
+	checkValue(t, response.StatusCode, http.StatusTemporaryRedirect)
+	checkValue(t, response.Header.Get("Location"), "/replacement/resource")
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(
+		"GET",
+		"/temporarily_down/resource-1/resource-2/",
+		nil,
+	)
+
+	host.ServeHTTP(rr, req)
+
+	response = rr.Result()
+	checkValue(t, response.StatusCode, http.StatusTemporaryRedirect)
+	checkValue(
+		t,
+		response.Header.Get("Location"), "/replacement/resource-1/resource-2/",
+	)
+
+	testPanicker(
+		t,
+		true,
+		func() {
+			host.RedirectRequestAt(
+				"temporarily_down",
+				"",
+				http.StatusTemporaryRedirect,
+			)
+		},
+	)
+
+	testPanicker(
+		t,
+		true,
+		func() {
+			host.RedirectRequestAt(
+				"temporarily_down",
+				"new-resource",
+				http.StatusOK,
+			)
+		},
+	)
+}
+
 func TestHost_RedirectAnyRequestAt(t *testing.T) {
 	var host = NewDormantHost("http://example.com")
 	testPanicker(

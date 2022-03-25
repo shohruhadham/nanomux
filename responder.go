@@ -115,6 +115,7 @@ type _Responder interface {
 	RedirectHandler() RedirectHandler
 	WrapRedirectHandler(mws ...func(RedirectHandler) RedirectHandler)
 
+	RedirectRequestTo(url string, redirectCode int)
 	RedirectAnyRequestTo(url string, redirectCode int)
 
 	// -------------------------
@@ -144,6 +145,7 @@ type _Responder interface {
 		mws ...func(RedirectHandler) RedirectHandler,
 	)
 
+	RedirectRequestAt(pathTmplStr, url string, redirectCode int)
 	RedirectAnyRequestAt(pathTmplStr, url string, redirectCode int)
 
 	// -------------------------
@@ -179,9 +181,10 @@ type _ResponderBase struct {
 	wildcardResource *Resource
 
 	*_RequestHandlerBase
-	requestReceiver Handler
-	requestPasser   Handler
-	requestHandler  Handler
+	requestReceiver   Handler
+	requestPasser     Handler
+	requestHandler    Handler
+	requestRedirector Handler
 
 	permanentRedirectCode int
 	redirectHandler       RedirectHandler
@@ -352,7 +355,7 @@ func (rb *_ResponderBase) IsSubtreeHandler() bool {
 }
 
 // IsSecure returns true if the responder was configured to respond only if
-// it is used under "https".
+// it is used under HTTPS.
 func (rb *_ResponderBase) IsSecure() bool {
 	return rb.cfs.has(flagSecure)
 }
@@ -362,7 +365,7 @@ func (rb *_ResponderBase) IsSecure() bool {
 // status code.
 //
 // The responder can be configured to redirect insecure requests if it's
-// intended to be used in both "http" and "https" servers.
+// intended to be used in both HTTP and HTTPS servers.
 func (rb *_ResponderBase) RedirectsInsecureRequest() bool {
 	return rb.cfs.has(flagRedirectsInsecure)
 }
@@ -1634,7 +1637,7 @@ func (rb *_ResponderBase) WrapHandlerOf(methods string, mws ...Middleware) {
 // -------------------------
 
 // SetPermanentRedirectCode sets the status code for permanent redirects.
-// It's used to redirect requests to an "https" from an "http", to a URL with
+// It's used to redirect requests to an HTTPS from an HTTP, to a URL with
 // a trailing slash from one without, or vice versa. The code is either 301
 // (moved permanently) or 308 (permanent redirect). The difference between the
 // 301 and 308 status codes is that with the 301 status code, the request's
@@ -1651,8 +1654,8 @@ func (rb *_ResponderBase) SetPermanentRedirectCode(code int) {
 }
 
 // PermanentRedirectCode returns the responder's status code for permanent
-// redirects. The code is used to redirect requests to an "https" from an
-// "http", to a URL with a trailing slash from one without, or vice versa.
+// redirects. The code is used to redirect requests to an HTTPS from an
+// HTTP, to a URL with a trailing slash from one without, or vice versa.
 // It's either 301 (moved permanently) or 308 (permanent redirect). The
 // difference between the 301 and 308 status codes is that with the 301
 // status code, the request's HTTP method may change. For example, some
@@ -1669,8 +1672,8 @@ func (rb *_ResponderBase) PermanentRedirectCode() int {
 // SetRedirectHandler can be used to set a custom implementation of the
 // redirect handler function.
 //
-// The handler is mostly used to redirect requests to an "https" from an
-// "http", to a URL with a trailing slash from a URL without, or vice versa.
+// The handler is mostly used to redirect requests to an HTTPS from an
+// HTTP, to a URL with a trailing slash from a URL without, or vice versa.
 // It is also used when the responder has been configured to redirect requests
 // to a new location.
 func (rb *_ResponderBase) SetRedirectHandler(handler RedirectHandler) {
@@ -1683,8 +1686,8 @@ func (rb *_ResponderBase) SetRedirectHandler(handler RedirectHandler) {
 
 // RedirectHandler returns the redirect handler function of the responder.
 //
-// The handler is mostly used to redirect requests to an "https" from an
-// "http", to a URL with a trailing slash from a URL without, or vice versa.
+// The handler is mostly used to redirect requests to an HTTPS from an
+// HTTP, to a URL with a trailing slash from a URL without, or vice versa.
 // It is also used when the responder has been configured to redirect requests
 // to a new location.
 func (rb *_ResponderBase) RedirectHandler() RedirectHandler {
@@ -1702,8 +1705,8 @@ func (rb *_ResponderBase) RedirectHandler() RedirectHandler {
 // sufficient and only the response headers need to be changed, or some
 // other additional functionality is required.
 //
-// The redirect handler is mostly used to redirect requests to an "https" from
-// an "http", to a URL with a trailing slash from a URL without, or vice versa.
+// The redirect handler is mostly used to redirect requests to an HTTPS from
+// an HTTP, to a URL with a trailing slash from a URL without, or vice versa.
 // It's also used when responder has been configured to redirect requests to
 // a new location.
 func (rb *_ResponderBase) WrapRedirectHandler(
@@ -1726,6 +1729,33 @@ func (rb *_ResponderBase) WrapRedirectHandler(
 	}
 }
 
+// RedirectRequestTo configures the responder to redirect requests to another
+// URL. The request handler of the responder won't be called. If the responder
+// is a subtree handler and there is no resource in its subtree to handle a
+// request, the responder redirects the request to the URL, adding the
+// remaining path segments to it. If the responder doesn't exist, it will be
+// created.
+//
+// The RedirectRequstTo method must not be used for redirects from HTTP
+// to HTTPS or from a URL with no trailing slash to a URL with a trailing
+// slash or vice versa. Those redirects are handled automatically by the
+// NanoMux when the responder is configured properly.
+//
+// Example:
+// 	var root = NewDormantResource("https:///")
+// 	root.RedirectRequestTo(
+// 		"https:///login",
+// 		http.StatusPermanentRedirect,
+// 	)
+func (rb *_ResponderBase) RedirectRequestTo(url string, redirectCode int) {
+	var requestRedirector, err = redirector(rb, url, redirectCode)
+	if err != nil {
+		panicWithErr("%w", err)
+	}
+
+	rb.requestRedirector = requestRedirector
+}
+
 // RedirectAnyRequestTo configures the responder to redirect requests to
 // another URL. Requests made to the responder or its subtree will all be
 // redirected. Neither the request passer nor the request handler of the
@@ -1733,8 +1763,8 @@ func (rb *_ResponderBase) WrapRedirectHandler(
 // URL are not required to exist. If the responder doesn't exist, it will
 // be created.
 //
-// The RedirectAnyRequstTo method must not be used for redirects from "http"
-// to "https" or from a URL with no trailing slash to a URL with a trailing
+// The RedirectAnyRequstTo method must not be used for redirects from HTTP
+// to HTTPS or from a URL with no trailing slash to a URL with a trailing
 // slash or vice versa. Those redirects are handled automatically by the
 // NanoMux when the responder is configured properly.
 //
@@ -1745,59 +1775,12 @@ func (rb *_ResponderBase) WrapRedirectHandler(
 // 		http.StatusPermanentRedirect,
 // 	)
 func (rb *_ResponderBase) RedirectAnyRequestTo(url string, redirectCode int) {
-	var lUrl = len(url)
-	if lUrl == 0 {
-		panicWithErr("%w: empty url", errInvalidArgument)
+	var anyRequestRedirector, err = redirector(rb, url, redirectCode)
+	if err != nil {
+		panicWithErr("%w", err)
 	}
 
-	if redirectCode < 300 || redirectCode > 399 {
-		panicWithErr(
-			"%w: redirect code %v is out of range",
-			errInvalidArgument,
-			redirectCode,
-		)
-	}
-
-	if tUrl := strings.TrimPrefix(url, "http"); len(tUrl) == lUrl {
-		if url[0] != '/' {
-			url = "/" + url
-			lUrl = len(url)
-		}
-	}
-
-	rb.requestReceiver = func(
-		w http.ResponseWriter,
-		r *http.Request,
-		args *Args,
-	) bool {
-		// The url must be copied. Because it's a captured value,
-		// changes to it will be permanent.
-		var urlStr = url
-
-		var rPath = args.RemainingPath()
-		var lrPath = len(rPath)
-		if lrPath > 0 {
-			if rPath[0] == '/' {
-				if urlStr[lUrl-1] != '/' {
-					urlStr += rPath
-				} else {
-					urlStr += rPath[1:]
-				}
-			} else {
-				if urlStr[lUrl-1] == '/' {
-					urlStr += rPath
-				} else {
-					urlStr += "/" + rPath
-				}
-			}
-		}
-
-		if rb.redirectHandler == nil {
-			return commonRedirectHandler(w, r, urlStr, redirectCode, args)
-		}
-
-		return rb.redirectHandler(w, r, urlStr, redirectCode, args)
-	}
+	rb.requestReceiver = anyRequestRedirector
 }
 
 // --------------------------------------------------
@@ -2023,8 +2006,8 @@ func (rb *_ResponderBase) WrapPathHandlerOf(
 // compatible with the existing resource's properties. A newly created resource
 // is configured with the values in the path template.
 //
-// The status code is sent when redirecting the request to an "https" from
-// an "http", to a URL with a trailing slash from one without, or vice versa.
+// The status code is sent when redirecting the request to an HTTPS from
+// an HTTP, to a URL with a trailing slash from one without, or vice versa.
 // The code is either 301 (moved permanently) or 308 (permanent redirect). The
 // difference between the 301 and 308 status codes is that with the 301 status
 // code, the request's HTTP method may change. For example, some clients change
@@ -2044,7 +2027,7 @@ func (rb *_ResponderBase) SetPermanentRedirectCodeAt(
 // The scheme and trailing slash property values in the path template must be
 // compatible with the resource's properties.
 //
-// The code is used to redirect requests to an "https" from an "http", to a
+// The code is used to redirect requests to an HTTPS from an HTTP, to a
 // URL with a trailing slash from one without, or vice versa. It's either 301
 // (moved permanently) or 308 (permanent redirect). The difference between the
 // 301 and 308 status codes is that with the 301 status code, the request's
@@ -2072,8 +2055,8 @@ func (rb *_ResponderBase) PermanentRedirectCodeAt(pathTmplStr string) int {
 // compatible with the existing resource's properties. A newly created resource
 // is configured with the values in the path template.
 //
-// The handler is mostly used to redirect requests to an "https" from an
-// "http", to a URL with a trailing slash from a URL without, or vice versa.
+// The handler is mostly used to redirect requests to an HTTPS from an
+// HTTP, to a URL with a trailing slash from a URL without, or vice versa.
 // It is also used when the resource has been configured to redirect requests
 // to a new location.
 func (rb *_ResponderBase) SetRedirectHandlerAt(
@@ -2090,8 +2073,8 @@ func (rb *_ResponderBase) SetRedirectHandlerAt(
 // The scheme and trailing slash property values in the path template must be
 // compatible with the resource's properties.
 //
-// The handler is mostly used to redirect requests to an "https" from an
-// "http", to a URL with a trailing slash from a URL without, or vice versa.
+// The handler is mostly used to redirect requests to an HTTPS from an
+// HTTP, to a URL with a trailing slash from a URL without, or vice versa.
 // It is also used when the resource has been configured to redirect requests
 // to a new location.
 func (rb *_ResponderBase) RedirectHandlerAt(
@@ -2121,8 +2104,8 @@ func (rb *_ResponderBase) RedirectHandlerAt(
 // sufficient and only the response headers need to be changed, or some
 // other additional functionality is required.
 //
-// The redirect handler is mostly used to redirect requests to an "https" from
-// an "http", to a URL with a trailing slash from a URL without, or vice versa.
+// The redirect handler is mostly used to redirect requests to an HTTPS from
+// an HTTP, to a URL with a trailing slash from a URL without, or vice versa.
 // It's also used when resource has been configured to redirect requests to
 // a new location.
 func (rb *_ResponderBase) WrapRedirectHandlerAt(
@@ -2131,6 +2114,38 @@ func (rb *_ResponderBase) WrapRedirectHandlerAt(
 ) {
 	var r = rb.Resource(pathTmplStr)
 	r.WrapRedirectHandler(mws...)
+}
+
+// RedirectRequestAt configures the resource at the path to redirect requests
+// to another URL. The request handler of the resource won't be called. If the
+// resource is a subtree handler and there is no resource in its subtree to
+// handle a request, the resource redirects the request to the URL, adding the
+// remaining path segments to it. If the resource doesn't exist, it will be
+// created.
+//
+// The scheme and trailing slash property values in the path template must be
+// compatible with the existing resource's properties. A newly created resource
+// is configured with the values in the path template.
+//
+// The RedirectRequestAt method must not be used for redirects from HTTP
+// to HTTPS or from a URL with no trailing slash to a URL with a trailing
+// slash or vice versa. Those redirects are handled automatically by the
+// NanoMux when the resource is configured properly.
+//
+// Example:
+// 	var root = NewDormantResource("https:///")
+// 	root.RedirectRequestAt(
+// 		"https:///simulation",
+// 		"https:///reality",
+// 		http.StatusMovedPermanently,
+// 	)
+func (rb *_ResponderBase) RedirectRequestAt(
+	pathTmplStr,
+	url string,
+	redirectCode int,
+) {
+	var r = rb.Resource(pathTmplStr)
+	r.RedirectRequestTo(url, redirectCode)
 }
 
 // RedirectAnyRequestAt configures the resource at the path to redirect
@@ -2143,8 +2158,8 @@ func (rb *_ResponderBase) WrapRedirectHandlerAt(
 // compatible with the existing resource's properties. A newly created resource
 // is configured with the values in the path template.
 //
-// The RedirectAnyRequestAt method must not be used for redirects from "http"
-// to "https" or from a URL with no trailing slash to a URL with a trailing
+// The RedirectAnyRequestAt method must not be used for redirects from HTTP
+// to HTTPS or from a URL with no trailing slash to a URL with a trailing
 // slash or vice versa. Those redirects are handled automatically by the
 // NanoMux when the resource is configured properly.
 //

@@ -637,6 +637,25 @@ func TestCommonRedirectHandler(t *testing.T) {
 	checkValue(t, rec.Result().StatusCode, http.StatusTemporaryRedirect)
 	checkValue(t, rec.Header().Get("Location"), "/r0")
 	checkValue(t, strb.String(), "abc123")
+
+	testPanicker(
+		t, false,
+		func() {
+			SetCommonRedirectHandler(
+				func(
+					w http.ResponseWriter,
+					r *http.Request,
+					url string,
+					code int,
+					args *Args,
+				) bool {
+					w.Header()["Content-Type"] = nil
+					http.Redirect(w, r, url, code)
+					return true
+				},
+			)
+		},
+	)
 }
 
 func TestHandlerOfNotFound(t *testing.T) {
@@ -734,4 +753,25 @@ func TestHandlerOfNotFound(t *testing.T) {
 
 	checkValue(t, rec.Result().StatusCode, http.StatusNotFound)
 	checkValue(t, strb.String(), "abc123")
+
+	testPanicker(
+		t, false,
+		func() {
+			SetHandlerForNotFound(
+				func(
+					w http.ResponseWriter,
+					r *http.Request,
+					args *Args,
+				) bool {
+					http.Error(
+						w,
+						http.StatusText(http.StatusNotFound),
+						http.StatusNotFound,
+					)
+
+					return true
+				},
+			)
+		},
+	)
 }

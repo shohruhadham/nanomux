@@ -294,7 +294,7 @@ func (hb *Host) handleOrPassRequest(
 		}
 	}
 
-	if !hb.canHandleRequest() {
+	if !hb.canHandleRequest() && hb.requestRedirector == nil {
 		return notFoundResourceHandler(w, r, args)
 	}
 
@@ -365,6 +365,10 @@ func (hb *Host) handleOrPassRequest(
 		}
 
 		return commonRedirectHandler(w, r, newURL.String(), prc, args)
+	}
+
+	if hb.requestRedirector != nil {
+		return hb.requestRedirector(w, r, args)
 	}
 
 	return hb.requestHandler(w, r, args)

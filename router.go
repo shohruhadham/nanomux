@@ -97,6 +97,8 @@ func (ro *Router) _Responder(urlTmplStr string) (_Responder, error) {
 
 				return newLast, nil
 			}
+		} else {
+			tslash = false
 		}
 	}
 
@@ -115,7 +117,12 @@ func (ro *Router) _Responder(urlTmplStr string) (_Responder, error) {
 	} else {
 		err = _r.checkForConfigCompatibility(secure, tslash, nil)
 		if err != nil {
-			return nil, newErr("%w", err)
+			if errors.Is(err, errDormantHost) ||
+				errors.Is(err, errDormantResource) {
+				_r.configure(secure, tslash, nil)
+			} else {
+				return nil, newErr("%w", err)
+			}
 		}
 	}
 
@@ -517,8 +524,8 @@ func (ro *Router) WrapURLHandlerOf(
 // be compatible with the existing responder's properties. A newly created
 // responder is configured with the values in the URL template.
 //
-// The status code is sent when redirecting the request to an "https" from
-// an "http", to a URL with a trailing slash from one without, or vice versa.
+// The status code is sent when redirecting the request to an HTTPS from
+// an HTTP, to a URL with a trailing slash from one without, or vice versa.
 // The code is either 301 (moved permanently) or 308 (permanent redirect). The
 // difference between the 301 and 308 status codes is that with the 301 status
 // code, the request's HTTP method may change. For example, some clients change
@@ -542,7 +549,7 @@ func (ro *Router) SetPermanentRedirectCodeAt(
 // The scheme and trailing slash property values in the URL template must
 // be compatible with the responder's properties.
 //
-// The code is used to redirect requests to an "https" from an "http", to a
+// The code is used to redirect requests to an HTTPS from an HTTP, to a
 // URL with a trailing slash from one without, or vice versa. It's either 301
 // (moved permanently) or 308 (permanent redirect). The difference between the
 // 301 and 308 status codes is that with the 301 status code, the request's
@@ -576,8 +583,8 @@ func (ro *Router) PermanentRedirectCodeAt(urlTmplStr string) int {
 // be compatible with the existing responder's properties. A newly created
 // responder is configured with the values in the URL template.
 //
-// The handler is mostly used to redirect requests to an "https" from an
-// "http", to a URL with a trailing slash from a URL without, or vice versa.
+// The handler is mostly used to redirect requests to an HTTPS from an
+// HTTP, to a URL with a trailing slash from a URL without, or vice versa.
 // It is also used when the resource has been configured to redirect requests
 // to a new location.
 func (ro *Router) SetRedirectHandlerAt(
@@ -598,8 +605,8 @@ func (ro *Router) SetRedirectHandlerAt(
 // The scheme and trailing slash property values in the URL template must
 // be compatible with the responder's properties.
 //
-// The handler is mostly used to redirect requests to an "https" from an
-// "http", to a URL with a trailing slash from a URL without, or vice versa.
+// The handler is mostly used to redirect requests to an HTTPS from an
+// HTTP, to a URL with a trailing slash from a URL without, or vice versa.
 // It is also used when the resource has been configured to redirect requests
 // to a new location.
 func (ro *Router) RedirectHandlerAt(urlTmplStr string) RedirectHandler {
@@ -633,8 +640,8 @@ func (ro *Router) RedirectHandlerAt(urlTmplStr string) RedirectHandler {
 // sufficient and only the response headers need to be changed, or some
 // other additional functionality is required.
 //
-// The redirect handler is mostly used to redirect requests to an "https" from
-// an "http", to a URL with a trailing slash from a URL without, or vice versa.
+// The redirect handler is mostly used to redirect requests to an HTTPS from
+// an HTTP, to a URL with a trailing slash from a URL without, or vice versa.
 // It's also used when resource has been configured to redirect requests to
 // a new location.
 func (ro *Router) WrapRedirectHandlerAt(
@@ -649,6 +656,38 @@ func (ro *Router) WrapRedirectHandlerAt(
 	_r.WrapRedirectHandler(mws...)
 }
 
+// RedirectRequestAt configures the responder at the path to redirect requests
+// to another URL. The request handler of the responder won't be called. If the
+// responder is a subtree handler and there is no resource in its subtree to
+// handle a request, the responder redirects the request to the URL, adding the
+// remaining path segments to it. If the responder doesn't exist, it will be
+// created.
+//
+// The scheme and trailing slash property values in the URL template must
+// be compatible with the existing responder's properties. A newly created
+// responder is configured with the values in the URL template.
+//
+// The RedirectAnyRequestAt method must not be used for redirects from HTTP
+// to HTTPS or from a URL with no trailing slash to a URL with a trailing
+// slash or vice versa. Those redirects are handled automatically by the
+// NanoMux when the responder is configured properly.
+//
+// Example:
+// 	var router = NewRouter()
+// 	router.RedirectAnyRequestAt(
+// 		"https:///simulation",
+// 		"https:///reality",
+// 		http.StatusMovedPermanently,
+// 	)
+func (ro *Router) RedirectRequestAt(urlTmplStr, url string, redirectCode int) {
+	var _r, err = ro._Responder(urlTmplStr)
+	if err != nil {
+		panicWithErr("%w", err)
+	}
+
+	_r.RedirectRequestTo(url, redirectCode)
+}
+
 // RedirectAnyRequestAt configures the responder at the path to redirect
 // requests to another URL. Requests made to the responder or its subtree will
 // all be redirected. Neither the request passer nor the request handler of the
@@ -660,8 +699,8 @@ func (ro *Router) WrapRedirectHandlerAt(
 // be compatible with the existing responder's properties. A newly created
 // responder is configured with the values in the URL template.
 //
-// The RedirectAnyRequestAt method must not be used for redirects from "http"
-// to "https" or from a URL with no trailing slash to a URL with a trailing
+// The RedirectAnyRequestAt method must not be used for redirects from HTTP
+// to HTTPS or from a URL with no trailing slash to a URL with a trailing
 // slash or vice versa. Those redirects are handled automatically by the
 // NanoMux when the responder is configured properly.
 //
@@ -672,7 +711,11 @@ func (ro *Router) WrapRedirectHandlerAt(
 // 		"http://example.com/reality",
 // 		http.StatusMovedPermanently,
 // 	)
-func (ro *Router) RedirectAnyRequestAt(urlTmplStr, url string, redirectCode int) {
+func (ro *Router) RedirectAnyRequestAt(
+	urlTmplStr,
+	url string,
+	redirectCode int,
+) {
 	var _r, err = ro._Responder(urlTmplStr)
 	if err != nil {
 		panicWithErr("%w", err)
@@ -1177,7 +1220,7 @@ func (ro *Router) Resource(urlTmplStr string) *Resource {
 // among the other hosts.
 //
 // When the config's value RedirectInsecureRequest is true, the URL template
-// must also state that the resource is secure by using "https".
+// must also state that the resource is secure by using HTTPS.
 func (ro *Router) ResourceUsingConfig(
 	urlTmplStr string,
 	config Config,
