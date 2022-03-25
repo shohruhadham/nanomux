@@ -596,6 +596,64 @@ func WrapCommonRedirectHandler(
 	}
 }
 
+// -------------------------
+
+func redirector(
+	rb *_ResponderBase,
+	url string,
+	redirectCode int,
+) (Handler, error) {
+	var lUrl = len(url)
+	if lUrl == 0 {
+		return nil, newErr("%w: empty url", errInvalidArgument)
+	}
+
+	if redirectCode < 300 || redirectCode > 399 {
+		return nil, newErr(
+			"%w: redirect code %v is out of range",
+			errInvalidArgument,
+			redirectCode,
+		)
+	}
+
+	if tUrl := strings.TrimPrefix(url, "http"); len(tUrl) == lUrl {
+		if url[0] != '/' {
+			url = "/" + url
+			lUrl = len(url)
+		}
+	}
+
+	return func(w http.ResponseWriter, r *http.Request, args *Args) bool {
+		// The url must be copied. Because it's a captured value,
+		// changes to it will be permanent.
+		var urlStr = url
+
+		var rPath = args.RemainingPath()
+		var lrPath = len(rPath)
+		if lrPath > 0 {
+			if rPath[0] == '/' {
+				if urlStr[lUrl-1] != '/' {
+					urlStr += rPath
+				} else {
+					urlStr += rPath[1:]
+				}
+			} else {
+				if urlStr[lUrl-1] == '/' {
+					urlStr += rPath
+				} else {
+					urlStr += "/" + rPath
+				}
+			}
+		}
+
+		if rb.redirectHandler == nil {
+			return commonRedirectHandler(w, r, urlStr, redirectCode, args)
+		}
+
+		return rb.redirectHandler(w, r, urlStr, redirectCode, args)
+	}, nil
+}
+
 // --------------------------------------------------
 
 var notFoundResourceHandler Handler = func(

@@ -2009,11 +2009,211 @@ func TestRouter_WrapRedirectHandlerAt(t *testing.T) {
 	}
 }
 
-func TestRouter_RedirectAnyRequestAt(t *testing.T) {
+func TestRouter_RedirectRequestAt(t *testing.T) {
 	var ro = NewRouter()
 	testPanicker(
 		t,
 		false,
+		func() {
+			ro.RedirectRequestAt(
+				"temporarily_down",
+				"replacement",
+				http.StatusTemporaryRedirect,
+			)
+		},
+	)
+
+	ro.SetConfigurationAt(
+		"temporarily_down",
+		Config{SubtreeHandler: true},
+	)
+
+	var rec = httptest.NewRecorder()
+	var req = httptest.NewRequest("GET", "/temporarily_down", nil)
+	ro.ServeHTTP(rec, req)
+
+	var response = rec.Result()
+	checkValue(t, response.StatusCode, http.StatusTemporaryRedirect)
+	checkValue(t, response.Header.Get("Location"), "/replacement")
+
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest("GET", "/temporarily_down/resource", nil)
+	ro.ServeHTTP(rec, req)
+
+	response = rec.Result()
+	checkValue(t, response.StatusCode, http.StatusTemporaryRedirect)
+	checkValue(t, response.Header.Get("Location"), "/replacement/resource")
+
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest(
+		"GET",
+		"/temporarily_down/resource-1/resource-2/",
+		nil,
+	)
+
+	ro.ServeHTTP(rec, req)
+
+	response = rec.Result()
+	checkValue(t, response.StatusCode, http.StatusTemporaryRedirect)
+	checkValue(
+		t,
+		response.Header.Get("Location"), "/replacement/resource-1/resource-2/",
+	)
+
+	testPanicker(
+		t, true,
+		func() {
+			ro.RedirectRequestAt(
+				"{invalid-template",
+				"",
+				http.StatusTemporaryRedirect,
+			)
+		},
+	)
+
+	testPanicker(
+		t, true,
+		func() {
+			ro.RedirectRequestAt(
+				"temporarily_down",
+				"",
+				http.StatusTemporaryRedirect,
+			)
+		},
+	)
+
+	testPanicker(
+		t, true,
+		func() {
+			ro.RedirectRequestAt(
+				"temporarily_down",
+				"new-resource",
+				http.StatusOK,
+			)
+		},
+	)
+
+	// -------------------------
+
+	testPanicker(
+		t, false,
+		func() {
+			ro.RedirectRequestAt(
+				"http://www.example.com/temporarily_down",
+				"http://www.example.com/replacement",
+				http.StatusTemporaryRedirect,
+			)
+		},
+	)
+
+	ro.SetConfigurationAt(
+		"http://www.example.com/temporarily_down",
+		Config{SubtreeHandler: true},
+	)
+
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest(
+		"GET",
+		"http://www.example.com/temporarily_down",
+		nil,
+	)
+
+	ro.ServeHTTP(rec, req)
+
+	response = rec.Result()
+	checkValue(t, response.StatusCode, http.StatusTemporaryRedirect)
+	checkValue(
+		t,
+		response.Header.Get("Location"),
+		"http://www.example.com/replacement",
+	)
+
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest(
+		"GET",
+		"http://www.example.com/temporarily_down/resource",
+		nil,
+	)
+
+	ro.ServeHTTP(rec, req)
+
+	response = rec.Result()
+	checkValue(t, response.StatusCode, http.StatusTemporaryRedirect)
+	checkValue(
+		t,
+		response.Header.Get("Location"),
+		"http://www.example.com/replacement/resource",
+	)
+
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest(
+		"GET",
+		"http://www.example.com/temporarily_down/resource-1/resource-2/",
+		nil,
+	)
+
+	ro.ServeHTTP(rec, req)
+
+	response = rec.Result()
+	checkValue(t, response.StatusCode, http.StatusTemporaryRedirect)
+	checkValue(
+		t,
+		response.Header.Get("Location"),
+		"http://www.example.com/replacement/resource-1/resource-2/",
+	)
+
+	testPanicker(
+		t, true,
+		func() {
+			ro.RedirectRequestAt(
+				"http://www.example.com/temporarily_down",
+				"",
+				http.StatusTemporaryRedirect,
+			)
+		},
+	)
+
+	testPanicker(
+		t, true,
+		func() {
+			ro.RedirectRequestAt(
+				"http://www.example.com/temporarily_down",
+				"new-resource",
+				http.StatusOK,
+			)
+		},
+	)
+
+	// -------------------------
+
+	testPanicker(
+		t, false,
+		func() {
+			ro.RedirectRequestAt(
+				"https:///",
+				"https:///resource/",
+				http.StatusTemporaryRedirect,
+			)
+		},
+	)
+
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest("GET", "https:///", nil)
+	ro.ServeHTTP(rec, req)
+
+	response = rec.Result()
+	checkValue(t, response.StatusCode, http.StatusTemporaryRedirect)
+	checkValue(
+		t,
+		response.Header.Get("Location"),
+		"https:///resource/",
+	)
+}
+
+func TestRouter_RedirectAnyRequestAt(t *testing.T) {
+	var ro = NewRouter()
+	testPanicker(
+		t, false,
 		func() {
 			ro.RedirectAnyRequestAt(
 				"temporarily_down",
@@ -2152,8 +2352,7 @@ func TestRouter_RedirectAnyRequestAt(t *testing.T) {
 	)
 
 	testPanicker(
-		t,
-		true,
+		t, true,
 		func() {
 			ro.RedirectAnyRequestAt(
 				"http://www.example.com/temporarily_down",
@@ -2164,8 +2363,7 @@ func TestRouter_RedirectAnyRequestAt(t *testing.T) {
 	)
 
 	testPanicker(
-		t,
-		true,
+		t, true,
 		func() {
 			ro.RedirectAnyRequestAt(
 				"http://www.example.com/temporarily_down",
