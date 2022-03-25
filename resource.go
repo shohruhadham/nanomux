@@ -50,6 +50,7 @@ func createResource(
 		}
 
 		tmpl = rootTmpl
+		tslash = false
 	}
 
 	if tmpl == nil {
@@ -61,9 +62,20 @@ func createResource(
 
 	var cfs *_ConfigFlags
 	if config != nil {
-		config.Secure, config.TrailingSlash = secure, tslash
-		if config.RedirectInsecureRequest && !secure {
+		config.Secure, config.HasTrailingSlash = secure, tslash
+		if config.RedirectsInsecureRequest && !secure {
 			return nil, newErr("%w", errConflictingSecurity)
+		}
+
+		if tmpl == rootTmpl {
+			config.HasTrailingSlash = false
+			config.LenientOnTrailingSlash = false
+			config.StrictOnTrailingSlash = false
+
+			if config.HandlesThePathAsIs {
+				config.LenientOnUncleanPath = true
+				config.HandlesThePathAsIs = false
+			}
 		}
 
 		var tcfs = config.asFlags()
@@ -102,7 +114,8 @@ func createResource(
 // method handlers).
 //
 // The template's scheme and trailing slash property values are used to
-// configure the resource.
+// configure the resource. The root resource's trailing slash property is
+// ignored.
 //
 // When the URL template contains a host and/or prefix path segment templates,
 // the resource keeps them. Templates are used when the resource is being
@@ -131,6 +144,7 @@ func NewDormantResource(urlTmplStr string) *Resource {
 // The resource is configured with the properties in the config as well as
 // the scheme and trailing slash property values of the URL template. The
 // config's Secure and TrailingSlash values are ignored and may not be set.
+// The root resource's trailing slash related properties are also ignored.
 //
 // When the URL template contains a host and/or prefix path segment templates,
 // the resource keeps them. Templates are used when the resource is being
@@ -155,8 +169,9 @@ func NewDormantResourceUsingConfig(urlTmplStr string, config Config) *Resource {
 
 // NewResource returns a new resource.
 //
-// The first argument URL template's scheme and trailing slash property values
-// are used to configure the new Resource instance.
+// The argument URL template's scheme and trailing slash property values
+// are used to configure the new Resource instance. The root resource's
+// trailing slash property is ignored.
 //
 // The Impl is, in a sense, the implementation of the resource. It is an
 // instance of a type with methods to handle HTTP requests. Methods must have
@@ -214,7 +229,8 @@ func NewResource(urlTmplStr string, impl Impl) *Resource {
 // The new Resource instance is configured with the properties in the
 // config as well as the scheme and trailing slash property values of the URL
 // template. The config's Secure and TrailingSlash values are ignored and may
-// not be set.
+// not be set. The root resource's trailing slash related properties are also
+// ignored.
 //
 // The Impl is, in a sense, the implementation of the resource. It is an
 // instance of a type with methods to handle HTTP requests. Methods must have
@@ -486,6 +502,5 @@ func (rb *Resource) handleOrPassRequest(
 		return commonRedirectHandler(w, r, newURL.String(), prc, args)
 	}
 
-	// At this point, the request may have been modified by subresources.
 	return rb.requestHandler(w, r, args)
 }

@@ -32,7 +32,7 @@ func TestHost_Constructors(t *testing.T) {
 		func() {
 			NewDormantHostUsingConfig(
 				"http://example.com",
-				Config{RedirectInsecureRequest: true},
+				Config{RedirectsInsecureRequest: true},
 			)
 		},
 	)
@@ -86,7 +86,7 @@ func TestHost_Constructors(t *testing.T) {
 			NewHostUsingConfig(
 				"http://{sub}.example.com",
 				&_Impl{},
-				Config{RedirectInsecureRequest: true},
+				Config{RedirectsInsecureRequest: true},
 			)
 		},
 	)
@@ -508,7 +508,7 @@ func requestHandlerHosts(t *testing.T) []*Host {
 
 	host = NewDormantHostUsingConfig(
 		"https://{sub1:[a-zA-Z]{3}}.{sub2:[a-zA-Z]{3}}.example.com",
-		Config{RedirectInsecureRequest: true},
+		Config{RedirectsInsecureRequest: true},
 	)
 
 	host.SetSharedData(true)
@@ -519,9 +519,9 @@ func requestHandlerHosts(t *testing.T) []*Host {
 		NewDormantHostUsingConfig(
 			"https://example.com",
 			Config{
-				SubtreeHandler:          true,
-				RedirectInsecureRequest: true,
-				LeniencyOnTrailingSlash: true,
+				SubtreeHandler:           true,
+				RedirectsInsecureRequest: true,
+				LenientOnTrailingSlash:   true,
 			},
 		),
 	)
@@ -550,10 +550,10 @@ func requestHandlerHosts(t *testing.T) []*Host {
 		NewDormantHostUsingConfig(
 			"https://example.com/",
 			Config{
-				SubtreeHandler:          true,
-				RedirectInsecureRequest: true,
-				LeniencyOnTrailingSlash: true,
-				StrictOnTrailingSlash:   true,
+				SubtreeHandler:           true,
+				RedirectsInsecureRequest: true,
+				LenientOnTrailingSlash:   true,
+				StrictOnTrailingSlash:    true,
 			},
 		),
 	)
@@ -563,8 +563,8 @@ func requestHandlerHosts(t *testing.T) []*Host {
 		NewDormantHostUsingConfig(
 			"https://example.com",
 			Config{
-				RedirectInsecureRequest: true,
-				StrictOnTrailingSlash:   true,
+				RedirectsInsecureRequest: true,
+				StrictOnTrailingSlash:    true,
 			},
 		),
 	)
