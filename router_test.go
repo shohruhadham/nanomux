@@ -5460,17 +5460,35 @@ func TestRouter_ServeHTTP(t *testing.T) {
 // --------------------------------------------------
 
 func TestArgs_SetGet(t *testing.T) {
-	var setCases = []struct{ key, value string }{
-		{"key1", "value1"},
-		{"key2", "value2"},
-		{"key3", "value3"},
-		{"key1", "newValue1"},
+	type (
+		_Key1 struct{}
+		_Key2 struct{}
+		_Key3 struct{}
+	)
+
+	var (
+		key1 _Key1
+		key2 _Key2
+		key3 _Key3
+	)
+
+	var setCases = []struct {
+		key   any
+		value string
+	}{
+		{key1, "value1"},
+		{key2, "value2"},
+		{key3, "value3"},
+		{key1, "newValue1"},
 	}
 
-	var getCases = []struct{ key, value string }{
-		{"key1", "newValue1"},
-		{"key2", "value2"},
-		{"key3", "value3"},
+	var getCases = []struct {
+		key   any
+		value string
+	}{
+		{key1, "newValue1"},
+		{key2, "value2"},
+		{key3, "value3"},
 	}
 
 	var args = &Args{}

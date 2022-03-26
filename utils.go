@@ -515,7 +515,8 @@ func (args *Args) HostPathValues() HostPathValues {
 }
 
 // RemainingPath returns the escaped remaining path of the request's URL
-// that's below the current responder's segment.
+// that's below the responder's segment that is currently passing or handling
+// the request.
 func (args *Args) RemainingPath() string {
 	if args.reachedTheLastPathSegment() {
 		return ""
@@ -610,7 +611,7 @@ type _ArgsKey struct{}
 // argsKey can be used to retrieve *Args from the request's context in the
 // http.Handler or http.HandlerFunc after the conversion to the Handler with
 // the HR or FnHr functions.
-var argsKey interface{} = _ArgsKey{}
+var argsKey any = _ArgsKey{}
 
 // ArgsFrom is a function to retrieve the argument *Args in the http.Handler
 // or http.HandlerFunc after the conversion to the Handler with the HrWithArgs
@@ -623,7 +624,7 @@ func ArgsFrom(r *http.Request) *Args {
 // --------------------------------------------------
 
 var argsPool = sync.Pool{
-	New: func() interface{} {
+	New: func() any {
 		return &Args{}
 	},
 }

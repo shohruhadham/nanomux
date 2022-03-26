@@ -203,9 +203,9 @@ It's possible to retrieve a subtree resource with the method Resource. If the su
 		// ...
 	}
 
-Shared Data
+Sharing Data Between Handlers
 
-If there is a need for shared data, it can be set with the SetSharedData method. The shared data can be retrieved in the handlers using the ResponderSharedData method of the passed *Args argument.
+If there is a need for shared data, it can be set with the SetSharedData method of the Host and Resource. The shared data can then be retrieved in the handlers calling the ResponderSharedData method of the passed *Args argument.
 
 	var blogsMap = &sync.Map{}
 
@@ -234,10 +234,65 @@ If there is a need for shared data, it can be set with the SetSharedData method.
 
 	// ...
 
+	blogs.SetHandlerFor("GET", GetBlogs)
 	blogs.SetSharedData(blogsMap)
+
+	blog.SetHandlerFor("POST", PostBlog)
 	blog.SetSharedData(blogsMap)
 
 Hosts and resources can have their own shared data. Handlers retrieve the shared data of their responder.
+
+Sharing Data via Args
+
+The responder's SetSharedData is useful for sharing data between its handlers. But, when the data needs to be shared between responders in the resource tree, the *Args argument can be used. The Set method of the *Args argument takes a key and a value of any type and sets the value for the key. The rules for defining a key are the same as for "context.Context". Any responder can set as many values as needed when it's passing or handling a request. The *Args argument carries the values between middlewares and handlers as the request passes through the matching responders in the resource tree.
+
+	type (
+		_Key struct{}
+
+		Value struct {
+			// ...
+		}
+	)
+
+	var Key any = _Key{}
+
+	// ...
+
+	func Mw(handler nanomux.Handler) nanomux.Handler {
+		return func(
+			w http.ResponseWriter,
+			r *http.Request,
+			args *nanomux.Args,
+		) bool {
+			var value = &Value{
+				// ...
+			}
+
+			args.Set(Key, value)
+			return handler(w, r, args)
+		}
+	}
+
+	func GetSectorStats(
+		w http.ResponseWriter,
+		r *http.Request,
+		args *nanomux.Args,
+	) bool {
+		var sector = args.HostPathValues().Get("sector")
+		var value = args.Get(Key).(*Value)
+		// ...
+	}
+
+	// ...
+
+	var root = nanomux.NewDormantResource("/")
+	root.WrapRequestPasser(Mw)
+	root.SetPathHandlerFor("GET", "stats/{sector}", GetSectorStats)
+
+	var err = http.ListenAndServe(":8000", root)
+	if err != nil {
+		// ...
+	}
 
 Implementation
 
@@ -510,12 +565,54 @@ The Router type is more suitable when multiple hosts with different root domains
 		// ...
 	}
 
-http.Handler and http.HandlerFunc
+Converting http.Handler and http.HandlerFunc
 
 It is possible to use an http.Handler and an http.HandlerFunc with NanoMux. For that, NanoMux provides four converters: Hr, HrWithArgs, FnHr, and FnHrWithArgs. The Hr and HrWithArgs convert the http.Handler, while the FnHr and FnHrWithArgs convert the function with the signature of the http.HandlerFunc to the nanomux.Handler.
 
 Most of the time, when there is a need to use an http.Handler and http.HandlerFunc, it's to utilize the handlers written outside the context of NanoMux, and those handlers don't use the *Args argument. The Hr and FnHr converters return a handler that ignores the *Args argument instead of inserting it into the request's context, which is a slower operation. These converters must be used when the http.Handler and http.HandlerFunc handlers don't need the *Args argument. If they are written to use the *Args argument, then it's better to change their signatures as well.
 
 One situation where http.Handler and http.HandlerFunc can be considered when writing handlers might be to use a middleware with the signature of func(http.Handler) http.Handler. But for middleware with that signature, NanoMux provides an Mw converter. The Mw converter converts the middleware with the signature of func(http.Handler) http.Handler to the middleware with the signature of func(nanomux.Handler) nanomux.Handler, so it can be used to wrap the NanoMux handlers.
+
+	func GetStats(w http.ResponseWriter, r *http.Request) {
+		// ...
+	}
+
+	func PostStats(
+		w http.ResponseWriter,
+		r *http.Request,
+		args *nanomux.Args,
+	) bool {
+		// ...
+	}
+
+	func Middleware(next http.Handler) http.Handler {
+		return http.HandlerFunc(
+			func(w http.ResponseWriter, r *http.Request) {
+				// ...
+			},
+		)
+	}
+
+	func MiddlewareWithParam(param string, next http.Handler) http.Handler {
+		return http.HandlerFunc(
+			func(w http.ResponseWriter, r *http.Request) {
+				// ...
+			},
+		)
+	}
+
+	// ...
+
+	var r = nanomux.NewDormantResource("stats")
+	r.SetHandlerFor("GET", nanomux.FnHr(GetStats))
+	r.SetHandlerFor("POST", PostStats)
+
+	r.WrapRequestHandler(nanomux.Mw(Middleware))
+	r.WrapHandlerOf(
+		"GET, POST",
+		nanomux.Mw(func(next http.Handler) http.Handler {
+			return MiddlewareWithParam("param", next)
+		}),
+	)
 */
 package nanomux
