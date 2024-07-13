@@ -1,4 +1,4 @@
-# NanoMux [![Build Status](https://app.travis-ci.com/shohruhadham/nanomux.svg?branch=main)](https://app.travis-ci.com/shohruhadham/nanomux) [![Go Reference](https://pkg.go.dev/badge/github.com/shohruhadham/nanomux.svg)](https://pkg.go.dev/github.com/shohruhadham/nanomux)
+# NanoMux [![Go Reference](https://pkg.go.dev/badge/github.com/shohruhadham/nanomux.svg)](https://pkg.go.dev/github.com/shohruhadham/nanomux)
 NanoMux is a package of HTTP request routers for the Go language.
 
 The package has three types that can be used as routers. The first one is the Resource, which represents the path segment resource. The second one is the Host. it represents the host segment of the URL but also takes on the role of the root resource when HTTP method handlers are set. The third one is the Router which supports registering multiple hosts and resources. It passes the request to the matching host and, when there is no matching host, to the root resource. In NanoMux terms, hosts and resources are called responders.
